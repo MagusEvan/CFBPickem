@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { Pool, PoolMember, Profile } from '@/lib/types'
 
 export async function getPool(poolId: string) {
@@ -23,8 +24,9 @@ export async function getPoolMembers(poolId: string) {
 }
 
 export async function getPoolByInviteCode(inviteCode: string) {
-  const supabase = await createClient()
-  const { data } = await supabase
+  // Use admin client to bypass RLS — the user isn't a member yet
+  const admin = createAdminClient()
+  const { data } = await admin
     .from('pools')
     .select('*')
     .eq('invite_code', inviteCode)
