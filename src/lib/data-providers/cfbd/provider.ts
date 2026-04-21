@@ -4,32 +4,32 @@ import { cfbdFetch } from './client'
 import { adaptTeam, adaptGame, adaptRecord } from './adapter'
 import { CONFERENCE_MAP, PAC12_CFBD, INDEPENDENT_CFBD } from '../conference-map'
 
+// Reverse map: CFBD conference name -> our internal key
+const CFBD_TO_KEY: Record<string, string> = {}
+for (const [key, val] of Object.entries(CONFERENCE_MAP)) {
+  if (val.cfbd) {
+    CFBD_TO_KEY[val.cfbd] = key
+  }
+}
+
 export class CfbdProvider implements DataProvider {
-  async getTeamsByConference(conferenceKey: string, year: number): Promise<CfbTeam[]> {
-    if (conferenceKey === 'PAC12_IND') {
-      const [pac12, independents] = await Promise.all([
-        cfbdFetch<any[]>('/teams', { conference: PAC12_CFBD }),
-        cfbdFetch<any[]>('/teams', { conference: INDEPENDENT_CFBD }),
-      ])
-      return [
-        ...pac12.map((t) => adaptTeam(t, 'PAC12_IND')),
-        ...independents.map((t) => adaptTeam(t, 'PAC12_IND')),
-      ]
-    }
-
-    const cfbdName = CONFERENCE_MAP[conferenceKey]?.cfbd
-    if (!cfbdName) return []
-
-    const teams = await cfbdFetch<any[]>('/teams', { conference: cfbdName })
-    return teams.map((t) => adaptTeam(t, conferenceKey))
+  async getAllFbsTeams(year: number): Promise<CfbTeam[]> {
+    const teams = await cfbdFetch<any[]>('/teams/fbs', { year: String(year) })
+    return teams.map((t) => {
+      const conf = t.conference as string | null
+      // Map to our internal key
+      let conferenceKey = conf ? (CFBD_TO_KEY[conf] ?? null) : null
+      // Pac-12 and Independents both map to PAC12_IND
+      if (conf === PAC12_CFBD || conf === INDEPENDENT_CFBD) {
+        conferenceKey = 'PAC12_IND'
+      }
+      return adaptTeam(t, conferenceKey ?? 'UNKNOWN')
+    }).filter((t) => t.conferenceKey !== 'UNKNOWN')
   }
 
-  async getAllFbsTeams(year: number): Promise<CfbTeam[]> {
-    const conferenceKeys = Object.keys(CONFERENCE_MAP)
-    const results = await Promise.all(
-      conferenceKeys.map((key) => this.getTeamsByConference(key, year))
-    )
-    return results.flat()
+  async getTeamsByConference(conferenceKey: string, year: number): Promise<CfbTeam[]> {
+    const allTeams = await this.getAllFbsTeams(year)
+    return allTeams.filter((t) => t.conferenceKey === conferenceKey)
   }
 
   async getGamesForWeek(year: number, week: number): Promise<CfbGame[]> {
@@ -42,8 +42,6 @@ export class CfbdProvider implements DataProvider {
   }
 
   async getTeamSchedule(teamId: string, year: number): Promise<CfbGame[]> {
-    // CFBD uses team name for schedule lookup, but we store ID
-    // We'll need to fetch by year and filter
     const games = await cfbdFetch<any[]>('/games', {
       year: String(year),
       division: 'fbs',
