@@ -24,7 +24,12 @@ export async function GET(request: NextRequest) {
 
   const { data: cached } = await query
   const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
-  const isFresh = cached && cached.length > 0 && cached[0].fetched_at > sixHoursAgo
+
+  // Cache is fresh only if we have data AND the oldest entry is recent
+  // For "all teams" requests, also check we have multiple conferences cached
+  const isFresh = cached && cached.length > 0 &&
+    cached.every((t) => t.fetched_at > sixHoursAgo) &&
+    (conferenceKey || new Set(cached.map((t) => t.conference_key)).size >= 5)
 
   if (isFresh) {
     return NextResponse.json(cached)
