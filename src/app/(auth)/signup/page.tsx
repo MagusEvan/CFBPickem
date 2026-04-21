@@ -23,7 +23,7 @@ export default function SignupPage() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -33,6 +33,10 @@ export default function SignupPage() {
 
     if (error) {
       setError(error.message)
+      setLoading(false)
+    } else if (data.user?.identities?.length === 0) {
+      // Supabase returns an empty identities array for existing accounts
+      setError('An account with this email already exists. Please sign in instead.')
       setLoading(false)
     } else {
       router.push('/pools')
