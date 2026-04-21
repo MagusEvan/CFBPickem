@@ -6,7 +6,7 @@ export interface SnakePick {
 
 export interface DraftConfig {
   managerCount: number
-  conferences: string[] // ordered list of conference keys, one per round
+  numRounds: number // number of conferences = number of rounds
 }
 
 export interface PickValidation {

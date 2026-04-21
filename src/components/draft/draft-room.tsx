@@ -1,14 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { useDraftRealtime } from '@/hooks/use-draft-realtime'
-import { startDraft, makePick } from '@/lib/draft/actions'
-import { generateSnakeOrder, getPickInfo, getConferenceForRound } from '@/lib/draft/engine'
-import { createClient } from '@/lib/supabase/client'
+import { startDraft, makePick, resetDraft, undoPick } from '@/lib/draft/actions'
+import { generateSnakeOrder, getPickInfo, getAvailableConferences } from '@/lib/draft/engine'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 import type { Pool, PoolMember, Profile, CachedTeam } from '@/lib/types'
+
+const CONFERENCE_LABELS: Record<string, string> = {
+  ACC: 'ACC', B12: 'Big 12', B1G: 'Big Ten', SEC: 'SEC',
+  AAC: 'American Athletic', CUSA: 'Conference USA', MAC: 'MAC',
+  MW: 'Mountain West', SBC: 'Sun Belt', PAC12_IND: 'Pac-12 / Ind',
+}
 
 interface DraftRoomProps {
   pool: Pool
@@ -18,67 +25,80 @@ interface DraftRoomProps {
 
 export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   const { draftState, picks, loading } = useDraftRealtime(pool.id)
-  const [availableTeams, setAvailableTeams] = useState<CachedTeam[]>([])
+  const [allTeams, setAllTeams] = useState<CachedTeam[]>([])
+  const [selectedConference, setSelectedConference] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draftStatus, setDraftStatus] = useState(pool.draft_status)
+  const router = useRouter()
 
   const currentMember = members.find((m) => m.user_id === currentUserId)
   const isAdmin = pool.admin_id === currentUserId
   const conferences = pool.conferences as string[]
 
-  // Fetch available teams for the current conference
+  // Fetch all teams on mount
   useEffect(() => {
-    if (!draftState?.conference_key) return
-
     async function fetchTeams() {
-      const conferenceKey = draftState!.conference_key!
-      const res = await fetch(
-        `/api/data/teams?conference=${conferenceKey}&year=${pool.season_year}`
-      )
+      const res = await fetch(`/api/data/teams?year=${pool.season_year}`)
       if (res.ok) {
-        const teams = await res.json()
-        setAvailableTeams(teams)
+        const teams: CachedTeam[] = await res.json()
+        setAllTeams(teams.filter((t) => t.conference_key && conferences.includes(t.conference_key)))
       }
     }
+    fetchTeams()
+  }, [pool.season_year, conferences])
 
-    // If pac12 depleted, fetch all teams from pool conferences
-    if (draftState.pac12_ind_depleted && draftState.conference_key === 'PAC12_IND') {
-      async function fetchAllTeams() {
-        const res = await fetch(`/api/data/teams?year=${pool.season_year}`)
-        if (res.ok) {
-          const teams: CachedTeam[] = await res.json()
-          // Filter to pool conferences except PAC12_IND
-          setAvailableTeams(
-            teams.filter((t) =>
-              t.conference_key &&
-              conferences.includes(t.conference_key) &&
-              t.conference_key !== 'PAC12_IND'
-            )
-          )
-        }
-      }
-      fetchAllTeams()
-    } else {
-      fetchTeams()
-    }
-  }, [draftState?.conference_key, draftState?.pac12_ind_depleted, pool.season_year, conferences])
-
-  // Track draft completion via realtime
+  // Track draft completion
   useEffect(() => {
     if (draftState) {
-      const snakeOrder = generateSnakeOrder({ managerCount: members.length, conferences })
+      const snakeOrder = generateSnakeOrder({ managerCount: members.length, numRounds: conferences.length })
       if (draftState.current_pick_number > snakeOrder.length) {
         setDraftStatus('completed')
+      } else if (draftStatus === 'pre_draft' && pool.draft_status === 'pre_draft') {
+        // Check if draft state exists (was started via realtime)
+        setDraftStatus('in_progress')
       }
     }
-  }, [draftState, members.length, conferences])
+  }, [draftState, members.length, conferences, draftStatus, pool.draft_status])
 
-  const draftedTeamIds = new Set(picks.map((p) => p.team_id))
-  const undraftedTeams = availableTeams.filter((t) => !draftedTeamIds.has(t.id))
+  // Reset selected conference when turn changes
+  useEffect(() => {
+    setSelectedConference(null)
+  }, [draftState?.current_pick_number])
 
+  const draftedTeamIds = useMemo(() => new Set(picks.map((p) => p.team_id)), [picks])
   const isMyTurn = draftState?.current_member_id === currentMember?.id
   const currentPicker = members.find((m) => m.id === draftState?.current_member_id)
+
+  // Get conferences this manager has already drafted from
+  const myConferences = useMemo(() => {
+    if (!currentMember) return new Set<string>()
+    return new Set(picks.filter((p) => p.member_id === currentMember.id).map((p) => p.conference_key))
+  }, [picks, currentMember])
+
+  const myBonusPick = useMemo(() => {
+    if (!currentMember) return false
+    return picks.some((p) => p.member_id === currentMember.id && p.is_bonus_pick)
+  }, [picks, currentMember])
+
+  // Available conferences for current picker
+  const availableConferences = useMemo(() => {
+    if (!isMyTurn) return []
+    return getAvailableConferences(
+      conferences,
+      myConferences,
+      draftState?.pac12_ind_depleted ?? false,
+      myBonusPick
+    )
+  }, [isMyTurn, conferences, myConferences, draftState?.pac12_ind_depleted, myBonusPick])
+
+  // Available teams in selected conference
+  const availableTeams = useMemo(() => {
+    if (!selectedConference) return []
+    return allTeams
+      .filter((t) => t.conference_key === selectedConference && !draftedTeamIds.has(t.id))
+      .sort((a, b) => b.wins - a.wins || a.name.localeCompare(b.name))
+  }, [selectedConference, allTeams, draftedTeamIds])
 
   async function handleStartDraft() {
     setSubmitting(true)
@@ -92,12 +112,38 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setSubmitting(false)
   }
 
-  async function handlePick(team: CachedTeam) {
-    if (!isMyTurn || submitting) return
+  async function handleResetDraft() {
+    if (!confirm('Are you sure you want to reset the draft? All picks will be deleted.')) return
     setSubmitting(true)
     setError(null)
     try {
-      await makePick(pool.id, team.id, team.name, team.conference_key!)
+      await resetDraft(pool.id)
+      setDraftStatus('pre_draft')
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset draft')
+    }
+    setSubmitting(false)
+  }
+
+  async function handleUndoPick() {
+    setSubmitting(true)
+    setError(null)
+    try {
+      await undoPick(pool.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to undo pick')
+    }
+    setSubmitting(false)
+  }
+
+  async function handlePick(team: CachedTeam) {
+    if (!isMyTurn || submitting || !selectedConference) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await makePick(pool.id, team.id, team.name, team.conference_key!, selectedConference)
+      setSelectedConference(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to make pick')
     }
@@ -105,7 +151,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   }
 
   // Pre-draft state
-  if (draftStatus === 'pre_draft') {
+  if (draftStatus === 'pre_draft' || (!draftState && pool.draft_status === 'pre_draft')) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Draft - {pool.name}</h1>
@@ -130,8 +176,21 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   if (draftStatus === 'completed') {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Draft Complete - {pool.name}</h1>
-        <DraftBoard picks={picks} members={members} conferences={conferences} managerCount={members.length} />
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Draft Complete - {pool.name}</h1>
+          {isAdmin && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleUndoPick} disabled={submitting}>
+                Undo Last Pick
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleResetDraft} disabled={submitting}>
+                Reset Draft
+              </Button>
+            </div>
+          )}
+        </div>
+        {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
+        <DraftBoard picks={picks} members={members} conferences={conferences} />
       </div>
     )
   }
@@ -145,15 +204,20 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Draft - {pool.name}</h1>
-        <div className="text-right">
+        <div className="flex items-center gap-4">
           <p className="text-sm text-muted-foreground">
             Round {draftState?.current_round} &middot; Pick {draftState?.current_pick_number}
           </p>
-          <p className="font-medium">
-            {draftState?.conference_key}
-            {draftState?.pac12_ind_depleted && draftState?.conference_key === 'PAC12_IND' &&
-              ' (Depleted - Bonus Pick)'}
-          </p>
+          {isAdmin && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleUndoPick} disabled={submitting || picks.length === 0}>
+                Undo
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleResetDraft} disabled={submitting}>
+                Reset
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -174,14 +238,45 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>
       )}
 
-      {/* Available teams */}
-      {isMyTurn && (
+      {/* Step 1: Conference selector */}
+      {isMyTurn && !selectedConference && (
         <div>
-          <h2 className="mb-3 text-lg font-semibold">
-            Available Teams ({undraftedTeams.length})
-          </h2>
+          <h2 className="mb-3 text-lg font-semibold">Select a Conference</h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {undraftedTeams.map((team) => (
+            {availableConferences.map((conf) => {
+              const teamsInConf = allTeams.filter(
+                (t) => t.conference_key === conf && !draftedTeamIds.has(t.id)
+              ).length
+              return (
+                <Card
+                  key={conf}
+                  className="cursor-pointer transition-colors hover:bg-muted/50"
+                  onClick={() => setSelectedConference(conf)}
+                >
+                  <CardContent className="flex items-center justify-between py-3">
+                    <span className="font-medium">{CONFERENCE_LABELS[conf] ?? conf}</span>
+                    <Badge variant="secondary">{teamsInConf} teams</Badge>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Team selector */}
+      {isMyTurn && selectedConference && (
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">
+              Select a Team from {CONFERENCE_LABELS[selectedConference] ?? selectedConference}
+            </h2>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedConference(null)}>
+              Back to Conferences
+            </Button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {availableTeams.map((team) => (
               <Card
                 key={team.id}
                 className="cursor-pointer transition-colors hover:bg-muted/50"
@@ -194,7 +289,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
                   <div>
                     <p className="font-medium">{team.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {team.wins}-{team.losses} &middot; {team.conference_key}
+                      {team.wins}-{team.losses}
                     </p>
                   </div>
                 </CardContent>
@@ -204,8 +299,10 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
         </div>
       )}
 
+      <Separator />
+
       {/* Draft board */}
-      <DraftBoard picks={picks} members={members} conferences={conferences} managerCount={members.length} />
+      <DraftBoard picks={picks} members={members} conferences={conferences} />
     </div>
   )
 }
@@ -214,15 +311,11 @@ function DraftBoard({
   picks,
   members,
   conferences,
-  managerCount,
 }: {
   picks: { pick_number: number; member_id: string | null; team_name: string; conference_key: string; is_bonus_pick: boolean }[]
   members: (PoolMember & { profiles: Profile })[]
   conferences: string[]
-  managerCount: number
 }) {
-  const snakeOrder = generateSnakeOrder({ managerCount, conferences })
-
   // Group picks by member
   const memberPickMap = new Map<string, typeof picks>()
   for (const member of members) {
@@ -242,9 +335,9 @@ function DraftBoard({
           <thead>
             <tr className="border-b">
               <th className="px-2 py-2 text-left font-medium text-muted-foreground">Manager</th>
-              {conferences.map((conf, i) => (
+              {conferences.map((conf) => (
                 <th key={conf} className="px-2 py-2 text-center font-medium text-muted-foreground">
-                  {conf}
+                  {CONFERENCE_LABELS[conf] ?? conf}
                 </th>
               ))}
             </tr>
@@ -256,26 +349,26 @@ function DraftBoard({
                 const memberPicks = memberPickMap.get(member.id) ?? []
                 return (
                   <tr key={member.id} className="border-b">
-                    <td className="px-2 py-2 font-medium">
+                    <td className="px-2 py-2 font-medium whitespace-nowrap">
                       {member.profiles.display_name}
                     </td>
                     {conferences.map((conf) => {
-                      const pick = memberPicks.find(
-                        (p) => p.conference_key === conf || (p.is_bonus_pick && p.conference_key === conf)
-                      )
-                      // Also check for bonus picks where the team's actual conference matches
-                      const bonusPick = memberPicks.find(
-                        (p) => p.is_bonus_pick && p.conference_key === 'PAC12_IND'
-                      )
-                      const displayPick = conf === 'PAC12_IND' && !pick ? undefined : pick
+                      const pick = memberPicks.find((p) => p.conference_key === conf && !p.is_bonus_pick)
+                      const bonusPick = memberPicks.find((p) => p.conference_key === conf && p.is_bonus_pick)
 
                       return (
                         <td key={conf} className="px-2 py-2 text-center">
-                          {displayPick ? (
+                          {pick && (
                             <Badge variant="secondary" className="text-xs">
-                              {displayPick.team_name}
+                              {pick.team_name}
                             </Badge>
-                          ) : (
+                          )}
+                          {bonusPick && (
+                            <Badge variant="outline" className="mt-1 text-xs">
+                              {bonusPick.team_name} *
+                            </Badge>
+                          )}
+                          {!pick && !bonusPick && (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>

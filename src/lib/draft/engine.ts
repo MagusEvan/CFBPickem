@@ -1,17 +1,16 @@
 import type { SnakePick, DraftConfig, PickValidation } from './types'
-import type { DraftPick, CachedTeam } from '@/lib/types'
+import type { CachedTeam } from '@/lib/types'
 
 /**
  * Generate the full snake draft order.
  * Odd rounds go 1→N, even rounds go N→1.
  */
 export function generateSnakeOrder(config: DraftConfig): SnakePick[] {
-  const { managerCount, conferences } = config
-  const rounds = conferences.length
+  const { managerCount, numRounds } = config
   const picks: SnakePick[] = []
   let pickNumber = 1
 
-  for (let round = 1; round <= rounds; round++) {
+  for (let round = 1; round <= numRounds; round++) {
     const isReversed = round % 2 === 0
     for (let i = 0; i < managerCount; i++) {
       const managerPosition = isReversed ? managerCount - i : i + 1
@@ -24,13 +23,6 @@ export function generateSnakeOrder(config: DraftConfig): SnakePick[] {
 }
 
 /**
- * Get the conference being drafted in a given round.
- */
-export function getConferenceForRound(conferences: string[], round: number): string {
-  return conferences[round - 1]
-}
-
-/**
  * Find which pick corresponds to a given overall pick number.
  */
 export function getPickInfo(snakeOrder: SnakePick[], pickNumber: number): SnakePick | null {
@@ -39,29 +31,32 @@ export function getPickInfo(snakeOrder: SnakePick[], pickNumber: number): SnakeP
 
 /**
  * Validate a draft pick.
+ * Managers freely choose a conference + team each pick.
+ * They cannot pick from a conference they've already drafted from,
+ * unless PAC12_IND is depleted and they haven't used their bonus pick yet.
  */
 export function validatePick(params: {
   teamId: string
   teamConferenceKey: string
-  roundConferenceKey: string
+  chosenConferenceKey: string
   currentPickMemberId: string
   requestingMemberId: string
   draftedTeamIds: Set<string>
   memberConferences: Set<string> // conference keys this manager already drafted from
-  isPac12IndDepleted: boolean
-  isDepletingConference: boolean // true if this round's conference is PAC12_IND
+  memberHasBonusPick: boolean // whether this manager already used a bonus pick
+  pac12IndDepleted: boolean
   poolConferences: string[]
 }): PickValidation {
   const {
     teamId,
     teamConferenceKey,
-    roundConferenceKey,
+    chosenConferenceKey,
     currentPickMemberId,
     requestingMemberId,
     draftedTeamIds,
     memberConferences,
-    isPac12IndDepleted,
-    isDepletingConference,
+    memberHasBonusPick,
+    pac12IndDepleted,
     poolConferences,
   } = params
 
@@ -75,24 +70,23 @@ export function validatePick(params: {
     return { valid: false, error: 'This team has already been drafted.' }
   }
 
-  // 3. Conference validation
-  if (isDepletingConference && isPac12IndDepleted) {
-    // Bonus pick: can pick from any other pool conference (not PAC12_IND)
-    const validConferences = poolConferences.filter((c) => c !== 'PAC12_IND')
-    if (!validConferences.includes(teamConferenceKey)) {
-      return { valid: false, error: 'Bonus pick must be from a pool conference (not Pac-12/Independent).' }
-    }
-  } else {
-    // Normal pick: team must be from the round's conference
-    if (teamConferenceKey !== roundConferenceKey) {
-      return { valid: false, error: `This team is not in the ${roundConferenceKey} conference.` }
-    }
+  // 3. Team must belong to the chosen conference
+  if (teamConferenceKey !== chosenConferenceKey) {
+    return { valid: false, error: 'This team is not in the selected conference.' }
   }
 
-  // 4. Manager doesn't already have a team from this team's conference
-  //    (exception: bonus picks allow a second team from a conference)
-  if (!(isDepletingConference && isPac12IndDepleted)) {
-    if (memberConferences.has(teamConferenceKey)) {
+  // 4. Conference must be a pool conference
+  if (!poolConferences.includes(chosenConferenceKey)) {
+    return { valid: false, error: 'This conference is not part of this pool.' }
+  }
+
+  // 5. Manager can't pick from a conference they've already drafted from
+  if (memberConferences.has(chosenConferenceKey)) {
+    // Exception: if PAC12_IND is depleted and they haven't picked from PAC12_IND
+    // and haven't used their bonus pick, they can pick a second team from another conference
+    if (pac12IndDepleted && !memberConferences.has('PAC12_IND') && !memberHasBonusPick) {
+      // This is a bonus pick — allowed
+    } else {
       return { valid: false, error: 'You already have a team from this conference.' }
     }
   }
@@ -101,8 +95,36 @@ export function validatePick(params: {
 }
 
 /**
- * Check if the Pac-12/Independent pool is depleted for a given round.
- * Returns true if all available teams have been drafted.
+ * Determine which conferences a manager can still pick from.
+ */
+export function getAvailableConferences(
+  poolConferences: string[],
+  memberConferences: Set<string>,
+  pac12IndDepleted: boolean,
+  memberHasBonusPick: boolean
+): string[] {
+  const available = poolConferences.filter((conf) => {
+    // Already drafted from this conference
+    if (memberConferences.has(conf)) return false
+    // PAC12_IND is depleted — can't pick from it
+    if (conf === 'PAC12_IND' && pac12IndDepleted) return false
+    return true
+  })
+
+  // If PAC12_IND is depleted and manager doesn't have a PAC12_IND team
+  // and hasn't used a bonus pick, they can also pick from conferences they already have
+  if (pac12IndDepleted && !memberConferences.has('PAC12_IND') && !memberHasBonusPick) {
+    const bonusConferences = poolConferences.filter(
+      (conf) => conf !== 'PAC12_IND' && memberConferences.has(conf)
+    )
+    return [...available, ...bonusConferences]
+  }
+
+  return available
+}
+
+/**
+ * Check if the Pac-12/Independent pool is depleted.
  */
 export function checkPac12Depletion(
   pac12IndTeamCount: number,
