@@ -75,6 +75,7 @@ create policy "Members can view team scraps"
     pool_id in (select public.user_pool_ids())
   );
 
--- Enable realtime for draft tables
+-- Enable realtime for draft and pool tables
 alter publication supabase_realtime add table public.draft_picks;
 alter publication supabase_realtime add table public.draft_state;
+alter publication supabase_realtime add table public.pools;

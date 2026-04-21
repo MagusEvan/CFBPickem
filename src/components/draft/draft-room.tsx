@@ -24,13 +24,15 @@ interface DraftRoomProps {
 }
 
 export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
-  const { draftState, picks, loading } = useDraftRealtime(pool.id)
+  const { draftState, picks, poolStatus, loading } = useDraftRealtime(pool.id)
   const [allTeams, setAllTeams] = useState<CachedTeam[]>([])
   const [selectedConference, setSelectedConference] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [draftStatus, setDraftStatus] = useState(pool.draft_status)
   const router = useRouter()
+
+  // Use realtime pool status, falling back to server-rendered prop
+  const draftStatus = poolStatus ?? pool.draft_status
 
   const currentMember = members.find((m) => m.user_id === currentUserId)
   const isAdmin = pool.admin_id === currentUserId
@@ -47,19 +49,6 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     }
     fetchTeams()
   }, [pool.season_year, conferences])
-
-  // Track draft completion
-  useEffect(() => {
-    if (draftState) {
-      const snakeOrder = generateSnakeOrder({ managerCount: members.length, numRounds: conferences.length })
-      if (draftState.current_pick_number > snakeOrder.length) {
-        setDraftStatus('completed')
-      } else if (draftStatus === 'pre_draft' && pool.draft_status === 'pre_draft') {
-        // Check if draft state exists (was started via realtime)
-        setDraftStatus('in_progress')
-      }
-    }
-  }, [draftState, members.length, conferences, draftStatus, pool.draft_status])
 
   // Reset selected conference when turn changes
   useEffect(() => {
@@ -105,7 +94,6 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setError(null)
     try {
       await startDraft(pool.id)
-      setDraftStatus('in_progress')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start draft')
     }
@@ -118,7 +106,6 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setError(null)
     try {
       await resetDraft(pool.id)
-      setDraftStatus('pre_draft')
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset draft')
