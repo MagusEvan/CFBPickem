@@ -24,7 +24,7 @@ interface DraftRoomProps {
 }
 
 export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
-  const { draftState, picks, poolStatus, loading } = useDraftRealtime(pool.id)
+  const { draftState, picks, poolStatus, loading, refetch } = useDraftRealtime(pool.id)
   const [allTeams, setAllTeams] = useState<CachedTeam[]>([])
   const [selectedConference, setSelectedConference] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -94,6 +94,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setError(null)
     try {
       await startDraft(pool.id)
+      await refetch()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start draft')
     }
@@ -106,6 +107,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setError(null)
     try {
       await resetDraft(pool.id)
+      await refetch()
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset draft')
@@ -118,6 +120,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setError(null)
     try {
       await undoPick(pool.id)
+      await refetch()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to undo pick')
     }
@@ -131,6 +134,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     try {
       await makePick(pool.id, team.id, team.name, team.conference_key!, selectedConference)
       setSelectedConference(null)
+      await refetch()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to make pick')
     }
