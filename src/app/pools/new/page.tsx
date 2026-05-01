@@ -5,6 +5,7 @@ import { createPool } from '@/lib/pools/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
 const ALL_CONFERENCES = [
@@ -129,6 +130,7 @@ export default function CreatePoolPage() {
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={loading || selectedConferences.length === 0}>
+              {loading && <Spinner className="mr-2" />}
               {loading ? 'Creating...' : 'Create Pool'}
             </Button>
           </CardFooter>

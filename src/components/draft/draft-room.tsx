@@ -8,6 +8,7 @@ import { generateSnakeOrder, getPickInfo, getAvailableConferences } from '@/lib/
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Spinner } from '@/components/ui/spinner'
 import { Separator } from '@/components/ui/separator'
 import type { Pool, PoolMember, Profile, CachedTeam } from '@/lib/types'
 
@@ -153,6 +154,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
             </p>
             {isAdmin && (
               <Button onClick={handleStartDraft} disabled={submitting || members.length < 2}>
+                {submitting && <Spinner className="mr-2" />}
                 {submitting ? 'Starting...' : 'Start Draft'}
               </Button>
             )}
@@ -172,9 +174,11 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
           {isAdmin && (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleUndoPick} disabled={submitting}>
+                {submitting && <Spinner className="mr-2" />}
                 Undo Last Pick
               </Button>
               <Button variant="destructive" size="sm" onClick={handleResetDraft} disabled={submitting}>
+                {submitting && <Spinner className="mr-2" />}
                 Reset Draft
               </Button>
             </div>
@@ -188,7 +192,12 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
 
   // Active draft
   if (loading) {
-    return <div className="py-12 text-center text-muted-foreground">Loading draft...</div>
+    return (
+      <div className="flex flex-col items-center gap-3 py-12">
+        <Spinner className="h-6 w-6" />
+        <p className="text-muted-foreground">Loading draft...</p>
+      </div>
+    )
   }
 
   return (
@@ -202,9 +211,11 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
           {isAdmin && (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleUndoPick} disabled={submitting || picks.length === 0}>
+                {submitting && <Spinner className="mr-2" />}
                 Undo
               </Button>
               <Button variant="destructive" size="sm" onClick={handleResetDraft} disabled={submitting}>
+                {submitting && <Spinner className="mr-2" />}
                 Reset
               </Button>
             </div>
@@ -215,7 +226,12 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
       {/* Current turn indicator */}
       <Card className={isMyTurn ? 'border-primary bg-primary/5' : ''}>
         <CardContent className="py-4 text-center">
-          {isMyTurn ? (
+          {submitting ? (
+            <div className="flex items-center justify-center gap-2">
+              <Spinner />
+              <p className="text-muted-foreground">Submitting pick...</p>
+            </div>
+          ) : isMyTurn ? (
             <p className="text-lg font-bold text-primary">Your Turn to Pick!</p>
           ) : (
             <p className="text-muted-foreground">
@@ -241,7 +257,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
               return (
                 <Card
                   key={conf}
-                  className="cursor-pointer transition-colors hover:bg-muted/50"
+                  className={`cursor-pointer transition-colors hover:bg-muted/50 ${submitting ? 'pointer-events-none opacity-50' : ''}`}
                   onClick={() => setSelectedConference(conf)}
                 >
                   <CardContent className="flex items-center justify-between py-3">
@@ -270,7 +286,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
             {availableTeams.map((team) => (
               <Card
                 key={team.id}
-                className="cursor-pointer transition-colors hover:bg-muted/50"
+                className={`cursor-pointer transition-colors hover:bg-muted/50 ${submitting ? 'pointer-events-none opacity-50' : ''}`}
                 onClick={() => handlePick(team)}
               >
                 <CardContent className="flex items-center gap-3 py-3">

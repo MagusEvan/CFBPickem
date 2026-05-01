@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function ResetPasswordPage() {
@@ -82,6 +83,7 @@ export default function ResetPasswordPage() {
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={loading}>
+              {loading && <Spinner className="mr-2" />}
               {loading ? 'Updating...' : 'Update Password'}
             </Button>
           </CardFooter>
