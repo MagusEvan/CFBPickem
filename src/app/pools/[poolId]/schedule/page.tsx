@@ -46,15 +46,49 @@ export default async function SchedulePage({
 
   const draftedTeamIds = new Set(picks.map((p) => p.team_id))
 
-  // Fetch games for weeks 1-15
+  // Fetch games for selected week
   const selectedWeek = Number(weekParam) || 1
   const weeks = Array.from({ length: 15 }, (_, i) => i + 1)
 
-  const { data: gamesData } = await supabase
+  // Check cache first, if empty trigger a fetch from the data provider
+  let { data: gamesData } = await supabase
     .from('cached_games')
     .select('*')
     .eq('season_year', pool.season_year)
     .eq('week', selectedWeek)
+
+  if (!gamesData || gamesData.length === 0) {
+    // Fetch from provider and populate cache
+    try {
+      const { getDataProvider } = await import('@/lib/data-providers')
+      const { createAdminClient } = await import('@/lib/supabase/admin')
+      const provider = getDataProvider()
+      const fetchedGames = await provider.getGamesForWeek(pool.season_year, selectedWeek)
+      const admin = createAdminClient()
+
+      const rows = fetchedGames.map((g) => ({
+        id: g.id,
+        season_year: g.seasonYear,
+        week: g.week,
+        home_team_id: g.homeTeam.id,
+        away_team_id: g.awayTeam.id,
+        home_score: g.homeTeam.score,
+        away_score: g.awayTeam.score,
+        status: g.status,
+        start_time: g.startTime,
+        venue: g.venue,
+        fetched_at: new Date().toISOString(),
+      }))
+
+      if (rows.length > 0) {
+        await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+      }
+
+      gamesData = rows
+    } catch {
+      gamesData = []
+    }
+  }
 
   const games = (gamesData ?? []) as CachedGame[]
 
