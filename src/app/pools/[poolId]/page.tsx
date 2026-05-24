@@ -38,7 +38,7 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href={`/pools/${pool.id}/draft`}>
           <Card className="transition-colors hover:bg-muted/50">
-            <CardContent className="flex items-center gap-3 pt-6">
+            <CardContent className="flex items-center gap-3 py-2">
               <Users className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="font-medium">Draft</p>
@@ -53,7 +53,7 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
 
         <Link href={`/pools/${pool.id}/standings`}>
           <Card className="transition-colors hover:bg-muted/50">
-            <CardContent className="flex items-center gap-3 pt-6">
+            <CardContent className="flex items-center gap-3 py-2">
               <Trophy className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="font-medium">Standings</p>
@@ -65,7 +65,7 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
 
         <Link href={`/pools/${pool.id}/schedule`}>
           <Card className="transition-colors hover:bg-muted/50">
-            <CardContent className="flex items-center gap-3 pt-6">
+            <CardContent className="flex items-center gap-3 py-2">
               <Calendar className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="font-medium">Schedule</p>
