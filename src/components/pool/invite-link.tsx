@@ -15,8 +15,8 @@ export function InviteLinkButton({ inviteCode }: { inviteCode: string }) {
   }
 
   return (
-    <Card className="cursor-pointer transition-colors hover:bg-muted/50" onClick={copyLink}>
-      <CardContent className="flex items-center gap-3 py-2">
+    <Card className="cursor-pointer py-0 transition-colors hover:bg-muted/50" onClick={copyLink}>
+      <CardContent className="flex items-center gap-3 px-4 py-4">
         {copied ? (
           <Check className="h-5 w-5 text-green-600" />
         ) : (
