@@ -1,8 +1,10 @@
 import { getPoolByInviteCode, getCurrentUserId } from '@/lib/pools/queries'
 import { joinPool } from '@/lib/pools/actions'
 import { redirect } from 'next/navigation'
+import { createAdminClient } from '@/lib/supabase/admin'
+import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 
 export default async function JoinPoolPage({ params }: { params: Promise<{ inviteCode: string }> }) {
   const { inviteCode } = await params
@@ -26,6 +28,37 @@ export default async function JoinPoolPage({ params }: { params: Promise<{ invit
     redirect(`/login?next=/join/${inviteCode}`)
   }
 
+  // Check if user is already a member
+  const admin = createAdminClient()
+  const { data: existing } = await admin
+    .from('pool_members')
+    .select('id')
+    .eq('pool_id', pool.id)
+    .eq('user_id', userId)
+    .single()
+
+  if (existing) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <CardTitle>{pool.name}</CardTitle>
+            <CardDescription>You&apos;re already a member of this pool.</CardDescription>
+          </CardHeader>
+          <CardFooter className="justify-center">
+            <Link href={`/pools/${pool.id}`} className={buttonVariants({ size: 'lg' })}>
+              Go to Pool
+            </Link>
+          </CardFooter>
+        </Card>
+      </div>
+    )
+  }
+
+  const poolLabel = pool.game_type === 'world_cup'
+    ? `World Cup ${pool.season_year}`
+    : `${pool.season_year} Season`
+
   async function handleJoin() {
     'use server'
     await joinPool(inviteCode)
@@ -40,7 +73,7 @@ export default async function JoinPoolPage({ params }: { params: Promise<{ invit
         </CardHeader>
         <CardContent>
           <p className="text-xl font-bold">{pool.name}</p>
-          <p className="text-muted-foreground">{pool.season_year} Season</p>
+          <p className="text-muted-foreground">{poolLabel}</p>
         </CardContent>
         <CardFooter className="justify-center">
           <form action={handleJoin}>
