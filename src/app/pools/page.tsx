@@ -58,7 +58,7 @@ export default async function PoolsPage() {
                     <DraftStatusBadge status={pool.draft_status} />
                   </div>
                   <CardDescription>
-                    {pool.season_year} Season &middot; {pool.max_managers} managers
+                    {pool.game_type === 'world_cup' ? `World Cup ${pool.season_year}` : `${pool.season_year} Season`} &middot; {pool.max_managers} managers
                   </CardDescription>
                 </CardHeader>
               </Card>

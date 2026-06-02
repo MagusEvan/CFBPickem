@@ -11,3 +11,15 @@ export interface ManagerStanding {
   totalLosses: number
   teamCount: number
 }
+
+export interface WorldCupManagerStanding {
+  memberId: string
+  displayName: string
+  totalPoints: number
+  teamBreakdowns: {
+    teamId: string
+    teamName: string
+    points: number
+    gamesPlayed: number
+  }[]
+}

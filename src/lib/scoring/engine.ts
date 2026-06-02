@@ -1,6 +1,7 @@
-import type { ScoringStrategy, ManagerStanding } from './types'
+import type { ScoringStrategy, ManagerStanding, WorldCupManagerStanding } from './types'
 import { winsOnlyStrategy } from './strategies/wins-only'
-import type { DraftPick, CachedTeam, PoolMember, Profile } from '@/lib/types'
+import { calculateTeamPoints } from './strategies/world-cup'
+import type { DraftPick, CachedTeam, CachedGame, PoolMember, Profile, WorldCupScoringConfig } from '@/lib/types'
 
 const strategies: Record<string, ScoringStrategy> = {
   wins_only: winsOnlyStrategy,
@@ -40,6 +41,43 @@ export function calculateStandings(
         totalWins,
         totalLosses,
         teamCount: memberPicks.length,
+      }
+    })
+    .sort((a, b) => b.totalPoints - a.totalPoints)
+}
+
+export function calculateWorldCupStandings(
+  members: (PoolMember & { profiles: Profile })[],
+  picks: DraftPick[],
+  games: CachedGame[],
+  config: WorldCupScoringConfig
+): WorldCupManagerStanding[] {
+  return members
+    .map((member) => {
+      const memberPicks = picks.filter((p) => p.member_id === member.id)
+      const teamBreakdowns: WorldCupManagerStanding['teamBreakdowns'] = []
+      let totalPoints = 0
+
+      for (const pick of memberPicks) {
+        const { totalPoints: teamPts, breakdown } = calculateTeamPoints(
+          games,
+          pick.team_id,
+          config
+        )
+        teamBreakdowns.push({
+          teamId: pick.team_id,
+          teamName: pick.team_name,
+          points: teamPts,
+          gamesPlayed: breakdown.length,
+        })
+        totalPoints += teamPts
+      }
+
+      return {
+        memberId: member.id,
+        displayName: member.profiles.display_name,
+        totalPoints,
+        teamBreakdowns,
       }
     })
     .sort((a, b) => b.totalPoints - a.totalPoints)

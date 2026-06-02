@@ -14,12 +14,36 @@ export interface Pool {
   season_year: number
   invite_code: string
   max_managers: number
-  conferences: string[]
+  conferences: string[] | null
   num_rounds: number
   scoring_strategy: string
   draft_status: 'pre_draft' | 'in_progress' | 'completed'
   draft_order_mode: 'manual' | 'random'
+  game_type: 'cfb' | 'world_cup'
+  teams_per_manager: number | null
+  scoring_config: WorldCupScoringConfig | null
   created_at: string
+}
+
+export interface WorldCupScoringConfig {
+  group: {
+    win: number
+    draw: number
+    goal_points: number
+    goal_cap: number
+    shutout: number
+  }
+  knockout: {
+    win: number
+    ot_win: number
+    shootout_win: number
+    shootout_loss: number
+    ot_loss: number
+    loss: number
+    goal_points: number
+    goal_cap: number | null
+    shutout: number
+  }
 }
 
 export interface PoolMember {
@@ -86,13 +110,14 @@ export interface CachedTeam {
   season_year: number
   wins: number
   losses: number
+  game_type: 'cfb' | 'world_cup'
   fetched_at: string
 }
 
 export interface CachedGame {
   id: string
   season_year: number
-  week: number
+  week: number | null
   home_team_id: string
   away_team_id: string
   home_score: number | null
@@ -100,5 +125,12 @@ export interface CachedGame {
   status: 'scheduled' | 'in_progress' | 'final'
   start_time: string | null
   venue: string | null
+  game_type: 'cfb' | 'world_cup'
+  stage: string | null
+  is_overtime: boolean
+  is_shootout: boolean
+  home_penalty_score: number | null
+  away_penalty_score: number | null
+  manual_entry: boolean
   fetched_at: string
 }

@@ -95,6 +95,29 @@ export function validatePick(params: {
 }
 
 /**
+ * Validate a World Cup draft pick.
+ * No conferences — just check turn order and team availability.
+ */
+export function validateWorldCupPick(params: {
+  teamId: string
+  currentPickMemberId: string
+  requestingMemberId: string
+  draftedTeamIds: Set<string>
+}): PickValidation {
+  const { teamId, currentPickMemberId, requestingMemberId, draftedTeamIds } = params
+
+  if (currentPickMemberId !== requestingMemberId) {
+    return { valid: false, error: 'It is not your turn to pick.' }
+  }
+
+  if (draftedTeamIds.has(teamId)) {
+    return { valid: false, error: 'This team has already been drafted.' }
+  }
+
+  return { valid: true }
+}
+
+/**
  * Determine which conferences a manager can still pick from.
  */
 export function getAvailableConferences(

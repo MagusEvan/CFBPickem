@@ -2,10 +2,18 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
-import { calculateStandings } from '@/lib/scoring/engine'
+import { calculateStandings, calculateWorldCupStandings } from '@/lib/scoring/engine'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import type { DraftPick, CachedTeam, TeamScraps } from '@/lib/types'
+import type { DraftPick, CachedTeam, CachedGame, TeamScraps, WorldCupScoringConfig } from '@/lib/types'
+
+const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
+  group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },
+  knockout: {
+    win: 6, ot_win: 5, shootout_win: 4, shootout_loss: 2,
+    ot_loss: 1, loss: 0, goal_points: 1, goal_cap: null, shutout: 1,
+  },
+}
 
 export default async function StandingsPage({ params }: { params: Promise<{ poolId: string }> }) {
   const { poolId } = await params
@@ -15,18 +23,6 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   ])
 
   if (!pool) notFound()
-
-  const supabase = await createClient()
-
-  const [picksRes, teamsRes, scrapsRes] = await Promise.all([
-    supabase.from('draft_picks').select('*').eq('pool_id', poolId),
-    supabase.from('cached_teams').select('*').eq('season_year', pool.season_year),
-    supabase.from('team_scraps').select('*').eq('pool_id', poolId),
-  ])
-
-  const picks = (picksRes.data ?? []) as DraftPick[]
-  const teams = (teamsRes.data ?? []) as CachedTeam[]
-  const scraps = (scrapsRes.data ?? []) as TeamScraps[]
 
   if (pool.draft_status === 'pre_draft') {
     return (
@@ -41,10 +37,26 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
     )
   }
 
+  const supabase = await createClient()
+
+  if (pool.game_type === 'world_cup') {
+    return <WorldCupStandings poolId={poolId} pool={pool} members={members} />
+  }
+
+  // CFB standings
+  const [picksRes, teamsRes, scrapsRes] = await Promise.all([
+    supabase.from('draft_picks').select('*').eq('pool_id', poolId),
+    supabase.from('cached_teams').select('*').eq('season_year', pool.season_year),
+    supabase.from('team_scraps').select('*').eq('pool_id', poolId),
+  ])
+
+  const picks = (picksRes.data ?? []) as DraftPick[]
+  const teams = (teamsRes.data ?? []) as CachedTeam[]
+  const scraps = (scrapsRes.data ?? []) as TeamScraps[]
+
   const standings = calculateStandings(members, picks, teams, pool.scoring_strategy)
   const teamMap = new Map(teams.map((t) => [t.id, t]))
 
-  // Calculate Team Scraps total wins
   const scrapsTotal = scraps.reduce((sum, s) => {
     const team = teamMap.get(s.team_id)
     return sum + (team?.wins ?? s.wins)
@@ -54,7 +66,6 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
 
-      {/* Leaderboard */}
       <Card>
         <CardHeader>
           <CardTitle>Leaderboard</CardTitle>
@@ -87,7 +98,6 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
                   <td className="px-2 py-2 text-center font-bold">{s.totalPoints}</td>
                 </tr>
               ))}
-              {/* Team Scraps row */}
               <tr className="border-b bg-muted/30">
                 <td className="px-2 py-2 text-muted-foreground">—</td>
                 <td className="px-2 py-2 text-muted-foreground italic">Team Scraps</td>
@@ -100,7 +110,6 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
         </CardContent>
       </Card>
 
-      {/* Team Scraps detail */}
       {scraps.length > 0 && (
         <Card>
           <CardHeader>
@@ -129,6 +138,98 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
           </CardContent>
         </Card>
       )}
+    </div>
+  )
+}
+
+async function WorldCupStandings({
+  poolId,
+  pool,
+  members,
+}: {
+  poolId: string
+  pool: { season_year: number; scoring_config: WorldCupScoringConfig | null }
+  members: Parameters<typeof calculateWorldCupStandings>[0]
+}) {
+  const supabase = await createClient()
+
+  const [picksRes, gamesRes] = await Promise.all([
+    supabase.from('draft_picks').select('*').eq('pool_id', poolId),
+    supabase.from('cached_games').select('*').eq('game_type', 'world_cup').eq('season_year', pool.season_year),
+  ])
+
+  const picks = (picksRes.data ?? []) as DraftPick[]
+  const games = (gamesRes.data ?? []) as CachedGame[]
+  const config = pool.scoring_config ?? DEFAULT_WC_SCORING
+
+  const standings = calculateWorldCupStandings(members, picks, games, config)
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Standings</h1>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Leaderboard</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="px-2 py-2 text-left">Rank</th>
+                <th className="px-2 py-2 text-left">Manager</th>
+                <th className="px-2 py-2 text-center">Teams</th>
+                <th className="px-2 py-2 text-center">Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((s, i) => (
+                <tr key={s.memberId} className="border-b">
+                  <td className="px-2 py-2 font-medium">{i + 1}</td>
+                  <td className="px-2 py-2">
+                    <Link
+                      href={`/pools/${poolId}/rosters/${s.memberId}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {s.displayName}
+                    </Link>
+                  </td>
+                  <td className="px-2 py-2 text-center">{s.teamBreakdowns.length}</td>
+                  <td className="px-2 py-2 text-center font-bold">{s.totalPoints}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {/* Per-manager team breakdowns */}
+      {standings.map((s) => (
+        <Card key={s.memberId}>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {s.displayName} — {s.totalPoints} pts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {s.teamBreakdowns
+                .sort((a, b) => b.points - a.points)
+                .map((tb) => (
+                  <div key={tb.teamId} className="flex items-center justify-between rounded-md border p-2">
+                    <span className="text-sm font-medium">{tb.teamName}</span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {tb.gamesPlayed} GP
+                      </Badge>
+                      <span className="text-sm font-bold">{tb.points} pts</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }

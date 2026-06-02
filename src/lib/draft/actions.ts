@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { generateSnakeOrder, getPickInfo, validatePick, checkPac12Depletion, calculateTeamScraps } from './engine'
+import { generateSnakeOrder, getPickInfo, validatePick, validateWorldCupPick, checkPac12Depletion, calculateTeamScraps } from './engine'
 import type { Pool, PoolMember, DraftPick, DraftState, CachedTeam } from '@/lib/types'
 
 export async function startDraft(poolId: string) {
@@ -101,6 +101,13 @@ export async function resetDraft(poolId: string) {
   return { success: true }
 }
 
+function getNumRounds(pool: Pool): number {
+  if (pool.game_type === 'world_cup') {
+    return pool.teams_per_manager ?? 1
+  }
+  return (pool.conferences ?? []).length
+}
+
 export async function undoPick(poolId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -138,7 +145,7 @@ export async function undoPick(poolId: string) {
   }
 
   // Rewind draft state to the undone pick
-  const conferences = pool.conferences as string[]
+  const numRounds = getNumRounds(pool)
   const { data: members } = await admin
     .from('pool_members')
     .select('*')
@@ -147,33 +154,36 @@ export async function undoPick(poolId: string) {
 
   if (!members) throw new Error('No members found')
 
-  const snakeOrder = generateSnakeOrder({ managerCount: members.length, numRounds: conferences.length })
+  const snakeOrder = generateSnakeOrder({ managerCount: members.length, numRounds })
   const pickInfo = getPickInfo(snakeOrder, lastPick.pick_number)
 
   if (!pickInfo) throw new Error('Invalid pick number')
 
   const memberForPick = members.find((m) => m.draft_position === pickInfo.managerPosition)
 
-  // Check pac12 depletion status after removing the pick
+  // Check pac12 depletion status after removing the pick (CFB only)
   let pac12Depleted = false
-  if (conferences.includes('PAC12_IND')) {
-    const { data: pac12Teams } = await admin
-      .from('cached_teams')
-      .select('id')
-      .eq('conference_key', 'PAC12_IND')
-      .eq('season_year', pool.season_year)
+  if (pool.game_type === 'cfb') {
+    const conferences = pool.conferences ?? []
+    if (conferences.includes('PAC12_IND')) {
+      const { data: pac12Teams } = await admin
+        .from('cached_teams')
+        .select('id')
+        .eq('conference_key', 'PAC12_IND')
+        .eq('season_year', pool.season_year)
 
-    const { data: pac12Picks } = await admin
-      .from('draft_picks')
-      .select('id')
-      .eq('pool_id', poolId)
-      .eq('conference_key', 'PAC12_IND')
-      .eq('is_bonus_pick', false)
+      const { data: pac12Picks } = await admin
+        .from('draft_picks')
+        .select('id')
+        .eq('pool_id', poolId)
+        .eq('conference_key', 'PAC12_IND')
+        .eq('is_bonus_pick', false)
 
-    pac12Depleted = checkPac12Depletion(
-      pac12Teams?.length ?? 0,
-      pac12Picks?.length ?? 0
-    )
+      pac12Depleted = checkPac12Depletion(
+        pac12Teams?.length ?? 0,
+        pac12Picks?.length ?? 0
+      )
+    }
   }
 
   await admin.from('draft_state').update({
@@ -222,48 +232,70 @@ export async function makePick(
 
   const draftedTeamIds = new Set((existingPicks ?? []).map((p) => p.team_id))
 
-  // Get this member's drafted conferences and bonus pick status
-  const memberPicks = (existingPicks ?? []).filter((p) => p.member_id === member.id)
-  const memberConferences = new Set(memberPicks.map((p) => p.conference_key))
-  const memberHasBonusPick = memberPicks.some((p) => p.is_bonus_pick)
+  if (pool.game_type === 'world_cup') {
+    // World Cup: simplified validation (no conferences)
+    const validation = validateWorldCupPick({
+      teamId,
+      currentPickMemberId: state.current_member_id!,
+      requestingMemberId: member.id,
+      draftedTeamIds,
+    })
 
-  const conferences = pool.conferences as string[]
+    if (!validation.valid) throw new Error(validation.error)
 
-  // Validate pick
-  const validation = validatePick({
-    teamId,
-    teamConferenceKey,
-    chosenConferenceKey,
-    currentPickMemberId: state.current_member_id!,
-    requestingMemberId: member.id,
-    draftedTeamIds,
-    memberConferences,
-    memberHasBonusPick,
-    pac12IndDepleted: state.pac12_ind_depleted,
-    poolConferences: conferences,
-  })
+    const { error: pickError } = await admin.from('draft_picks').insert({
+      pool_id: poolId,
+      member_id: member.id,
+      round: state.current_round,
+      pick_number: state.current_pick_number,
+      conference_key: null,
+      team_id: teamId,
+      team_name: teamName,
+      is_bonus_pick: false,
+      bonus_conference_key: null,
+    })
 
-  if (!validation.valid) throw new Error(validation.error)
+    if (pickError) throw new Error(pickError.message)
+  } else {
+    // CFB: conference-based validation
+    const memberPicks = (existingPicks ?? []).filter((p) => p.member_id === member.id)
+    const memberConferences = new Set(memberPicks.map((p) => p.conference_key))
+    const memberHasBonusPick = memberPicks.some((p) => p.is_bonus_pick)
+    const conferences = pool.conferences as string[]
 
-  // Determine if this is a bonus pick
-  const isBonusPick = state.pac12_ind_depleted &&
-    !memberConferences.has('PAC12_IND') &&
-    memberConferences.has(chosenConferenceKey)
+    const validation = validatePick({
+      teamId,
+      teamConferenceKey,
+      chosenConferenceKey,
+      currentPickMemberId: state.current_member_id!,
+      requestingMemberId: member.id,
+      draftedTeamIds,
+      memberConferences,
+      memberHasBonusPick,
+      pac12IndDepleted: state.pac12_ind_depleted,
+      poolConferences: conferences,
+    })
 
-  // Insert pick
-  const { error: pickError } = await admin.from('draft_picks').insert({
-    pool_id: poolId,
-    member_id: member.id,
-    round: state.current_round,
-    pick_number: state.current_pick_number,
-    conference_key: chosenConferenceKey,
-    team_id: teamId,
-    team_name: teamName,
-    is_bonus_pick: isBonusPick,
-    bonus_conference_key: isBonusPick ? chosenConferenceKey : null,
-  })
+    if (!validation.valid) throw new Error(validation.error)
 
-  if (pickError) throw new Error(pickError.message)
+    const isBonusPick = state.pac12_ind_depleted &&
+      !memberConferences.has('PAC12_IND') &&
+      memberConferences.has(chosenConferenceKey)
+
+    const { error: pickError } = await admin.from('draft_picks').insert({
+      pool_id: poolId,
+      member_id: member.id,
+      round: state.current_round,
+      pick_number: state.current_pick_number,
+      conference_key: chosenConferenceKey,
+      team_id: teamId,
+      team_name: teamName,
+      is_bonus_pick: isBonusPick,
+      bonus_conference_key: isBonusPick ? chosenConferenceKey : null,
+    })
+
+    if (pickError) throw new Error(pickError.message)
+  }
 
   // Advance draft state
   await advanceDraftState(admin, pool, state, poolId)
@@ -285,9 +317,9 @@ async function advanceDraftState(
 
   if (!members) return
 
-  const conferences = pool.conferences as string[]
+  const numRounds = getNumRounds(pool)
   const managerCount = members.length
-  const snakeOrder = generateSnakeOrder({ managerCount, numRounds: conferences.length })
+  const snakeOrder = generateSnakeOrder({ managerCount, numRounds })
   const totalPicks = snakeOrder.length
   const nextPickNumber = state.current_pick_number + 1
 
@@ -299,33 +331,39 @@ async function advanceDraftState(
       updated_at: new Date().toISOString(),
     }).eq('pool_id', poolId)
 
-    await finalizeTeamScraps(admin, poolId, pool)
+    // Only finalize team scraps for CFB pools
+    if (pool.game_type === 'cfb') {
+      await finalizeTeamScraps(admin, poolId, pool)
+    }
     return
   }
 
   const nextPick = getPickInfo(snakeOrder, nextPickNumber)!
   const nextMember = members.find((m) => m.draft_position === nextPick.managerPosition)
 
-  // Check Pac-12 depletion
+  // Check Pac-12 depletion (CFB only)
   let pac12Depleted = state.pac12_ind_depleted
-  if (conferences.includes('PAC12_IND') && !pac12Depleted) {
-    const { data: pac12Teams } = await admin
-      .from('cached_teams')
-      .select('id')
-      .eq('conference_key', 'PAC12_IND')
-      .eq('season_year', pool.season_year)
+  if (pool.game_type === 'cfb') {
+    const conferences = pool.conferences ?? []
+    if (conferences.includes('PAC12_IND') && !pac12Depleted) {
+      const { data: pac12Teams } = await admin
+        .from('cached_teams')
+        .select('id')
+        .eq('conference_key', 'PAC12_IND')
+        .eq('season_year', pool.season_year)
 
-    const { data: pac12Picks } = await admin
-      .from('draft_picks')
-      .select('id')
-      .eq('pool_id', poolId)
-      .eq('conference_key', 'PAC12_IND')
-      .eq('is_bonus_pick', false)
+      const { data: pac12Picks } = await admin
+        .from('draft_picks')
+        .select('id')
+        .eq('pool_id', poolId)
+        .eq('conference_key', 'PAC12_IND')
+        .eq('is_bonus_pick', false)
 
-    pac12Depleted = checkPac12Depletion(
-      pac12Teams?.length ?? 0,
-      pac12Picks?.length ?? 0
-    )
+      pac12Depleted = checkPac12Depletion(
+        pac12Teams?.length ?? 0,
+        pac12Picks?.length ?? 0
+      )
+    }
   }
 
   await admin.from('draft_state').update({

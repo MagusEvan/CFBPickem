@@ -25,7 +25,9 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{pool.name}</h1>
-          <p className="text-muted-foreground">{pool.season_year} Season</p>
+          <p className="text-muted-foreground">
+            {pool.game_type === 'world_cup' ? `World Cup ${pool.season_year}` : `${pool.season_year} Season`}
+          </p>
         </div>
         <Badge variant={pool.draft_status === 'completed' ? 'secondary' : 'outline'}>
           {pool.draft_status === 'pre_draft' && 'Pre-Draft'}
@@ -69,7 +71,9 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
               <Calendar className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="font-medium">Schedule</p>
-                <p className="text-sm text-muted-foreground">Weekly matchups</p>
+                <p className="text-sm text-muted-foreground">
+                  {pool.game_type === 'world_cup' ? 'Match schedule' : 'Weekly matchups'}
+                </p>
               </div>
             </CardContent>
           </Card>

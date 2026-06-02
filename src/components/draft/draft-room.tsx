@@ -32,24 +32,34 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
+  const isWorldCup = pool.game_type === 'world_cup'
+
   // Use realtime pool status, falling back to server-rendered prop
   const draftStatus = poolStatus ?? pool.draft_status
 
   const currentMember = members.find((m) => m.user_id === currentUserId)
   const isAdmin = pool.admin_id === currentUserId
-  const conferences = pool.conferences as string[]
+  const conferences = (pool.conferences ?? []) as string[]
 
   // Fetch all teams on mount
   useEffect(() => {
     async function fetchTeams() {
-      const res = await fetch(`/api/data/teams?year=${pool.season_year}`)
-      if (res.ok) {
-        const teams: CachedTeam[] = await res.json()
-        setAllTeams(teams.filter((t) => t.conference_key && conferences.includes(t.conference_key)))
+      if (isWorldCup) {
+        const res = await fetch(`/api/data/wc-teams?year=${pool.season_year}`)
+        if (res.ok) {
+          const teams: CachedTeam[] = await res.json()
+          setAllTeams(teams)
+        }
+      } else {
+        const res = await fetch(`/api/data/teams?year=${pool.season_year}`)
+        if (res.ok) {
+          const teams: CachedTeam[] = await res.json()
+          setAllTeams(teams.filter((t) => t.conference_key && conferences.includes(t.conference_key)))
+        }
       }
     }
     fetchTeams()
-  }, [pool.season_year, conferences])
+  }, [pool.season_year, isWorldCup, conferences])
 
   // Reset selected conference when turn changes
   useEffect(() => {
@@ -60,35 +70,58 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   const isMyTurn = draftState?.current_member_id === currentMember?.id
   const currentPicker = members.find((m) => m.id === draftState?.current_member_id)
 
-  // Get conferences this manager has already drafted from
+  // Get conferences this manager has already drafted from (CFB only)
   const myConferences = useMemo(() => {
-    if (!currentMember) return new Set<string>()
+    if (!currentMember || isWorldCup) return new Set<string>()
     return new Set(picks.filter((p) => p.member_id === currentMember.id).map((p) => p.conference_key))
-  }, [picks, currentMember])
+  }, [picks, currentMember, isWorldCup])
 
   const myBonusPick = useMemo(() => {
-    if (!currentMember) return false
+    if (!currentMember || isWorldCup) return false
     return picks.some((p) => p.member_id === currentMember.id && p.is_bonus_pick)
-  }, [picks, currentMember])
+  }, [picks, currentMember, isWorldCup])
 
-  // Available conferences for current picker
+  // Available conferences for current picker (CFB only)
   const availableConferences = useMemo(() => {
-    if (!isMyTurn) return []
+    if (!isMyTurn || isWorldCup) return []
     return getAvailableConferences(
       conferences,
       myConferences,
       draftState?.pac12_ind_depleted ?? false,
       myBonusPick
     )
-  }, [isMyTurn, conferences, myConferences, draftState?.pac12_ind_depleted, myBonusPick])
+  }, [isMyTurn, isWorldCup, conferences, myConferences, draftState?.pac12_ind_depleted, myBonusPick])
 
-  // Available teams in selected conference
+  // Available teams in selected conference (CFB) or all undrafted (WC)
   const availableTeams = useMemo(() => {
+    if (isWorldCup) {
+      return allTeams
+        .filter((t) => !draftedTeamIds.has(t.id))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    }
     if (!selectedConference) return []
     return allTeams
       .filter((t) => t.conference_key === selectedConference && !draftedTeamIds.has(t.id))
       .sort((a, b) => b.wins - a.wins || a.name.localeCompare(b.name))
-  }, [selectedConference, allTeams, draftedTeamIds])
+  }, [isWorldCup, selectedConference, allTeams, draftedTeamIds])
+
+  // Group WC teams by group letter for display
+  const wcTeamsByGroup = useMemo(() => {
+    if (!isWorldCup) return new Map<string, CachedTeam[]>()
+    const groups = new Map<string, CachedTeam[]>()
+    // We need group info — it's not in CachedTeam, so we use abbreviation trick:
+    // For WC teams, the id is the FIFA code. We'll fetch group from static data
+    // For now, group by first letter of id as placeholder... actually we should store group somewhere.
+    // The WC teams API stores conference_key as null, but we can use the static data.
+    // Let's group undrafted teams alphabetically by name for now and use the static teams data
+    for (const team of availableTeams) {
+      // Group letter isn't in cached_teams. We'll just show all undrafted teams sorted by name.
+      const letter = team.name[0].toUpperCase()
+      if (!groups.has(letter)) groups.set(letter, [])
+      groups.get(letter)!.push(team)
+    }
+    return groups
+  }, [isWorldCup, availableTeams])
 
   async function handleStartDraft() {
     setSubmitting(true)
@@ -129,11 +162,18 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   }
 
   async function handlePick(team: CachedTeam) {
-    if (!isMyTurn || submitting || !selectedConference) return
+    if (!isMyTurn || submitting) return
+    if (!isWorldCup && !selectedConference) return
     setSubmitting(true)
     setError(null)
     try {
-      await makePick(pool.id, team.id, team.name, team.conference_key!, selectedConference)
+      await makePick(
+        pool.id,
+        team.id,
+        team.name,
+        team.conference_key ?? '',
+        isWorldCup ? '' : selectedConference!
+      )
       setSelectedConference(null)
       await refetch()
     } catch (err) {
@@ -185,7 +225,11 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
           )}
         </div>
         {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
-        <DraftBoard picks={picks} members={members} conferences={conferences} />
+        {isWorldCup ? (
+          <WcDraftBoard picks={picks} members={members} numRounds={pool.teams_per_manager ?? 1} />
+        ) : (
+          <DraftBoard picks={picks} members={members} conferences={conferences} />
+        )}
       </div>
     )
   }
@@ -245,8 +289,34 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>
       )}
 
-      {/* Step 1: Conference selector */}
-      {isMyTurn && !selectedConference && (
+      {/* World Cup: Show all undrafted teams */}
+      {isWorldCup && isMyTurn && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold">Select a Team</h2>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {availableTeams.map((team) => (
+              <Card
+                key={team.id}
+                className={`cursor-pointer transition-colors hover:bg-muted/50 ${submitting ? 'pointer-events-none opacity-50' : ''}`}
+                onClick={() => handlePick(team)}
+              >
+                <CardContent className="flex items-center gap-3 py-3">
+                  {team.logo_url && (
+                    <img src={team.logo_url} alt={team.name} className="h-8 w-8 object-contain" />
+                  )}
+                  <div>
+                    <p className="font-medium">{team.name}</p>
+                    <p className="text-xs text-muted-foreground">{team.abbreviation}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CFB: Step 1: Conference selector */}
+      {!isWorldCup && isMyTurn && !selectedConference && (
         <div>
           <h2 className="mb-3 text-lg font-semibold">Select a Conference</h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -271,8 +341,8 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
         </div>
       )}
 
-      {/* Step 2: Team selector */}
-      {isMyTurn && selectedConference && (
+      {/* CFB: Step 2: Team selector */}
+      {!isWorldCup && isMyTurn && selectedConference && (
         <div>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold">
@@ -309,11 +379,16 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
       <Separator />
 
       {/* Draft board */}
-      <DraftBoard picks={picks} members={members} conferences={conferences} />
+      {isWorldCup ? (
+        <WcDraftBoard picks={picks} members={members} numRounds={pool.teams_per_manager ?? 1} />
+      ) : (
+        <DraftBoard picks={picks} members={members} conferences={conferences} />
+      )}
     </div>
   )
 }
 
+// CFB Draft Board — conferences as columns
 function DraftBoard({
   picks,
   members,
@@ -323,7 +398,6 @@ function DraftBoard({
   members: (PoolMember & { profiles: Profile })[]
   conferences: string[]
 }) {
-  // Group picks by member
   const memberPickMap = new Map<string, typeof picks>()
   for (const member of members) {
     memberPickMap.set(member.id, [])
@@ -376,6 +450,77 @@ function DraftBoard({
                             </Badge>
                           )}
                           {!pick && !bonusPick && (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// World Cup Draft Board — rounds as columns
+function WcDraftBoard({
+  picks,
+  members,
+  numRounds,
+}: {
+  picks: { pick_number: number; round: number; member_id: string | null; team_name: string }[]
+  members: (PoolMember & { profiles: Profile })[]
+  numRounds: number
+}) {
+  const rounds = Array.from({ length: numRounds }, (_, i) => i + 1)
+
+  const memberPickMap = new Map<string, typeof picks>()
+  for (const member of members) {
+    memberPickMap.set(member.id, [])
+  }
+  for (const pick of picks) {
+    if (pick.member_id && memberPickMap.has(pick.member_id)) {
+      memberPickMap.get(pick.member_id)!.push(pick)
+    }
+  }
+
+  return (
+    <div>
+      <h2 className="mb-3 text-lg font-semibold">Draft Board</h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="px-2 py-2 text-left font-medium text-muted-foreground">Manager</th>
+              {rounds.map((r) => (
+                <th key={r} className="px-2 py-2 text-center font-medium text-muted-foreground">
+                  Round {r}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {members
+              .sort((a, b) => (a.draft_position ?? 99) - (b.draft_position ?? 99))
+              .map((member) => {
+                const memberPicks = memberPickMap.get(member.id) ?? []
+                return (
+                  <tr key={member.id} className="border-b">
+                    <td className="px-2 py-2 font-medium whitespace-nowrap">
+                      {member.profiles.display_name}
+                    </td>
+                    {rounds.map((r) => {
+                      const pick = memberPicks.find((p) => p.round === r)
+                      return (
+                        <td key={r} className="px-2 py-2 text-center">
+                          {pick ? (
+                            <Badge variant="secondary" className="text-xs">
+                              {pick.team_name}
+                            </Badge>
+                          ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>

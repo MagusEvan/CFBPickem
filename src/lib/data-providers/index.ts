@@ -14,4 +14,4 @@ export function getDataProvider(): DataProvider {
 }
 
 export type { DataProvider } from './provider'
-export type { CfbTeam, CfbGame, CfbTeamRecord } from './types'
+export type { CfbTeam, CfbGame, CfbTeamRecord, WcTeam, WcGame, WcStage } from './types'
