@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { nanoid } from 'nanoid'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
@@ -126,8 +127,9 @@ export async function joinPool(inviteCode: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  // Look up pool by invite code
-  const { data: pool, error: poolError } = await supabase
+  // Use admin client to bypass RLS — user isn't a member yet
+  const admin = createAdminClient()
+  const { data: pool, error: poolError } = await admin
     .from('pools')
     .select('id, max_managers, draft_status')
     .eq('invite_code', inviteCode)
