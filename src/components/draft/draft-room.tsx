@@ -28,6 +28,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   const { draftState, picks, poolStatus, loading, refetch } = useDraftRealtime(pool.id)
   const [allTeams, setAllTeams] = useState<CachedTeam[]>([])
   const [selectedConference, setSelectedConference] = useState<string | null>(null)
+  const [pendingPick, setPendingPick] = useState<CachedTeam | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -61,36 +62,41 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     fetchTeams()
   }, [pool.season_year, isWorldCup, conferences])
 
-  // Reset selected conference when turn changes
+  // Reset selection state when turn changes
   useEffect(() => {
     setSelectedConference(null)
+    setPendingPick(null)
   }, [draftState?.current_pick_number])
 
   const draftedTeamIds = useMemo(() => new Set(picks.map((p) => p.team_id)), [picks])
   const isMyTurn = draftState?.current_member_id === currentMember?.id
   const currentPicker = members.find((m) => m.id === draftState?.current_member_id)
+  // Admin can pick on behalf of the current picker
+  const canPick = isMyTurn || (isAdmin && !!currentPicker)
 
-  // Get conferences this manager has already drafted from (CFB only)
-  const myConferences = useMemo(() => {
-    if (!currentMember || isWorldCup) return new Set<string>()
-    return new Set(picks.filter((p) => p.member_id === currentMember.id).map((p) => p.conference_key))
-  }, [picks, currentMember, isWorldCup])
+  // Get conferences the current picker has already drafted from (CFB only)
+  const pickerConferences = useMemo(() => {
+    const pickerId = currentPicker?.id
+    if (!pickerId || isWorldCup) return new Set<string>()
+    return new Set(picks.filter((p) => p.member_id === pickerId).map((p) => p.conference_key))
+  }, [picks, currentPicker, isWorldCup])
 
-  const myBonusPick = useMemo(() => {
-    if (!currentMember || isWorldCup) return false
-    return picks.some((p) => p.member_id === currentMember.id && p.is_bonus_pick)
-  }, [picks, currentMember, isWorldCup])
+  const pickerBonusPick = useMemo(() => {
+    const pickerId = currentPicker?.id
+    if (!pickerId || isWorldCup) return false
+    return picks.some((p) => p.member_id === pickerId && p.is_bonus_pick)
+  }, [picks, currentPicker, isWorldCup])
 
   // Available conferences for current picker (CFB only)
   const availableConferences = useMemo(() => {
-    if (!isMyTurn || isWorldCup) return []
+    if (!canPick || isWorldCup) return []
     return getAvailableConferences(
       conferences,
-      myConferences,
+      pickerConferences,
       draftState?.pac12_ind_depleted ?? false,
-      myBonusPick
+      pickerBonusPick
     )
-  }, [isMyTurn, isWorldCup, conferences, myConferences, draftState?.pac12_ind_depleted, myBonusPick])
+  }, [canPick, isWorldCup, conferences, pickerConferences, draftState?.pac12_ind_depleted, pickerBonusPick])
 
   // Available teams in selected conference (CFB) or all undrafted (WC)
   const availableTeams = useMemo(() => {
@@ -161,25 +167,36 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setSubmitting(false)
   }
 
-  async function handlePick(team: CachedTeam) {
-    if (!isMyTurn || submitting) return
+  function handleSelectTeam(team: CachedTeam) {
+    if (!canPick || submitting) return
     if (!isWorldCup && !selectedConference) return
+    setPendingPick(team)
+  }
+
+  async function handleConfirmPick() {
+    if (!pendingPick || !canPick || submitting) return
     setSubmitting(true)
     setError(null)
     try {
       await makePick(
         pool.id,
-        team.id,
-        team.name,
-        team.conference_key ?? '',
-        isWorldCup ? '' : selectedConference!
+        pendingPick.id,
+        pendingPick.name,
+        pendingPick.conference_key ?? '',
+        isWorldCup ? '' : selectedConference!,
+        !isMyTurn ? currentPicker?.id : undefined
       )
+      setPendingPick(null)
       setSelectedConference(null)
       await refetch()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to make pick')
     }
     setSubmitting(false)
+  }
+
+  function handleCancelPick() {
+    setPendingPick(null)
   }
 
   // Pre-draft state
@@ -268,7 +285,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
       </div>
 
       {/* Current turn indicator */}
-      <Card className={isMyTurn ? 'border-primary bg-primary/5' : ''}>
+      <Card className={canPick ? 'border-primary bg-primary/5' : ''}>
         <CardContent className="py-4 text-center">
           {submitting ? (
             <div className="flex items-center justify-center gap-2">
@@ -277,6 +294,10 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
             </div>
           ) : isMyTurn ? (
             <p className="text-lg font-bold text-primary">Your Turn to Pick!</p>
+          ) : isAdmin ? (
+            <p className="text-lg font-bold text-primary">
+              Picking for <span>{currentPicker?.profiles?.display_name}</span>
+            </p>
           ) : (
             <p className="text-muted-foreground">
               Waiting for <span className="font-medium">{currentPicker?.profiles?.display_name}</span> to pick...
@@ -289,8 +310,48 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>
       )}
 
+      {/* Confirmation dialog */}
+      {pendingPick && canPick && (
+        <Card className="border-primary bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              {isMyTurn ? 'Confirm Your Pick' : `Confirm Pick for ${currentPicker?.profiles?.display_name}`}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3">
+              {pendingPick.logo_url && (
+                <img src={pendingPick.logo_url} alt={pendingPick.name} className="h-12 w-12 object-contain" />
+              )}
+              <div>
+                <p className="text-lg font-bold">{pendingPick.name}</p>
+                {!isWorldCup && selectedConference && (
+                  <p className="text-sm text-muted-foreground">
+                    from {CONFERENCE_LABELS[selectedConference] ?? selectedConference}
+                  </p>
+                )}
+                {!isWorldCup && (
+                  <p className="text-sm text-muted-foreground">
+                    {pendingPick.wins}-{pendingPick.losses}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleConfirmPick} disabled={submitting}>
+                {submitting && <Spinner className="mr-2" />}
+                {submitting ? 'Submitting...' : 'Confirm Pick'}
+              </Button>
+              <Button variant="outline" onClick={handleCancelPick} disabled={submitting}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* World Cup: Show all undrafted teams */}
-      {isWorldCup && isMyTurn && (
+      {isWorldCup && canPick && !pendingPick && (
         <div>
           <h2 className="mb-3 text-lg font-semibold">Select a Team</h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -298,7 +359,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
               <Card
                 key={team.id}
                 className={`cursor-pointer transition-colors hover:bg-muted/50 ${submitting ? 'pointer-events-none opacity-50' : ''}`}
-                onClick={() => handlePick(team)}
+                onClick={() => handleSelectTeam(team)}
               >
                 <CardContent className="flex items-center gap-3 py-3">
                   {team.logo_url && (
@@ -316,7 +377,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
       )}
 
       {/* CFB: Step 1: Conference selector */}
-      {!isWorldCup && isMyTurn && !selectedConference && (
+      {!isWorldCup && canPick && !selectedConference && !pendingPick && (
         <div>
           <h2 className="mb-3 text-lg font-semibold">Select a Conference</h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -342,7 +403,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
       )}
 
       {/* CFB: Step 2: Team selector */}
-      {!isWorldCup && isMyTurn && selectedConference && (
+      {!isWorldCup && canPick && selectedConference && !pendingPick && (
         <div>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold">
@@ -357,7 +418,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
               <Card
                 key={team.id}
                 className={`cursor-pointer transition-colors hover:bg-muted/50 ${submitting ? 'pointer-events-none opacity-50' : ''}`}
-                onClick={() => handlePick(team)}
+                onClick={() => handleSelectTeam(team)}
               >
                 <CardContent className="flex items-center gap-3 py-3">
                   {team.logo_url && (

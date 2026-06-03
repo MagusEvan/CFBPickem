@@ -203,7 +203,8 @@ export async function makePick(
   teamId: string,
   teamName: string,
   teamConferenceKey: string,
-  chosenConferenceKey: string
+  chosenConferenceKey: string,
+  onBehalfOfMemberId?: string
 ) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -219,10 +220,24 @@ export async function makePick(
 
   const pool = poolRes.data as Pool | null
   const state = stateRes.data as DraftState | null
-  const member = memberRes.data as PoolMember | null
+  const callerMember = memberRes.data as PoolMember | null
 
-  if (!pool || !state || !member) throw new Error('Draft data not found')
+  if (!pool || !state || !callerMember) throw new Error('Draft data not found')
   if (pool.draft_status !== 'in_progress') throw new Error('Draft is not in progress')
+
+  // Determine the target member (admin picking on behalf of someone else, or self)
+  let targetMember = callerMember
+  if (onBehalfOfMemberId && onBehalfOfMemberId !== callerMember.id) {
+    if (pool.admin_id !== user.id) throw new Error('Only the league owner can pick on behalf of others')
+    const { data: target } = await admin
+      .from('pool_members')
+      .select('*')
+      .eq('id', onBehalfOfMemberId)
+      .eq('pool_id', poolId)
+      .single() as { data: PoolMember | null }
+    if (!target) throw new Error('Target member not found')
+    targetMember = target
+  }
 
   // Get all existing picks
   const { data: existingPicks } = await admin
@@ -237,7 +252,7 @@ export async function makePick(
     const validation = validateWorldCupPick({
       teamId,
       currentPickMemberId: state.current_member_id!,
-      requestingMemberId: member.id,
+      requestingMemberId: targetMember.id,
       draftedTeamIds,
     })
 
@@ -245,7 +260,7 @@ export async function makePick(
 
     const { error: pickError } = await admin.from('draft_picks').insert({
       pool_id: poolId,
-      member_id: member.id,
+      member_id: targetMember.id,
       round: state.current_round,
       pick_number: state.current_pick_number,
       conference_key: null,
@@ -258,7 +273,7 @@ export async function makePick(
     if (pickError) throw new Error(pickError.message)
   } else {
     // CFB: conference-based validation
-    const memberPicks = (existingPicks ?? []).filter((p) => p.member_id === member.id)
+    const memberPicks = (existingPicks ?? []).filter((p) => p.member_id === targetMember.id)
     const memberConferences = new Set(memberPicks.map((p) => p.conference_key))
     const memberHasBonusPick = memberPicks.some((p) => p.is_bonus_pick)
     const conferences = pool.conferences as string[]
@@ -268,7 +283,7 @@ export async function makePick(
       teamConferenceKey,
       chosenConferenceKey,
       currentPickMemberId: state.current_member_id!,
-      requestingMemberId: member.id,
+      requestingMemberId: targetMember.id,
       draftedTeamIds,
       memberConferences,
       memberHasBonusPick,
@@ -284,7 +299,7 @@ export async function makePick(
 
     const { error: pickError } = await admin.from('draft_picks').insert({
       pool_id: poolId,
-      member_id: member.id,
+      member_id: targetMember.id,
       round: state.current_round,
       pick_number: state.current_pick_number,
       conference_key: chosenConferenceKey,

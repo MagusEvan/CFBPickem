@@ -2,6 +2,7 @@ import type { WcTeam } from '../types'
 
 // 2026 FIFA World Cup — 48 qualified teams
 // Groups A-L, 4 teams per group
+// Official draw: December 5, 2025 — Washington, D.C.
 // Flag URLs from flagcdn.com (public, free CDN)
 
 function flag(code: string): string {
@@ -10,76 +11,76 @@ function flag(code: string): string {
 
 export const WORLD_CUP_2026_TEAMS: WcTeam[] = [
   // Group A
-  { id: 'USA', name: 'United States', abbreviation: 'USA', group: 'A', logoUrl: null, flagUrl: flag('us') },
-  { id: 'MAR', name: 'Morocco', abbreviation: 'MAR', group: 'A', logoUrl: null, flagUrl: flag('ma') },
-  { id: 'SCO', name: 'Scotland', abbreviation: 'SCO', group: 'A', logoUrl: null, flagUrl: flag('gb-sct') },
-  { id: 'ARG', name: 'Argentina', abbreviation: 'ARG', group: 'A', logoUrl: null, flagUrl: flag('ar') },
+  { id: 'MEX', name: 'Mexico', abbreviation: 'MEX', group: 'A', logoUrl: null, flagUrl: flag('mx') },
+  { id: 'RSA', name: 'South Africa', abbreviation: 'RSA', group: 'A', logoUrl: null, flagUrl: flag('za') },
+  { id: 'KOR', name: 'South Korea', abbreviation: 'KOR', group: 'A', logoUrl: null, flagUrl: flag('kr') },
+  { id: 'CZE', name: 'Czechia', abbreviation: 'CZE', group: 'A', logoUrl: null, flagUrl: flag('cz') },
 
   // Group B
-  { id: 'POR', name: 'Portugal', abbreviation: 'POR', group: 'B', logoUrl: null, flagUrl: flag('pt') },
-  { id: 'PAR', name: 'Paraguay', abbreviation: 'PAR', group: 'B', logoUrl: null, flagUrl: flag('py') },
-  { id: 'NZL', name: 'New Zealand', abbreviation: 'NZL', group: 'B', logoUrl: null, flagUrl: flag('nz') },
-  { id: 'SPA', name: 'Spain', abbreviation: 'SPA', group: 'B', logoUrl: null, flagUrl: flag('es') },
+  { id: 'CAN', name: 'Canada', abbreviation: 'CAN', group: 'B', logoUrl: null, flagUrl: flag('ca') },
+  { id: 'BIH', name: 'Bosnia and Herzegovina', abbreviation: 'BIH', group: 'B', logoUrl: null, flagUrl: flag('ba') },
+  { id: 'QAT', name: 'Qatar', abbreviation: 'QAT', group: 'B', logoUrl: null, flagUrl: flag('qa') },
+  { id: 'SUI', name: 'Switzerland', abbreviation: 'SUI', group: 'B', logoUrl: null, flagUrl: flag('ch') },
 
   // Group C
-  { id: 'MEX', name: 'Mexico', abbreviation: 'MEX', group: 'C', logoUrl: null, flagUrl: flag('mx') },
-  { id: 'EGY', name: 'Egypt', abbreviation: 'EGY', group: 'C', logoUrl: null, flagUrl: flag('eg') },
-  { id: 'BIH', name: 'Bosnia and Herzegovina', abbreviation: 'BIH', group: 'C', logoUrl: null, flagUrl: flag('ba') },
-  { id: 'UZB', name: 'Uzbekistan', abbreviation: 'UZB', group: 'C', logoUrl: null, flagUrl: flag('uz') },
+  { id: 'BRA', name: 'Brazil', abbreviation: 'BRA', group: 'C', logoUrl: null, flagUrl: flag('br') },
+  { id: 'MAR', name: 'Morocco', abbreviation: 'MAR', group: 'C', logoUrl: null, flagUrl: flag('ma') },
+  { id: 'HAI', name: 'Haiti', abbreviation: 'HAI', group: 'C', logoUrl: null, flagUrl: flag('ht') },
+  { id: 'SCO', name: 'Scotland', abbreviation: 'SCO', group: 'C', logoUrl: null, flagUrl: flag('gb-sct') },
 
   // Group D
-  { id: 'FRA', name: 'France', abbreviation: 'FRA', group: 'D', logoUrl: null, flagUrl: flag('fr') },
-  { id: 'COL', name: 'Colombia', abbreviation: 'COL', group: 'D', logoUrl: null, flagUrl: flag('co') },
-  { id: 'KSA', name: 'Saudi Arabia', abbreviation: 'KSA', group: 'D', logoUrl: null, flagUrl: flag('sa') },
+  { id: 'USA', name: 'United States', abbreviation: 'USA', group: 'D', logoUrl: null, flagUrl: flag('us') },
+  { id: 'PAR', name: 'Paraguay', abbreviation: 'PAR', group: 'D', logoUrl: null, flagUrl: flag('py') },
   { id: 'AUS', name: 'Australia', abbreviation: 'AUS', group: 'D', logoUrl: null, flagUrl: flag('au') },
+  { id: 'TUR', name: 'Türkiye', abbreviation: 'TUR', group: 'D', logoUrl: null, flagUrl: flag('tr') },
 
   // Group E
-  { id: 'CAN', name: 'Canada', abbreviation: 'CAN', group: 'E', logoUrl: null, flagUrl: flag('ca') },
-  { id: 'AUT', name: 'Austria', abbreviation: 'AUT', group: 'E', logoUrl: null, flagUrl: flag('at') },
+  { id: 'GER', name: 'Germany', abbreviation: 'GER', group: 'E', logoUrl: null, flagUrl: flag('de') },
+  { id: 'CUR', name: 'Curacao', abbreviation: 'CUR', group: 'E', logoUrl: null, flagUrl: flag('cw') },
   { id: 'CIV', name: 'Ivory Coast', abbreviation: 'CIV', group: 'E', logoUrl: null, flagUrl: flag('ci') },
-  { id: 'SRB', name: 'Serbia', abbreviation: 'SRB', group: 'E', logoUrl: null, flagUrl: flag('rs') },
+  { id: 'ECU', name: 'Ecuador', abbreviation: 'ECU', group: 'E', logoUrl: null, flagUrl: flag('ec') },
 
   // Group F
-  { id: 'BRA', name: 'Brazil', abbreviation: 'BRA', group: 'F', logoUrl: null, flagUrl: flag('br') },
-  { id: 'ITA', name: 'Italy', abbreviation: 'ITA', group: 'F', logoUrl: null, flagUrl: flag('it') },
-  { id: 'NGA', name: 'Nigeria', abbreviation: 'NGA', group: 'F', logoUrl: null, flagUrl: flag('ng') },
-  { id: 'ECU', name: 'Ecuador', abbreviation: 'ECU', group: 'F', logoUrl: null, flagUrl: flag('ec') },
+  { id: 'NED', name: 'Netherlands', abbreviation: 'NED', group: 'F', logoUrl: null, flagUrl: flag('nl') },
+  { id: 'JPN', name: 'Japan', abbreviation: 'JPN', group: 'F', logoUrl: null, flagUrl: flag('jp') },
+  { id: 'SWE', name: 'Sweden', abbreviation: 'SWE', group: 'F', logoUrl: null, flagUrl: flag('se') },
+  { id: 'TUN', name: 'Tunisia', abbreviation: 'TUN', group: 'F', logoUrl: null, flagUrl: flag('tn') },
 
   // Group G
-  { id: 'GER', name: 'Germany', abbreviation: 'GER', group: 'G', logoUrl: null, flagUrl: flag('de') },
-  { id: 'URU', name: 'Uruguay', abbreviation: 'URU', group: 'G', logoUrl: null, flagUrl: flag('uy') },
-  { id: 'TUN', name: 'Tunisia', abbreviation: 'TUN', group: 'G', logoUrl: null, flagUrl: flag('tn') },
-  { id: 'DEN', name: 'Denmark', abbreviation: 'DEN', group: 'G', logoUrl: null, flagUrl: flag('dk') },
+  { id: 'BEL', name: 'Belgium', abbreviation: 'BEL', group: 'G', logoUrl: null, flagUrl: flag('be') },
+  { id: 'EGY', name: 'Egypt', abbreviation: 'EGY', group: 'G', logoUrl: null, flagUrl: flag('eg') },
+  { id: 'IRN', name: 'Iran', abbreviation: 'IRN', group: 'G', logoUrl: null, flagUrl: flag('ir') },
+  { id: 'NZL', name: 'New Zealand', abbreviation: 'NZL', group: 'G', logoUrl: null, flagUrl: flag('nz') },
 
   // Group H
-  { id: 'JPN', name: 'Japan', abbreviation: 'JPN', group: 'H', logoUrl: null, flagUrl: flag('jp') },
-  { id: 'CRC', name: 'Costa Rica', abbreviation: 'CRC', group: 'H', logoUrl: null, flagUrl: flag('cr') },
-  { id: 'BEL', name: 'Belgium', abbreviation: 'BEL', group: 'H', logoUrl: null, flagUrl: flag('be') },
-  { id: 'CHN', name: 'China', abbreviation: 'CHN', group: 'H', logoUrl: null, flagUrl: flag('cn') },
+  { id: 'SPA', name: 'Spain', abbreviation: 'SPA', group: 'H', logoUrl: null, flagUrl: flag('es') },
+  { id: 'CPV', name: 'Cape Verde', abbreviation: 'CPV', group: 'H', logoUrl: null, flagUrl: flag('cv') },
+  { id: 'KSA', name: 'Saudi Arabia', abbreviation: 'KSA', group: 'H', logoUrl: null, flagUrl: flag('sa') },
+  { id: 'URU', name: 'Uruguay', abbreviation: 'URU', group: 'H', logoUrl: null, flagUrl: flag('uy') },
 
   // Group I
-  { id: 'ENG', name: 'England', abbreviation: 'ENG', group: 'I', logoUrl: null, flagUrl: flag('gb-eng') },
+  { id: 'FRA', name: 'France', abbreviation: 'FRA', group: 'I', logoUrl: null, flagUrl: flag('fr') },
   { id: 'SEN', name: 'Senegal', abbreviation: 'SEN', group: 'I', logoUrl: null, flagUrl: flag('sn') },
-  { id: 'POL', name: 'Poland', abbreviation: 'POL', group: 'I', logoUrl: null, flagUrl: flag('pl') },
-  { id: 'PAN', name: 'Panama', abbreviation: 'PAN', group: 'I', logoUrl: null, flagUrl: flag('pa') },
+  { id: 'IRQ', name: 'Iraq', abbreviation: 'IRQ', group: 'I', logoUrl: null, flagUrl: flag('iq') },
+  { id: 'NOR', name: 'Norway', abbreviation: 'NOR', group: 'I', logoUrl: null, flagUrl: flag('no') },
 
   // Group J
-  { id: 'NED', name: 'Netherlands', abbreviation: 'NED', group: 'J', logoUrl: null, flagUrl: flag('nl') },
-  { id: 'IRN', name: 'Iran', abbreviation: 'IRN', group: 'J', logoUrl: null, flagUrl: flag('ir') },
-  { id: 'GHA', name: 'Ghana', abbreviation: 'GHA', group: 'J', logoUrl: null, flagUrl: flag('gh') },
-  { id: 'KOR', name: 'South Korea', abbreviation: 'KOR', group: 'J', logoUrl: null, flagUrl: flag('kr') },
+  { id: 'ARG', name: 'Argentina', abbreviation: 'ARG', group: 'J', logoUrl: null, flagUrl: flag('ar') },
+  { id: 'ALG', name: 'Algeria', abbreviation: 'ALG', group: 'J', logoUrl: null, flagUrl: flag('dz') },
+  { id: 'AUT', name: 'Austria', abbreviation: 'AUT', group: 'J', logoUrl: null, flagUrl: flag('at') },
+  { id: 'JOR', name: 'Jordan', abbreviation: 'JOR', group: 'J', logoUrl: null, flagUrl: flag('jo') },
 
   // Group K
-  { id: 'SUI', name: 'Switzerland', abbreviation: 'SUI', group: 'K', logoUrl: null, flagUrl: flag('ch') },
-  { id: 'CMR', name: 'Cameroon', abbreviation: 'CMR', group: 'K', logoUrl: null, flagUrl: flag('cm') },
-  { id: 'CRO', name: 'Croatia', abbreviation: 'CRO', group: 'K', logoUrl: null, flagUrl: flag('hr') },
-  { id: 'HON', name: 'Honduras', abbreviation: 'HON', group: 'K', logoUrl: null, flagUrl: flag('hn') },
+  { id: 'POR', name: 'Portugal', abbreviation: 'POR', group: 'K', logoUrl: null, flagUrl: flag('pt') },
+  { id: 'COD', name: 'Congo DR', abbreviation: 'COD', group: 'K', logoUrl: null, flagUrl: flag('cd') },
+  { id: 'UZB', name: 'Uzbekistan', abbreviation: 'UZB', group: 'K', logoUrl: null, flagUrl: flag('uz') },
+  { id: 'COL', name: 'Colombia', abbreviation: 'COL', group: 'K', logoUrl: null, flagUrl: flag('co') },
 
   // Group L
-  { id: 'ALB', name: 'Albania', abbreviation: 'ALB', group: 'L', logoUrl: null, flagUrl: flag('al') },
-  { id: 'CHL', name: 'Chile', abbreviation: 'CHL', group: 'L', logoUrl: null, flagUrl: flag('cl') },
-  { id: 'JAM', name: 'Jamaica', abbreviation: 'JAM', group: 'L', logoUrl: null, flagUrl: flag('jm') },
-  { id: 'TUR', name: 'Turkey', abbreviation: 'TUR', group: 'L', logoUrl: null, flagUrl: flag('tr') },
+  { id: 'ENG', name: 'England', abbreviation: 'ENG', group: 'L', logoUrl: null, flagUrl: flag('gb-eng') },
+  { id: 'CRO', name: 'Croatia', abbreviation: 'CRO', group: 'L', logoUrl: null, flagUrl: flag('hr') },
+  { id: 'GHA', name: 'Ghana', abbreviation: 'GHA', group: 'L', logoUrl: null, flagUrl: flag('gh') },
+  { id: 'PAN', name: 'Panama', abbreviation: 'PAN', group: 'L', logoUrl: null, flagUrl: flag('pa') },
 ]
 
 export function getWorldCupTeams(_year: number): WcTeam[] {
