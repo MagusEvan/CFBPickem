@@ -29,6 +29,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   const [allTeams, setAllTeams] = useState<CachedTeam[]>([])
   const [selectedConference, setSelectedConference] = useState<string | null>(null)
   const [pendingPick, setPendingPick] = useState<CachedTeam | null>(null)
+  const [adminPickMode, setAdminPickMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -66,13 +67,14 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   useEffect(() => {
     setSelectedConference(null)
     setPendingPick(null)
+    setAdminPickMode(false)
   }, [draftState?.current_pick_number])
 
   const draftedTeamIds = useMemo(() => new Set(picks.map((p) => p.team_id)), [picks])
   const isMyTurn = draftState?.current_member_id === currentMember?.id
   const currentPicker = members.find((m) => m.id === draftState?.current_member_id)
-  // Admin can pick on behalf of the current picker
-  const canPick = isMyTurn || (isAdmin && !!currentPicker)
+  // Admin can pick on behalf of the current picker after enabling proxy mode
+  const canPick = isMyTurn || (isAdmin && adminPickMode && !!currentPicker)
 
   // Get conferences the current picker has already drafted from (CFB only)
   const pickerConferences = useMemo(() => {
@@ -286,7 +288,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
 
       {/* Current turn indicator */}
       <Card className={canPick ? 'border-primary bg-primary/5' : ''}>
-        <CardContent className="py-4 text-center">
+        <CardContent className="py-4 text-center space-y-3">
           {submitting ? (
             <div className="flex items-center justify-center gap-2">
               <Spinner />
@@ -294,14 +296,26 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
             </div>
           ) : isMyTurn ? (
             <p className="text-lg font-bold text-primary">Your Turn to Pick!</p>
-          ) : isAdmin ? (
-            <p className="text-lg font-bold text-primary">
-              Picking for <span>{currentPicker?.profiles?.display_name}</span>
-            </p>
+          ) : adminPickMode ? (
+            <div className="space-y-2">
+              <p className="text-lg font-bold text-primary">
+                Picking for {currentPicker?.profiles?.display_name}
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => setAdminPickMode(false)}>
+                Cancel
+              </Button>
+            </div>
           ) : (
-            <p className="text-muted-foreground">
-              Waiting for <span className="font-medium">{currentPicker?.profiles?.display_name}</span> to pick...
-            </p>
+            <div className="space-y-2">
+              <p className="text-muted-foreground">
+                Waiting for <span className="font-medium">{currentPicker?.profiles?.display_name}</span> to pick...
+              </p>
+              {isAdmin && (
+                <Button variant="outline" size="sm" onClick={() => setAdminPickMode(true)}>
+                  Pick for {currentPicker?.profiles?.display_name}
+                </Button>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
