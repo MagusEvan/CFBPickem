@@ -28,7 +28,7 @@ export function NavBar() {
     <header className="border-b bg-background">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         <Link href="/pools" className="text-lg font-bold">
-          CFB Pickem
+          Great Value Pickems
         </Link>
         <DropdownMenu>
           <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md p-2 hover:bg-muted">

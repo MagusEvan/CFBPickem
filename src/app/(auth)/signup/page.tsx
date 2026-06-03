@@ -49,7 +49,7 @@ export default function SignupPage() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">CFB Pickem</CardTitle>
+          <CardTitle className="text-2xl font-bold">Great Value Pickems</CardTitle>
           <CardDescription>Create your account</CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>

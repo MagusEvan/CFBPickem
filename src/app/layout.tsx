@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "CFB Pickem",
-  description: "College Football Draft Pickem Game",
+  title: "Great Value Pickems",
+  description: "Draft teams. Compete with friends. Dominate.",
 };
 
 export default function RootLayout({
