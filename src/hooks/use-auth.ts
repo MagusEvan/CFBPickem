@@ -17,7 +17,19 @@ export function useAuth() {
       }
     )
 
-    return () => subscription.unsubscribe()
+    // Refresh session when tab becomes visible again after being idle
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [supabase.auth])
 
   async function signOut() {

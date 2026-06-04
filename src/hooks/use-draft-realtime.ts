@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { DraftState, DraftPick, Pool } from '@/lib/types'
 
@@ -10,6 +10,7 @@ export function useDraftRealtime(poolId: string) {
   const [poolStatus, setPoolStatus] = useState<Pool['draft_status'] | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+  const channelsRef = useRef<ReturnType<typeof supabase.channel>[]>([])
 
   const fetchInitialState = useCallback(async () => {
     const [stateRes, picksRes, poolRes] = await Promise.all([
@@ -97,7 +98,22 @@ export function useDraftRealtime(poolId: string) {
       )
       .subscribe()
 
+    channelsRef.current = [stateChannel, picksChannel, poolChannel]
+
+    // When tab becomes visible again, refresh session and refetch state
+    // to catch any changes missed while the tab was idle
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession().then(() => {
+          fetchInitialState()
+        })
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       supabase.removeChannel(stateChannel)
       supabase.removeChannel(picksChannel)
       supabase.removeChannel(poolChannel)
