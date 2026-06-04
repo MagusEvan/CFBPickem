@@ -99,6 +99,15 @@ export interface TeamScraps {
   created_at: string
 }
 
+export interface WcScrapsTeam {
+  id: string
+  pool_id: string
+  scraps_team_number: number
+  team_id: string
+  team_name: string
+  created_at: string
+}
+
 export interface CachedTeam {
   id: string
   name: string

@@ -174,3 +174,39 @@ export function calculateTeamScraps(
     })
     .filter((s): s is { conferenceKey: string; team: CachedTeam } => s !== null)
 }
+
+/**
+ * Calculate World Cup scraps teams from undrafted national teams.
+ * Randomly assigns undrafted teams into groups of teamsPerManager.
+ * Number of scraps teams = floor(undrafted / teamsPerManager).
+ */
+export function calculateWcScrapsTeams(
+  allTeams: CachedTeam[],
+  draftedTeamIds: Set<string>,
+  teamsPerManager: number
+): { scrapsTeamNumber: number; teams: CachedTeam[] }[] {
+  const undrafted = allTeams.filter((t) => !draftedTeamIds.has(t.id))
+  const numScrapsTeams = Math.floor(undrafted.length / teamsPerManager)
+
+  if (numScrapsTeams === 0) return []
+
+  // Shuffle undrafted teams randomly
+  const shuffled = [...undrafted]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+
+  // Distribute round-robin across scraps teams
+  const result: { scrapsTeamNumber: number; teams: CachedTeam[] }[] = []
+  for (let t = 1; t <= numScrapsTeams; t++) {
+    result.push({ scrapsTeamNumber: t, teams: [] })
+  }
+
+  const totalToAssign = numScrapsTeams * teamsPerManager
+  for (let i = 0; i < totalToAssign; i++) {
+    result[i % numScrapsTeams].teams.push(shuffled[i])
+  }
+
+  return result
+}

@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { generateSnakeOrder, getPickInfo, validatePick, validateWorldCupPick, checkPac12Depletion, calculateTeamScraps } from './engine'
+import { generateSnakeOrder, getPickInfo, validatePick, validateWorldCupPick, checkPac12Depletion, calculateTeamScraps, calculateWcScrapsTeams } from './engine'
 import type { Pool, PoolMember, DraftPick, DraftState, CachedTeam } from '@/lib/types'
 
 export async function startDraft(poolId: string) {
@@ -83,6 +83,7 @@ export async function resetDraft(poolId: string) {
 
   // Delete all draft data
   await admin.from('team_scraps').delete().eq('pool_id', poolId)
+  await admin.from('wc_scraps_teams').delete().eq('pool_id', poolId)
   await admin.from('draft_picks').delete().eq('pool_id', poolId)
   await admin.from('draft_state').delete().eq('pool_id', poolId)
 
@@ -142,6 +143,7 @@ export async function undoPick(poolId: string) {
   if (pool.draft_status === 'completed') {
     await admin.from('pools').update({ draft_status: 'in_progress' }).eq('id', poolId)
     await admin.from('team_scraps').delete().eq('pool_id', poolId)
+    await admin.from('wc_scraps_teams').delete().eq('pool_id', poolId)
   }
 
   // Rewind draft state to the undone pick
@@ -346,9 +348,11 @@ async function advanceDraftState(
       updated_at: new Date().toISOString(),
     }).eq('pool_id', poolId)
 
-    // Only finalize team scraps for CFB pools
+    // Finalize scraps teams at draft completion
     if (pool.game_type === 'cfb') {
       await finalizeTeamScraps(admin, poolId, pool)
+    } else if (pool.game_type === 'world_cup') {
+      await finalizeWcScrapsTeams(admin, poolId, pool)
     }
     return
   }
@@ -417,5 +421,35 @@ async function finalizeTeamScraps(
 
   if (rows.length > 0) {
     await admin.from('team_scraps').upsert(rows, { onConflict: 'pool_id,conference_key' })
+  }
+}
+
+async function finalizeWcScrapsTeams(
+  admin: ReturnType<typeof createAdminClient>,
+  poolId: string,
+  pool: Pool
+) {
+  const [teamsRes, picksRes] = await Promise.all([
+    admin.from('cached_teams').select('*').eq('game_type', 'world_cup').eq('season_year', pool.season_year),
+    admin.from('draft_picks').select('team_id').eq('pool_id', poolId),
+  ])
+
+  const allTeams = (teamsRes.data ?? []) as CachedTeam[]
+  const draftedTeamIds = new Set((picksRes.data ?? []).map((p: { team_id: string }) => p.team_id))
+  const teamsPerManager = pool.teams_per_manager ?? 1
+
+  const scrapsTeams = calculateWcScrapsTeams(allTeams, draftedTeamIds, teamsPerManager)
+
+  const rows = scrapsTeams.flatMap((st) =>
+    st.teams.map((team) => ({
+      pool_id: poolId,
+      scraps_team_number: st.scrapsTeamNumber,
+      team_id: team.id,
+      team_name: team.name,
+    }))
+  )
+
+  if (rows.length > 0) {
+    await admin.from('wc_scraps_teams').insert(rows)
   }
 }
