@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { Separator } from '@/components/ui/separator'
-import type { Pool, PoolMember, Profile, CachedTeam } from '@/lib/types'
+import { createClient } from '@/lib/supabase/client'
+import type { Pool, PoolMember, Profile, CachedTeam, WcScrapsTeam } from '@/lib/types'
 
 const CONFERENCE_LABELS: Record<string, string> = {
   ACC: 'ACC', B12: 'Big 12', B1G: 'Big Ten', SEC: 'SEC',
@@ -30,6 +31,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   const [selectedConference, setSelectedConference] = useState<string | null>(null)
   const [pendingPick, setPendingPick] = useState<CachedTeam | null>(null)
   const [adminPickMode, setAdminPickMode] = useState(false)
+  const [wcScraps, setWcScraps] = useState<WcScrapsTeam[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -38,6 +40,20 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
 
   // Use realtime pool status, falling back to server-rendered prop
   const draftStatus = poolStatus ?? pool.draft_status
+
+  // Fetch WC scraps teams when draft is completed
+  useEffect(() => {
+    if (!isWorldCup || draftStatus !== 'completed') {
+      setWcScraps([])
+      return
+    }
+    const supabase = createClient()
+    supabase
+      .from('wc_scraps_teams')
+      .select('*')
+      .eq('pool_id', pool.id)
+      .then(({ data }) => setWcScraps((data ?? []) as WcScrapsTeam[]))
+  }, [isWorldCup, draftStatus, pool.id])
 
   const currentMember = members.find((m) => m.user_id === currentUserId)
   const isAdmin = pool.admin_id === currentUserId
@@ -174,7 +190,13 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setError(null)
     try {
       await generateWcScraps(pool.id)
-      router.refresh()
+      // Refetch scraps to display them
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('wc_scraps_teams')
+        .select('*')
+        .eq('pool_id', pool.id)
+      setWcScraps((data ?? []) as WcScrapsTeam[])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate scraps teams')
     }
@@ -266,6 +288,9 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
           <WcDraftBoard picks={picks} members={members} numRounds={pool.teams_per_manager ?? 1} />
         ) : (
           <DraftBoard picks={picks} members={members} conferences={conferences} />
+        )}
+        {wcScraps.length > 0 && (
+          <WcScrapsBoard scraps={wcScraps} />
         )}
       </div>
     )
@@ -624,6 +649,38 @@ function WcDraftBoard({
               })}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+// World Cup Scraps Board — shows scraps teams after draft completion
+function WcScrapsBoard({ scraps }: { scraps: WcScrapsTeam[] }) {
+  const teamNumbers = [...new Set(scraps.map((s) => s.scraps_team_number))].sort()
+
+  return (
+    <div>
+      <h2 className="mb-3 text-lg font-semibold">Scraps Teams</h2>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {teamNumbers.map((num) => {
+          const teams = scraps.filter((s) => s.scraps_team_number === num)
+          return (
+            <Card key={num} className="border-dashed">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-muted-foreground">Scraps Team {num}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-1">
+                  {teams.map((t) => (
+                    <Badge key={t.team_id} variant="outline" className="text-xs">
+                      {t.team_name}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
     </div>
   )
