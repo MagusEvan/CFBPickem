@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDraftRealtime } from '@/hooks/use-draft-realtime'
-import { startDraft, makePick, resetDraft, undoPick } from '@/lib/draft/actions'
+import { startDraft, makePick, resetDraft, undoPick, generateWcScraps } from '@/lib/draft/actions'
 import { generateSnakeOrder, getPickInfo, getAvailableConferences } from '@/lib/draft/engine'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -169,6 +169,18 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setSubmitting(false)
   }
 
+  async function handleGenerateScraps() {
+    setSubmitting(true)
+    setError(null)
+    try {
+      await generateWcScraps(pool.id)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate scraps teams')
+    }
+    setSubmitting(false)
+  }
+
   function handleSelectTeam(team: CachedTeam) {
     if (!canPick || submitting) return
     if (!isWorldCup && !selectedConference) return
@@ -232,6 +244,12 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
           <h1 className="text-2xl font-bold">Draft Complete - {pool.name}</h1>
           {isAdmin && (
             <div className="flex gap-2">
+              {isWorldCup && (
+                <Button variant="outline" size="sm" onClick={handleGenerateScraps} disabled={submitting}>
+                  {submitting && <Spinner className="mr-2" />}
+                  Generate Scraps Teams
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={handleUndoPick} disabled={submitting}>
                 {submitting && <Spinner className="mr-2" />}
                 Undo Last Pick

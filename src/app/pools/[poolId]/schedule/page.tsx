@@ -3,7 +3,7 @@ import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import type { DraftPick, CachedGame, CachedTeam } from '@/lib/types'
+import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam } from '@/lib/types'
 
 const STAGE_LABELS: Record<string, string> = {
   group: 'Group Stage',
@@ -48,20 +48,24 @@ export default async function SchedulePage({
 
   const supabase = await createClient()
 
-  // Get all draft picks and team data
-  const [picksRes, teamsRes] = await Promise.all([
+  // Get all draft picks, team data, and WC scraps
+  const [picksRes, teamsRes, wcScrapsRes] = await Promise.all([
     supabase.from('draft_picks').select('*').eq('pool_id', poolId),
     supabase
       .from('cached_teams')
       .select('*')
       .eq('season_year', pool.season_year)
       .eq('game_type', pool.game_type),
+    pool.game_type === 'world_cup'
+      ? supabase.from('wc_scraps_teams').select('*').eq('pool_id', poolId)
+      : Promise.resolve({ data: null }),
   ])
 
   const picks = (picksRes.data ?? []) as DraftPick[]
   const teams = (teamsRes.data ?? []) as CachedTeam[]
+  const wcScraps = (wcScrapsRes.data ?? []) as WcScrapsTeam[]
 
-  // Build lookup: team_id -> member display name
+  // Build lookup: team_id -> manager/scraps display name
   const teamToManager = new Map<string, string>()
   for (const pick of picks) {
     if (pick.member_id) {
@@ -71,8 +75,14 @@ export default async function SchedulePage({
       }
     }
   }
+  for (const scrap of wcScraps) {
+    teamToManager.set(scrap.team_id, `Scraps Team ${scrap.scraps_team_number}`)
+  }
 
-  const draftedTeamIds = new Set(picks.map((p) => p.team_id))
+  const draftedTeamIds = new Set([
+    ...picks.map((p) => p.team_id),
+    ...wcScraps.map((s) => s.team_id),
+  ])
   const teamMap = new Map(teams.map((t) => [t.id, t]))
 
   if (pool.game_type === 'world_cup') {

@@ -424,6 +424,31 @@ async function finalizeTeamScraps(
   }
 }
 
+export async function generateWcScraps(poolId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { data: pool } = await supabase
+    .from('pools')
+    .select('*')
+    .eq('id', poolId)
+    .single() as { data: Pool | null }
+
+  if (!pool) throw new Error('Pool not found')
+  if (pool.admin_id !== user.id) throw new Error('Only the league owner can generate scraps teams')
+  if (pool.game_type !== 'world_cup') throw new Error('Scraps generation is only for World Cup pools')
+  if (pool.draft_status !== 'completed') throw new Error('Draft must be completed first')
+
+  const admin = createAdminClient()
+
+  // Clear any existing scraps and regenerate
+  await admin.from('wc_scraps_teams').delete().eq('pool_id', poolId)
+  await finalizeWcScrapsTeams(admin, poolId, pool)
+
+  return { success: true }
+}
+
 async function finalizeWcScrapsTeams(
   admin: ReturnType<typeof createAdminClient>,
   poolId: string,
