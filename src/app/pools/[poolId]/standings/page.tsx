@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
 import { calculateStandings, calculateWorldCupStandings } from '@/lib/scoring/engine'
-import { calculateTeamPoints } from '@/lib/scoring/strategies/world-cup'
+import { calculateTeamPoints, type GamePointBreakdown } from '@/lib/scoring/strategies/world-cup'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -174,6 +174,15 @@ async function WorldCupStandings({
 
   const managerStandings = calculateWorldCupStandings(members, picks, games, config)
 
+  // Enrich manager standings with per-game breakdowns
+  const enrichedManagerStandings = managerStandings.map((ms) => ({
+    ...ms,
+    teamBreakdowns: ms.teamBreakdowns.map((tb) => {
+      const { breakdown } = calculateTeamPoints(games, tb.teamId, config)
+      return { ...tb, gameBreakdowns: breakdown }
+    }),
+  }))
+
   // Build scraps team standings
   const scrapsTeamNumbers = [...new Set(wcScraps.map((s) => s.scraps_team_number))].sort()
   const scrapsStandings = scrapsTeamNumbers.map((num) => {
@@ -185,6 +194,7 @@ async function WorldCupStandings({
         teamName: row.team_name,
         points: teamPts,
         gamesPlayed: breakdown.length,
+        gameBreakdowns: breakdown,
       }
     })
     return {
@@ -196,12 +206,19 @@ async function WorldCupStandings({
   })
 
   // Merge managers and scraps into one sorted list
+  type TeamBreakdownWithGames = {
+    teamId: string
+    teamName: string
+    points: number
+    gamesPlayed: number
+    gameBreakdowns: GamePointBreakdown[]
+  }
   type StandingEntry =
-    | { type: 'manager'; memberId: string; displayName: string; totalPoints: number; teamBreakdowns: typeof managerStandings[0]['teamBreakdowns'] }
-    | { type: 'scraps'; scrapsTeamNumber: number; displayName: string; totalPoints: number; teamBreakdowns: typeof scrapsStandings[0]['teamBreakdowns'] }
+    | { type: 'manager'; memberId: string; displayName: string; totalPoints: number; teamBreakdowns: TeamBreakdownWithGames[] }
+    | { type: 'scraps'; scrapsTeamNumber: number; displayName: string; totalPoints: number; teamBreakdowns: TeamBreakdownWithGames[] }
 
   const combined: StandingEntry[] = [
-    ...managerStandings.map((s) => ({ type: 'manager' as const, ...s })),
+    ...enrichedManagerStandings.map((s) => ({ type: 'manager' as const, ...s })),
     ...scrapsStandings.map((s) => ({ type: 'scraps' as const, ...s })),
   ].sort((a, b) => b.totalPoints - a.totalPoints)
 
@@ -271,15 +288,40 @@ async function WorldCupStandings({
                 {s.teamBreakdowns
                   .sort((a, b) => b.points - a.points)
                   .map((tb) => (
-                    <div key={tb.teamId} className="flex items-center justify-between rounded-md border p-2">
-                      <span className="text-sm font-medium">{tb.teamName}</span>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">
-                          {tb.gamesPlayed} GP
-                        </Badge>
-                        <span className="text-sm font-bold">{tb.points} pts</span>
-                      </div>
-                    </div>
+                    <details key={tb.teamId} className="rounded-md border">
+                      <summary className="flex cursor-pointer list-none items-center justify-between p-2">
+                        <span className="text-sm font-medium">{tb.teamName}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">
+                            {tb.gamesPlayed} GP
+                          </Badge>
+                          <span className="text-sm font-bold">{tb.points} pts</span>
+                        </div>
+                      </summary>
+                      {tb.gameBreakdowns.length > 0 ? (
+                        <div className="space-y-1 border-t px-2 py-2">
+                          {tb.gameBreakdowns.map((gb) => (
+                            <div key={gb.gameId} className="flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[10px] px-1">{gb.result}</Badge>
+                                <span>vs {gb.opponent}</span>
+                                <span className="text-muted-foreground">{gb.myGoals}–{gb.oppGoals}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                {gb.itemized.map((item, i) => (
+                                  <span key={i}>{item.label}: +{item.value}</span>
+                                ))}
+                                <span className="font-bold text-foreground">{gb.points} pts</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="border-t px-2 py-2 text-xs text-muted-foreground">
+                          No completed games yet
+                        </div>
+                      )}
+                    </details>
                   ))}
               </div>
             </CardContent>

@@ -5,7 +5,16 @@ import { createClient } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam } from '@/lib/types'
+import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
+import { scoreWorldCupGame } from '@/lib/scoring/strategies/world-cup'
+
+const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
+  group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },
+  knockout: {
+    win: 6, ot_win: 5, shootout_win: 4, shootout_loss: 2,
+    ot_loss: 1, loss: 0, goal_points: 1, goal_cap: null, shutout: 1,
+  },
+}
 
 const STAGE_LABELS: Record<string, string> = {
   group: 'Group Stage',
@@ -99,6 +108,7 @@ export default async function SchedulePage({
         teamToManager={teamToManager}
         draftedTeamIds={draftedTeamIds}
         selectedStage={stageParam || 'group'}
+        scoringConfig={pool.scoring_config ?? DEFAULT_WC_SCORING}
       />
     )
   }
@@ -155,6 +165,7 @@ export default async function SchedulePage({
     const homeManager = teamToManager.get(g.home_team_id)
     const awayManager = teamToManager.get(g.away_team_id)
     return homeManager && awayManager && homeManager !== awayManager
+      && !homeManager.startsWith('Scraps Team') && !awayManager.startsWith('Scraps Team')
   })
 
   const h2hGameIds = new Set(h2hGames.map((g) => g.id))
@@ -234,6 +245,7 @@ async function WorldCupSchedule({
   teamToManager,
   draftedTeamIds,
   selectedStage,
+  scoringConfig,
 }: {
   poolId: string
   pool: { season_year: number }
@@ -241,6 +253,7 @@ async function WorldCupSchedule({
   teamToManager: Map<string, string>
   draftedTeamIds: Set<string>
   selectedStage: string
+  scoringConfig: WorldCupScoringConfig
 }) {
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
@@ -312,6 +325,7 @@ async function WorldCupSchedule({
     const homeManager = teamToManager.get(g.home_team_id)
     const awayManager = teamToManager.get(g.away_team_id)
     return homeManager && awayManager && homeManager !== awayManager
+      && !homeManager.startsWith('Scraps Team') && !awayManager.startsWith('Scraps Team')
   })
 
   const h2hGameIds = new Set(h2hGames.map((g) => g.id))
@@ -358,6 +372,7 @@ async function WorldCupSchedule({
               teamMap={teamMap}
               teamToManager={teamToManager}
               isH2H={true}
+              scoringConfig={scoringConfig}
             />
           ))}
         </div>
@@ -376,6 +391,7 @@ async function WorldCupSchedule({
               teamMap={teamMap}
               teamToManager={teamToManager}
               isH2H={false}
+              scoringConfig={scoringConfig}
             />
           ))}
       </div>
@@ -456,11 +472,13 @@ function WcGameCard({
   teamMap,
   teamToManager,
   isH2H,
+  scoringConfig,
 }: {
   game: CachedGame
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
   isH2H: boolean
+  scoringConfig: WorldCupScoringConfig
 }) {
   const homeTeam = teamMap.get(game.home_team_id)
   const awayTeam = teamMap.get(game.away_team_id)
@@ -476,51 +494,112 @@ function WcGameCard({
     statusText = 'Live'
   }
 
+  const homeBreakdown = homeManager ? scoreWorldCupGame(game, game.home_team_id, scoringConfig) : null
+  const awayBreakdown = awayManager ? scoreWorldCupGame(game, game.away_team_id, scoringConfig) : null
+  const hasBreakdown = homeBreakdown || awayBreakdown
+
+  const gameContent = (
+    <>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {homeTeam?.logo_url && (
+            <img src={homeTeam.logo_url} alt="" className="h-6 w-6 object-contain" />
+          )}
+          <div>
+            <span className="font-medium">{homeTeam?.name ?? game.home_team_id}</span>
+            {homeManager && (
+              <span className="ml-2 text-xs text-muted-foreground">({homeManager})</span>
+            )}
+          </div>
+        </div>
+        <span className="text-lg font-bold">{game.home_score ?? '—'}</span>
+      </div>
+      <div className="my-1 text-center text-xs text-muted-foreground">
+        {statusText}
+        {game.is_shootout && game.status === 'final' && (
+          <span className="ml-1">
+            ({game.home_penalty_score} - {game.away_penalty_score})
+          </span>
+        )}
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {awayTeam?.logo_url && (
+            <img src={awayTeam.logo_url} alt="" className="h-6 w-6 object-contain" />
+          )}
+          <div>
+            <span className="font-medium">{awayTeam?.name ?? game.away_team_id}</span>
+            {awayManager && (
+              <span className="ml-2 text-xs text-muted-foreground">({awayManager})</span>
+            )}
+          </div>
+        </div>
+        <span className="text-lg font-bold">{game.away_score ?? '—'}</span>
+      </div>
+      {isH2H && (
+        <div className="mt-2 text-center">
+          <Badge variant="default" className="text-xs">Head-to-Head</Badge>
+        </div>
+      )}
+    </>
+  )
+
+  if (!hasBreakdown) {
+    return (
+      <Card className={isH2H ? 'border-primary/50 bg-primary/5' : ''}>
+        <CardContent className="py-3">{gameContent}</CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card className={isH2H ? 'border-primary/50 bg-primary/5' : ''}>
       <CardContent className="py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {homeTeam?.logo_url && (
-              <img src={homeTeam.logo_url} alt="" className="h-6 w-6 object-contain" />
+        <details>
+          <summary className="cursor-pointer list-none">{gameContent}</summary>
+          <div className="mt-3 space-y-2 border-t pt-3">
+            {homeBreakdown && homeManager && (
+              <ScoreBreakdownRow
+                managerName={homeManager}
+                teamName={homeTeam?.name ?? game.home_team_id}
+                breakdown={homeBreakdown}
+              />
             )}
-            <div>
-              <span className="font-medium">{homeTeam?.name ?? game.home_team_id}</span>
-              {homeManager && (
-                <span className="ml-2 text-xs text-muted-foreground">({homeManager})</span>
-              )}
-            </div>
-          </div>
-          <span className="text-lg font-bold">{game.home_score ?? '—'}</span>
-        </div>
-        <div className="my-1 text-center text-xs text-muted-foreground">
-          {statusText}
-          {game.is_shootout && game.status === 'final' && (
-            <span className="ml-1">
-              ({game.home_penalty_score} - {game.away_penalty_score})
-            </span>
-          )}
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {awayTeam?.logo_url && (
-              <img src={awayTeam.logo_url} alt="" className="h-6 w-6 object-contain" />
+            {awayBreakdown && awayManager && (
+              <ScoreBreakdownRow
+                managerName={awayManager}
+                teamName={awayTeam?.name ?? game.away_team_id}
+                breakdown={awayBreakdown}
+              />
             )}
-            <div>
-              <span className="font-medium">{awayTeam?.name ?? game.away_team_id}</span>
-              {awayManager && (
-                <span className="ml-2 text-xs text-muted-foreground">({awayManager})</span>
-              )}
-            </div>
           </div>
-          <span className="text-lg font-bold">{game.away_score ?? '—'}</span>
-        </div>
-        {isH2H && (
-          <div className="mt-2 text-center">
-            <Badge variant="default" className="text-xs">Head-to-Head</Badge>
-          </div>
-        )}
+        </details>
       </CardContent>
     </Card>
+  )
+}
+
+function ScoreBreakdownRow({
+  managerName,
+  teamName,
+  breakdown,
+}: {
+  managerName: string
+  teamName: string
+  breakdown: NonNullable<ReturnType<typeof scoreWorldCupGame>>
+}) {
+  return (
+    <div className="rounded-md bg-muted/50 p-2 text-sm">
+      <div className="flex items-center justify-between">
+        <span className="font-medium">{teamName} <span className="text-muted-foreground">({managerName})</span></span>
+        <span className="font-bold">{breakdown.points} pts</span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span>Result: {breakdown.result}</span>
+        {breakdown.itemized.map((item, i) => (
+          <span key={i}>{item.label}: +{item.value}</span>
+        ))}
+      </div>
+    </div>
   )
 }
