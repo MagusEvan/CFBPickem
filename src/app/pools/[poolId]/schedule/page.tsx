@@ -162,6 +162,9 @@ export default async function SchedulePage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Schedule</h1>
+      <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        Return to Pool
+      </Link>
 
       <div className="flex flex-wrap gap-2">
         {weeks.map((w) => (
@@ -276,6 +279,9 @@ async function WorldCupSchedule({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Schedule</h1>
+      <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        Return to Pool
+      </Link>
 
       {/* Stage selector */}
       <div className="flex flex-wrap gap-2">
