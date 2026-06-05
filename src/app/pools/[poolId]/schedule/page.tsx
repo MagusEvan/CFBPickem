@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import Link from 'next/link'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -36,7 +37,12 @@ export default async function SchedulePage({
   if (pool.draft_status === 'pre_draft') {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Schedule</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Schedule</h1>
+          <Link href={`/pools/${poolId}`} className="text-sm text-muted-foreground hover:text-foreground">
+            Return to Pool
+          </Link>
+        </div>
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             Schedule will be available after the draft is complete.

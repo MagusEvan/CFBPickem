@@ -28,7 +28,12 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   if (pool.draft_status === 'pre_draft') {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Standings</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Standings</h1>
+          <Link href={`/pools/${poolId}`} className="text-sm text-muted-foreground hover:text-foreground">
+            Return to Pool
+          </Link>
+        </div>
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             Standings will be available after the draft is complete.
