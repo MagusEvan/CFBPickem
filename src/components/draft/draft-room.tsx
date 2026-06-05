@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useDraftRealtime } from '@/hooks/use-draft-realtime'
 import { startDraft, makePick, resetDraft, undoPick, generateWcScraps } from '@/lib/draft/actions'
 import { generateSnakeOrder, getPickInfo, getAvailableConferences } from '@/lib/draft/engine'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
@@ -240,12 +240,10 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   if (draftStatus === 'pre_draft' || (!draftState && pool.draft_status === 'pre_draft')) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Draft - {pool.name}</h1>
-          <Link href={`/pools/${pool.id}`} className="text-sm text-muted-foreground hover:text-foreground">
-            Return to Pool
-          </Link>
-        </div>
+        <h1 className="text-2xl font-bold">Draft - {pool.name}</h1>
+        <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          Return to Pool
+        </Link>
         <Card>
           <CardContent className="py-12 text-center">
             <p className="mb-4 text-lg text-muted-foreground">
@@ -268,14 +266,13 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   if (draftStatus === 'completed') {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Draft Complete - {pool.name}</h1>
-          <div className="flex items-center gap-4">
-            <Link href={`/pools/${pool.id}`} className="text-sm text-muted-foreground hover:text-foreground">
-              Return to Pool
-            </Link>
+        <h1 className="text-2xl font-bold">Draft Complete - {pool.name}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Return to Pool
+          </Link>
           {isAdmin && (
-            <div className="flex gap-2">
+            <>
               {isWorldCup && (
                 <Button variant="outline" size="sm" onClick={handleGenerateScraps} disabled={submitting}>
                   {submitting && <Spinner className="mr-2" />}
@@ -290,9 +287,8 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
                 {submitting && <Spinner className="mr-2" />}
                 Reset Draft
               </Button>
-            </div>
+            </>
           )}
-          </div>
         </div>
         {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
         {isWorldCup ? (
@@ -319,28 +315,26 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Draft - {pool.name}</h1>
-        <div className="flex items-center gap-4">
-          <Link href={`/pools/${pool.id}`} className="text-sm text-muted-foreground hover:text-foreground">
-            Return to Pool
-          </Link>
-          <p className="text-sm text-muted-foreground">
-            Round {draftState?.current_round} &middot; Pick {draftState?.current_pick_number}
-          </p>
-          {isAdmin && (
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleUndoPick} disabled={submitting || picks.length === 0}>
-                {submitting && <Spinner className="mr-2" />}
-                Undo
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleResetDraft} disabled={submitting}>
-                {submitting && <Spinner className="mr-2" />}
-                Reset
-              </Button>
-            </div>
-          )}
-        </div>
+      <h1 className="text-2xl font-bold">Draft - {pool.name}</h1>
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          Return to Pool
+        </Link>
+        <p className="text-sm text-muted-foreground">
+          Round {draftState?.current_round} &middot; Pick {draftState?.current_pick_number}
+        </p>
+        {isAdmin && (
+          <>
+            <Button variant="outline" size="sm" onClick={handleUndoPick} disabled={submitting || picks.length === 0}>
+              {submitting && <Spinner className="mr-2" />}
+              Undo
+            </Button>
+            <Button variant="destructive" size="sm" onClick={handleResetDraft} disabled={submitting}>
+              {submitting && <Spinner className="mr-2" />}
+              Reset
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Current turn indicator */}

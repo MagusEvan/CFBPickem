@@ -4,6 +4,7 @@ import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
 import { calculateStandings, calculateWorldCupStandings } from '@/lib/scoring/engine'
 import { calculateTeamPoints } from '@/lib/scoring/strategies/world-cup'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
@@ -28,12 +29,10 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   if (pool.draft_status === 'pre_draft') {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Standings</h1>
-          <Link href={`/pools/${poolId}`} className="text-sm text-muted-foreground hover:text-foreground">
-            Return to Pool
-          </Link>
-        </div>
+        <h1 className="text-2xl font-bold">Standings</h1>
+        <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          Return to Pool
+        </Link>
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             Standings will be available after the draft is complete.
