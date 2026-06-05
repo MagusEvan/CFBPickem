@@ -245,11 +245,51 @@ async function WorldCupSchedule({
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
 
-  const { data: gamesData } = await supabase
+  let { data: gamesData } = await supabase
     .from('cached_games')
     .select('*')
     .eq('game_type', 'world_cup')
     .eq('season_year', pool.season_year)
+
+  // Lazy-fetch from ESPN if no cached games exist
+  if (!gamesData || gamesData.length === 0) {
+    try {
+      const { getWorldCupProvider } = await import('@/lib/data-providers/world-cup/provider')
+      const { createAdminClient } = await import('@/lib/supabase/admin')
+      const provider = getWorldCupProvider()
+      const fetchedGames = await provider.getAllGames(pool.season_year)
+      const admin = createAdminClient()
+
+      const rows = fetchedGames.map((g) => ({
+        id: g.id,
+        season_year: pool.season_year,
+        week: null,
+        home_team_id: g.homeTeam.id,
+        away_team_id: g.awayTeam.id,
+        home_score: g.homeTeam.score,
+        away_score: g.awayTeam.score,
+        status: g.status,
+        start_time: g.startTime,
+        venue: g.venue,
+        game_type: 'world_cup' as const,
+        stage: g.stage,
+        is_overtime: g.isOvertime,
+        is_shootout: g.isShootout,
+        home_penalty_score: g.homePenaltyScore,
+        away_penalty_score: g.awayPenaltyScore,
+        manual_entry: false,
+        fetched_at: new Date().toISOString(),
+      }))
+
+      if (rows.length > 0) {
+        await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+      }
+
+      gamesData = rows
+    } catch {
+      gamesData = []
+    }
+  }
 
   const allGames = (gamesData ?? []) as CachedGame[]
 
