@@ -3,8 +3,7 @@ import Link from 'next/link'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 import { scoreWorldCupGame } from '@/lib/scoring/strategies/world-cup'
 
@@ -27,6 +26,23 @@ const STAGE_LABELS: Record<string, string> = {
 }
 
 const STAGE_ORDER = ['group', 'round_of_32', 'round_of_16', 'quarter', 'semi', 'third_place', 'final']
+
+function formatGameTime(startTime: string | null): string | null {
+  if (!startTime) return null
+  const d = new Date(startTime)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ' · ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+function sortByTime<T extends { start_time: string | null }>(games: T[]): T[] {
+  return [...games].sort((a, b) => {
+    if (!a.start_time && !b.start_time) return 0
+    if (!a.start_time) return 1
+    if (!b.start_time) return -1
+    return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  })
+}
 
 export default async function SchedulePage({
   params,
@@ -198,34 +214,34 @@ export default async function SchedulePage({
       {h2hGames.length > 0 && (
         <div className="space-y-3">
           <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
-          {h2hGames.map((game) => (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {sortByTime(h2hGames).map((game) => (
+              <GameCard
+                key={game.id}
+                game={game}
+                teamMap={teamMap}
+                teamToManager={teamToManager}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {h2hGames.length > 0 && relevantGames.length > h2hGames.length && (
+        <h3 className="font-medium text-muted-foreground">Other Games</h3>
+      )}
+      {relevantGames.filter((g) => !h2hGameIds.has(g.id)).length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {sortByTime(relevantGames.filter((g) => !h2hGameIds.has(g.id))).map((game) => (
             <GameCard
               key={game.id}
               game={game}
               teamMap={teamMap}
               teamToManager={teamToManager}
-              isH2H={true}
             />
           ))}
         </div>
       )}
-
-      <div className="space-y-3">
-        {h2hGames.length > 0 && relevantGames.length > h2hGames.length && (
-          <h3 className="font-medium text-muted-foreground">Other Games</h3>
-        )}
-        {relevantGames
-          .filter((g) => !h2hGameIds.has(g.id))
-          .map((game) => (
-            <GameCard
-              key={game.id}
-              game={game}
-              teamMap={teamMap}
-              teamToManager={teamToManager}
-              isH2H={false}
-            />
-          ))}
-      </div>
 
       {relevantGames.length === 0 && (
         <Card>
@@ -365,36 +381,36 @@ async function WorldCupSchedule({
       {h2hGames.length > 0 && (
         <div className="space-y-3">
           <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
-          {h2hGames.map((game) => (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {sortByTime(h2hGames).map((game) => (
+              <WcGameCard
+                key={game.id}
+                game={game}
+                teamMap={teamMap}
+                teamToManager={teamToManager}
+                scoringConfig={scoringConfig}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {h2hGames.length > 0 && relevantGames.length > h2hGames.length && (
+        <h3 className="font-medium text-muted-foreground">Other Games</h3>
+      )}
+      {relevantGames.filter((g) => !h2hGameIds.has(g.id)).length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {sortByTime(relevantGames.filter((g) => !h2hGameIds.has(g.id))).map((game) => (
             <WcGameCard
               key={game.id}
               game={game}
               teamMap={teamMap}
               teamToManager={teamToManager}
-              isH2H={true}
               scoringConfig={scoringConfig}
             />
           ))}
         </div>
       )}
-
-      <div className="space-y-3">
-        {h2hGames.length > 0 && relevantGames.length > h2hGames.length && (
-          <h3 className="font-medium text-muted-foreground">Other Games</h3>
-        )}
-        {relevantGames
-          .filter((g) => !h2hGameIds.has(g.id))
-          .map((game) => (
-            <WcGameCard
-              key={game.id}
-              game={game}
-              teamMap={teamMap}
-              teamToManager={teamToManager}
-              isH2H={false}
-              scoringConfig={scoringConfig}
-            />
-          ))}
-      </div>
 
       {relevantGames.length === 0 && (
         <Card>
@@ -411,21 +427,23 @@ function GameCard({
   game,
   teamMap,
   teamToManager,
-  isH2H,
 }: {
   game: CachedGame
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
-  isH2H: boolean
 }) {
   const homeTeam = teamMap.get(game.home_team_id)
   const awayTeam = teamMap.get(game.away_team_id)
   const homeManager = teamToManager.get(game.home_team_id)
   const awayManager = teamToManager.get(game.away_team_id)
+  const timeStr = formatGameTime(game.start_time)
 
   return (
-    <Card className={isH2H ? 'border-primary/50 bg-primary/5' : ''}>
+    <Card>
       <CardContent className="py-3">
+        {timeStr && (
+          <div className="mb-2 text-center text-xs text-muted-foreground">{timeStr}</div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {awayTeam?.logo_url && (
@@ -457,11 +475,6 @@ function GameCard({
           </div>
           <span className="text-lg font-bold">{game.home_score ?? '—'}</span>
         </div>
-        {isH2H && (
-          <div className="mt-2 text-center">
-            <Badge variant="default" className="text-xs">Head-to-Head</Badge>
-          </div>
-        )}
       </CardContent>
     </Card>
   )
@@ -471,19 +484,18 @@ function WcGameCard({
   game,
   teamMap,
   teamToManager,
-  isH2H,
   scoringConfig,
 }: {
   game: CachedGame
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
-  isH2H: boolean
   scoringConfig: WorldCupScoringConfig
 }) {
   const homeTeam = teamMap.get(game.home_team_id)
   const awayTeam = teamMap.get(game.away_team_id)
   const homeManager = teamToManager.get(game.home_team_id)
   const awayManager = teamToManager.get(game.away_team_id)
+  const timeStr = formatGameTime(game.start_time)
 
   let statusText = 'vs'
   if (game.status === 'final') {
@@ -500,6 +512,9 @@ function WcGameCard({
 
   const gameContent = (
     <>
+      {timeStr && (
+        <div className="mb-2 text-center text-xs text-muted-foreground">{timeStr}</div>
+      )}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {homeTeam?.logo_url && (
@@ -536,24 +551,19 @@ function WcGameCard({
         </div>
         <span className="text-lg font-bold">{game.away_score ?? '—'}</span>
       </div>
-      {isH2H && (
-        <div className="mt-2 text-center">
-          <Badge variant="default" className="text-xs">Head-to-Head</Badge>
-        </div>
-      )}
     </>
   )
 
   if (!hasBreakdown) {
     return (
-      <Card className={isH2H ? 'border-primary/50 bg-primary/5' : ''}>
+      <Card>
         <CardContent className="py-3">{gameContent}</CardContent>
       </Card>
     )
   }
 
   return (
-    <Card className={isH2H ? 'border-primary/50 bg-primary/5' : ''}>
+    <Card>
       <CardContent className="py-3">
         <details>
           <summary className="cursor-pointer list-none">{gameContent}</summary>
