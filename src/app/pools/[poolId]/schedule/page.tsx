@@ -6,6 +6,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 import { scoreWorldCupGame } from '@/lib/scoring/strategies/world-cup'
+import { GameTime } from '@/components/schedule/game-time'
 
 const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
   group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },
@@ -26,14 +27,6 @@ const STAGE_LABELS: Record<string, string> = {
 }
 
 const STAGE_ORDER = ['group', 'round_of_32', 'round_of_16', 'quarter', 'semi', 'third_place', 'final']
-
-function formatGameTime(startTime: string | null): string | null {
-  if (!startTime) return null
-  const d = new Date(startTime)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
-    ' · ' +
-    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-}
 
 function sortByTime<T extends { start_time: string | null }>(games: T[]): T[] {
   return [...games].sort((a, b) => {
@@ -436,13 +429,14 @@ function GameCard({
   const awayTeam = teamMap.get(game.away_team_id)
   const homeManager = teamToManager.get(game.home_team_id)
   const awayManager = teamToManager.get(game.away_team_id)
-  const timeStr = formatGameTime(game.start_time)
 
   return (
     <Card>
       <CardContent className="py-3">
-        {timeStr && (
-          <div className="mb-2 text-center text-xs text-muted-foreground">{timeStr}</div>
+        {game.start_time && (
+          <div className="mb-2 text-center text-xs text-muted-foreground">
+            <GameTime startTime={game.start_time} />
+          </div>
         )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -475,6 +469,9 @@ function GameCard({
           </div>
           <span className="text-lg font-bold">{game.home_score ?? '—'}</span>
         </div>
+        {game.venue && (
+          <div className="mt-2 text-center text-xs text-muted-foreground">{game.venue}</div>
+        )}
       </CardContent>
     </Card>
   )
@@ -495,7 +492,6 @@ function WcGameCard({
   const awayTeam = teamMap.get(game.away_team_id)
   const homeManager = teamToManager.get(game.home_team_id)
   const awayManager = teamToManager.get(game.away_team_id)
-  const timeStr = formatGameTime(game.start_time)
 
   let statusText = 'vs'
   if (game.status === 'final') {
@@ -512,8 +508,10 @@ function WcGameCard({
 
   const gameContent = (
     <>
-      {timeStr && (
-        <div className="mb-2 text-center text-xs text-muted-foreground">{timeStr}</div>
+      {game.start_time && (
+        <div className="mb-2 text-center text-xs text-muted-foreground">
+          <GameTime startTime={game.start_time} />
+        </div>
       )}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -551,6 +549,9 @@ function WcGameCard({
         </div>
         <span className="text-lg font-bold">{game.away_score ?? '—'}</span>
       </div>
+      {game.venue && (
+        <div className="mt-2 text-center text-xs text-muted-foreground">{game.venue}</div>
+      )}
     </>
   )
 
