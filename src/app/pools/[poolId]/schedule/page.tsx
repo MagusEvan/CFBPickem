@@ -1,12 +1,14 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getPool, getPoolMembers } from '@/lib/pools/queries'
+import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 import { scoreWorldCupGame } from '@/lib/scoring/strategies/world-cup'
 import { GameTime } from '@/components/schedule/game-time'
+import { ScheduleHeader } from '@/components/schedule/refresh-schedule'
+import { refreshSchedule, isStale } from '@/lib/schedule/actions'
 
 const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
   group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },
@@ -46,12 +48,15 @@ export default async function SchedulePage({
 }) {
   const { poolId } = await params
   const { week: weekParam, stage: stageParam } = await searchParams
-  const [pool, members] = await Promise.all([
+  const [pool, members, userId] = await Promise.all([
     getPool(poolId),
     getPoolMembers(poolId),
+    getCurrentUserId(),
   ])
 
   if (!pool) notFound()
+
+  const isAdmin = userId === pool.admin_id
 
   if (pool.draft_status === 'pre_draft') {
     return (
@@ -118,6 +123,7 @@ export default async function SchedulePage({
         draftedTeamIds={draftedTeamIds}
         selectedStage={stageParam || 'group'}
         scoringConfig={pool.scoring_config ?? DEFAULT_WC_SCORING}
+        isAdmin={isAdmin}
       />
     )
   }
@@ -132,7 +138,8 @@ export default async function SchedulePage({
     .eq('season_year', pool.season_year)
     .eq('week', selectedWeek)
 
-  if (!gamesData || gamesData.length === 0) {
+  const cfbOldestFetch = gamesData?.[0]?.fetched_at ?? null
+  if (!gamesData || gamesData.length === 0 || isStale(cfbOldestFetch)) {
     try {
       const { getDataProvider } = await import('@/lib/data-providers')
       const { createAdminClient } = await import('@/lib/supabase/admin')
@@ -160,11 +167,14 @@ export default async function SchedulePage({
 
       gamesData = rows
     } catch {
-      gamesData = []
+      gamesData = gamesData ?? []
     }
   }
 
   const games = (gamesData ?? []) as CachedGame[]
+  const cfbLastFetched = games.length > 0
+    ? games.reduce((latest, g) => g.fetched_at > latest ? g.fetched_at : latest, games[0].fetched_at)
+    : null
 
   const relevantGames = games.filter(
     (g) => draftedTeamIds.has(g.home_team_id) || draftedTeamIds.has(g.away_team_id)
@@ -181,7 +191,15 @@ export default async function SchedulePage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Schedule</h1>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold">Schedule</h1>
+        <ScheduleHeader
+          lastFetchedAt={cfbLastFetched}
+          isAdmin={isAdmin}
+          poolId={poolId}
+          refreshAction={refreshSchedule}
+        />
+      </div>
       <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline' })}>
         Return to Pool
       </Link>
@@ -253,6 +271,7 @@ async function WorldCupSchedule({
   teamMap,
   teamToManager,
   draftedTeamIds,
+  isAdmin,
   selectedStage,
   scoringConfig,
 }: {
@@ -263,6 +282,7 @@ async function WorldCupSchedule({
   draftedTeamIds: Set<string>
   selectedStage: string
   scoringConfig: WorldCupScoringConfig
+  isAdmin: boolean
 }) {
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
@@ -273,8 +293,9 @@ async function WorldCupSchedule({
     .eq('game_type', 'world_cup')
     .eq('season_year', pool.season_year)
 
-  // Lazy-fetch from ESPN if no cached games exist
-  if (!gamesData || gamesData.length === 0) {
+  // Fetch from ESPN if no cached games or data is stale (>15 min)
+  const wcOldestFetch = gamesData?.[0]?.fetched_at ?? null
+  if (!gamesData || gamesData.length === 0 || isStale(wcOldestFetch)) {
     try {
       const { getWorldCupProvider } = await import('@/lib/data-providers/world-cup/provider')
       const { createAdminClient } = await import('@/lib/supabase/admin')
@@ -309,11 +330,14 @@ async function WorldCupSchedule({
 
       gamesData = rows
     } catch {
-      gamesData = []
+      gamesData = gamesData ?? []
     }
   }
 
   const allGames = (gamesData ?? []) as CachedGame[]
+  const wcLastFetched = allGames.length > 0
+    ? allGames.reduce((latest, g) => g.fetched_at > latest ? g.fetched_at : latest, allGames[0].fetched_at)
+    : null
 
   // Group games by stage
   const gamesByStage = new Map<string, CachedGame[]>()
@@ -341,7 +365,15 @@ async function WorldCupSchedule({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Schedule</h1>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold">Schedule</h1>
+        <ScheduleHeader
+          lastFetchedAt={wcLastFetched}
+          isAdmin={isAdmin}
+          poolId={poolId}
+          refreshAction={refreshSchedule}
+        />
+      </div>
       <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline' })}>
         Return to Pool
       </Link>
