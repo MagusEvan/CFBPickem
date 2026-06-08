@@ -30,8 +30,8 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Standings</h1>
-        <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline' })}>
-          Return to Pool
+        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+          &lt; Return to Pool
         </Link>
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
@@ -70,8 +70,8 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
-      <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline' })}>
-        Return to Pool
+      <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        &lt; Return to Pool
       </Link>
 
       <Card>
@@ -225,8 +225,8 @@ async function WorldCupStandings({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
-      <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline' })}>
-        Return to Pool
+      <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        &lt; Return to Pool
       </Link>
 
       <Card>
