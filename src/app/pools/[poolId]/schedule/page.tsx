@@ -8,7 +8,13 @@ import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam, WorldCupScoringCo
 import { scoreWorldCupGame } from '@/lib/scoring/strategies/world-cup'
 import { GameTime } from '@/components/schedule/game-time'
 import { ScheduleHeader } from '@/components/schedule/refresh-schedule'
-import { refreshSchedule, isStale } from '@/lib/schedule/actions'
+import { refreshSchedule } from '@/lib/schedule/actions'
+
+const STALE_MS = 15 * 60 * 1000
+function isStale(fetchedAt: string | null): boolean {
+  if (!fetchedAt) return true
+  return Date.now() - new Date(fetchedAt).getTime() > STALE_MS
+}
 
 const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
   group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },

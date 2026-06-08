@@ -4,8 +4,6 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPool } from '@/lib/pools/queries'
 
-const STALE_THRESHOLD_MS = 15 * 60 * 1000 // 15 minutes
-
 export async function refreshSchedule(poolId: string): Promise<{ error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -96,12 +94,4 @@ async function refreshCfbGames(
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to refresh' }
   }
-}
-
-/**
- * Check if cached games are stale (older than 15 minutes).
- */
-export function isStale(fetchedAt: string | null): boolean {
-  if (!fetchedAt) return true
-  return Date.now() - new Date(fetchedAt).getTime() > STALE_THRESHOLD_MS
 }
