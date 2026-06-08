@@ -19,7 +19,7 @@ interface EspnEvent {
   week: { number: number }
   season: { year: number }
   competitions: {
-    venue?: { fullName: string }
+    venue?: { fullName: string; address?: { city?: string; state?: string; country?: string } }
     competitors: {
       id: string
       team: { displayName: string }
@@ -28,6 +28,16 @@ interface EspnEvent {
     }[]
     status: { type: { completed: boolean; description: string } }
   }[]
+}
+
+function formatCfbVenue(venue?: { fullName: string; address?: { city?: string; state?: string; country?: string } }): string | null {
+  if (!venue) return null
+  const name = venue.fullName
+  const city = venue.address?.city
+  const state = venue.address?.state
+  if (city && state) return `${name} — ${city}, ${state}`
+  if (city) return `${name} — ${city}`
+  return name
 }
 
 export function adaptEspnTeam(entry: EspnTeamEntry, conferenceKey: string): CfbTeam {
@@ -65,7 +75,7 @@ export function adaptEspnGame(event: EspnEvent): CfbGame {
     },
     status: isCompleted ? 'final' : 'scheduled',
     startTime: event.date,
-    venue: comp.venue?.fullName ?? null,
+    venue: formatCfbVenue(comp.venue) ?? null,
   }
 }
 

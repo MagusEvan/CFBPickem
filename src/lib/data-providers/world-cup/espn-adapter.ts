@@ -3,6 +3,22 @@ import type { WcGame, WcStage } from '../types'
 const ESPN_WC_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatVenue(venue: any): string | null {
+  if (!venue) return null
+  const name = venue.fullName || venue.name
+  if (!name) return null
+  const city = venue.address?.city
+  const state = venue.address?.state
+  const country = venue.address?.country
+  const parts = [name]
+  if (city) {
+    const loc = state ? `${city}, ${state}` : country ? `${city}, ${country}` : city
+    parts.push(loc)
+  }
+  return parts.join(' — ')
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapStage(slug: string, _round: any): WcStage {
   const s = slug.toLowerCase()
   if (s.includes('group')) return 'group'
@@ -61,7 +77,7 @@ function parseGame(event: any): WcGame | null {
     },
     status: gameStatus,
     startTime: event.date || null,
-    venue: competition.venue?.fullName || null,
+    venue: formatVenue(competition.venue) || null,
     isOvertime,
     isShootout,
     homePenaltyScore,

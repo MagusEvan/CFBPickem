@@ -30,7 +30,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Standings</h1>
-        <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline' })}>
           Return to Pool
         </Link>
         <Card>
@@ -70,7 +70,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
-      <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+      <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline' })}>
         Return to Pool
       </Link>
 
@@ -225,7 +225,7 @@ async function WorldCupStandings({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
-      <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+      <Link href={`/pools/${poolId}`} className={buttonVariants({ variant: 'outline' })}>
         Return to Pool
       </Link>
 

@@ -241,7 +241,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Draft - {pool.name}</h1>
-        <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'outline' })}>
           Return to Pool
         </Link>
         <Card>
@@ -268,7 +268,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Draft Complete - {pool.name}</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'outline' })}>
             Return to Pool
           </Link>
           {isAdmin && (
@@ -317,7 +317,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Draft - {pool.name}</h1>
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'outline' })}>
           Return to Pool
         </Link>
         <p className="text-sm text-muted-foreground">
