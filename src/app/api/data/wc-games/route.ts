@@ -93,7 +93,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
+  // Verify the user is an admin of a WC pool for this season
   const admin = createAdminClient()
+  const { data: adminPool } = await admin
+    .from('pools')
+    .select('id')
+    .eq('admin_id', user.id)
+    .eq('game_type', 'world_cup')
+    .eq('season_year', season_year || 2026)
+    .limit(1)
+    .maybeSingle()
+
+  if (!adminPool) {
+    return NextResponse.json({ error: 'Only league admins can modify game data' }, { status: 403 })
+  }
   const gameId = id || `manual_${home_team_id}_${away_team_id}_${stage}_${Date.now()}`
 
   const { data, error } = await admin.from('cached_games').upsert({
