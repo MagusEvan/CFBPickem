@@ -43,9 +43,10 @@ function parseGame(event: any): WcGame | null {
   if (!home || !away) return null
 
   const status = event.status?.type?.name
+  const completed = event.status?.type?.completed === true
   let gameStatus: 'scheduled' | 'in_progress' | 'final' = 'scheduled'
-  if (status === 'STATUS_FINAL') gameStatus = 'final'
-  else if (status === 'STATUS_IN_PROGRESS' || status === 'STATUS_HALFTIME') gameStatus = 'in_progress'
+  if (completed || status === 'STATUS_FINAL' || status === 'STATUS_FULL_TIME') gameStatus = 'final'
+  else if (status === 'STATUS_IN_PROGRESS' || status === 'STATUS_HALFTIME' || status === 'STATUS_FIRST_HALF' || status === 'STATUS_SECOND_HALF') gameStatus = 'in_progress'
 
   // Detect OT and shootout from status detail
   const detail = (event.status?.type?.detail || '').toLowerCase()
