@@ -1,4 +1,5 @@
 import type { WcGame, WcStage } from '../types'
+import { parseEspnBroadcasts } from '@/lib/broadcasts'
 
 const ESPN_WC_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
 
@@ -82,6 +83,7 @@ function parseGame(event: any): WcGame | null {
     isShootout,
     homePenaltyScore,
     awayPenaltyScore,
+    broadcasts: parseEspnBroadcasts(competition.geoBroadcasts),
   }
 }
 

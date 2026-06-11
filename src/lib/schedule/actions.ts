@@ -57,6 +57,7 @@ async function refreshWcGames(
       home_penalty_score: g.homePenaltyScore,
       away_penalty_score: g.awayPenaltyScore,
       manual_entry: false,
+      broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
       fetched_at: new Date().toISOString(),
     }))
 
@@ -91,6 +92,7 @@ async function refreshCfbGames(
         status: g.status,
         start_time: g.startTime,
         venue: g.venue,
+        broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
         fetched_at: new Date().toISOString(),
       }))
 

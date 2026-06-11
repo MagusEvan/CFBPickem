@@ -1,4 +1,5 @@
 import type { CfbTeam, CfbGame, CfbTeamRecord } from '../types'
+import { parseEspnBroadcasts } from '@/lib/broadcasts'
 
 // ESPN API response shapes (simplified)
 
@@ -27,6 +28,8 @@ interface EspnEvent {
       score?: string
     }[]
     status: { type: { completed: boolean; description: string } }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    geoBroadcasts?: any[]
   }[]
 }
 
@@ -76,6 +79,7 @@ export function adaptEspnGame(event: EspnEvent): CfbGame {
     status: isCompleted ? 'final' : 'scheduled',
     startTime: event.date,
     venue: formatCfbVenue(comp.venue) ?? null,
+    broadcasts: parseEspnBroadcasts(comp.geoBroadcasts),
   }
 }
 

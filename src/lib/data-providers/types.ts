@@ -19,6 +19,7 @@ export interface CfbGame {
   status: 'scheduled' | 'in_progress' | 'final'
   startTime: string | null
   venue: string | null
+  broadcasts: import('@/lib/types').GameBroadcast[]
 }
 
 export interface CfbTeamRecord {
@@ -60,4 +61,5 @@ export interface WcGame {
   isShootout: boolean
   homePenaltyScore: number | null
   awayPenaltyScore: number | null
+  broadcasts: import('@/lib/types').GameBroadcast[]
 }

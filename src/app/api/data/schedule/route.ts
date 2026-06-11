@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
       status: g.status,
       start_time: g.startTime,
       venue: g.venue,
+      broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
       fetched_at: new Date().toISOString(),
     }))
 

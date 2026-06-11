@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
       home_penalty_score: g.homePenaltyScore,
       away_penalty_score: g.awayPenaltyScore,
       manual_entry: false,
+      broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
       fetched_at: new Date().toISOString(),
     }))
 

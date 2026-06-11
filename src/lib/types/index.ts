@@ -123,6 +123,13 @@ export interface CachedTeam {
   fetched_at: string
 }
 
+export interface GameBroadcast {
+  network: string
+  type: string      // "TV", "Web", "Radio"
+  market: string    // "National", "Home", "Away"
+  locale: string    // "us", "uk", "mx", etc.
+}
+
 export interface CachedGame {
   id: string
   season_year: number
@@ -141,5 +148,6 @@ export interface CachedGame {
   home_penalty_score: number | null
   away_penalty_score: number | null
   manual_entry: boolean
+  broadcasts: GameBroadcast[] | null
   fetched_at: string
 }

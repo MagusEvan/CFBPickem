@@ -6,6 +6,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 import { scoreWorldCupGame } from '@/lib/scoring/strategies/world-cup'
+import { getBroadcastForLocale } from '@/lib/broadcasts'
 import { GameTime } from '@/components/schedule/game-time'
 import { ScheduleHeader } from '@/components/schedule/refresh-schedule'
 import { refreshSchedule } from '@/lib/schedule/actions'
@@ -396,6 +397,7 @@ function GameCard({
         {game.start_time && (
           <div className="mb-2 text-center text-xs text-muted-foreground">
             <GameTime startTime={game.start_time} />
+            {(() => { const n = getBroadcastForLocale(game.broadcasts); return n ? <span className="ml-2">· {n}</span> : null })()}
           </div>
         )}
         <div className="flex items-center justify-between">
@@ -471,6 +473,7 @@ function WcGameCard({
       {game.start_time && (
         <div className="mb-2 text-center text-xs text-muted-foreground">
           <GameTime startTime={game.start_time} />
+          {(() => { const n = getBroadcastForLocale(game.broadcasts); return n ? <span className="ml-2">· {n}</span> : null })()}
         </div>
       )}
       <div className="flex items-center justify-between">
