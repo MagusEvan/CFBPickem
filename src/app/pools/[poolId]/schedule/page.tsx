@@ -398,6 +398,11 @@ function GameCard({
           <div className="mb-2 text-center text-xs text-muted-foreground">
             <GameTime startTime={game.start_time} />
             {(() => { const n = getBroadcastForLocale(game.broadcasts); return n ? <span className="ml-2">· {n}</span> : null })()}
+            {game.status_detail && (
+              <span className={`ml-2 ${game.status === 'in_progress' ? 'font-semibold text-green-600' : ''}`}>
+                · {game.status_detail}
+              </span>
+            )}
           </div>
         )}
         <div className="flex items-center justify-between">
@@ -414,13 +419,7 @@ function GameCard({
           </div>
           <span className="text-lg font-bold">{game.away_score ?? '—'}</span>
         </div>
-        <div className="my-1 text-center text-xs text-muted-foreground">
-          {game.status === 'in_progress' && game.status_detail
-            ? <span className="font-semibold text-green-600">{game.status_detail}</span>
-            : game.status === 'final'
-              ? (game.status_detail ?? 'Final')
-              : '@'}
-        </div>
+        <div className="my-1 text-center text-xs text-muted-foreground">@</div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {homeTeam?.logo_url && (
@@ -459,16 +458,11 @@ function WcGameCard({
   const homeManager = teamToManager.get(game.home_team_id)
   const awayManager = teamToManager.get(game.away_team_id)
 
-  let statusText = 'vs'
-  let statusLive = false
-  if (game.status === 'final') {
-    if (game.is_shootout) statusText = 'Final (Penalties)'
-    else if (game.is_overtime) statusText = 'Final (AET)'
-    else statusText = game.status_detail ?? 'Final'
-  } else if (game.status === 'in_progress') {
-    statusText = game.status_detail ?? 'Live'
-    statusLive = true
-  }
+  const statusDetail = game.status === 'in_progress'
+    ? (game.status_detail ?? 'Live')
+    : game.status === 'final'
+      ? (game.is_shootout ? 'Final (Penalties)' : game.is_overtime ? 'Final (AET)' : (game.status_detail ?? 'Final'))
+      : null
 
   const homeBreakdown = homeManager ? scoreWorldCupGame(game, game.home_team_id, scoringConfig) : null
   const awayBreakdown = awayManager ? scoreWorldCupGame(game, game.away_team_id, scoringConfig) : null
@@ -480,6 +474,11 @@ function WcGameCard({
         <div className="mb-2 text-center text-xs text-muted-foreground">
           <GameTime startTime={game.start_time} />
           {(() => { const n = getBroadcastForLocale(game.broadcasts); return n ? <span className="ml-2">· {n}</span> : null })()}
+          {statusDetail && (
+            <span className={`ml-2 ${game.status === 'in_progress' ? 'font-semibold text-green-600' : ''}`}>
+              · {statusDetail}
+            </span>
+          )}
         </div>
       )}
       <div className="flex items-center justify-between">
@@ -496,8 +495,8 @@ function WcGameCard({
         </div>
         <span className="text-lg font-bold">{game.home_score ?? '—'}</span>
       </div>
-      <div className={`my-1 text-center text-xs ${statusLive ? 'font-semibold text-green-600' : 'text-muted-foreground'}`}>
-        {statusText}
+      <div className="my-1 text-center text-xs text-muted-foreground">
+        vs
         {game.is_shootout && game.status === 'final' && (
           <span className="ml-1">
             ({game.home_penalty_score} - {game.away_penalty_score})
