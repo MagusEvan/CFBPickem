@@ -1,8 +1,9 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { RefreshCw, Check } from 'lucide-react'
 import { GameTime } from './game-time'
 
 export function ScheduleHeader({
@@ -17,12 +18,23 @@ export function ScheduleHeader({
   refreshAction: (poolId: string) => Promise<{ error?: string }>
 }) {
   const [isPending, startTransition] = useTransition()
+  const [result, setResult] = useState<'success' | 'error' | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
 
   function handleRefresh() {
+    setResult(null)
+    setErrorMsg(null)
     startTransition(async () => {
-      await refreshAction(poolId)
-      router.refresh()
+      const res = await refreshAction(poolId)
+      if (res?.error) {
+        setResult('error')
+        setErrorMsg(res.error)
+      } else {
+        setResult('success')
+        router.refresh()
+        setTimeout(() => setResult(null), 4000)
+      }
     })
   }
 
@@ -34,14 +46,28 @@ export function ScheduleHeader({
         </span>
       )}
       {isAdmin && (
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={handleRefresh}
-          disabled={isPending}
-        >
-          {isPending ? 'Refreshing...' : 'Refresh Scores'}
-        </Button>
+        <>
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={handleRefresh}
+            disabled={isPending}
+          >
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isPending ? 'animate-spin' : ''}`} />
+            {isPending ? 'Refreshing…' : 'Refresh Scores'}
+          </Button>
+          {result === 'success' && (
+            <span className="flex items-center gap-1 text-xs text-green-600">
+              <Check className="h-3.5 w-3.5" />
+              Updated
+            </span>
+          )}
+          {result === 'error' && (
+            <span className="text-xs text-destructive">
+              {errorMsg || 'Refresh failed'}
+            </span>
+          )}
+        </>
       )}
     </div>
   )
