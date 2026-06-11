@@ -10,11 +10,7 @@ import { GameTime } from '@/components/schedule/game-time'
 import { ScheduleHeader } from '@/components/schedule/refresh-schedule'
 import { refreshSchedule } from '@/lib/schedule/actions'
 
-const STALE_MS = 15 * 60 * 1000
-function isStale(fetchedAt: string | null): boolean {
-  if (!fetchedAt) return true
-  return Date.now() - new Date(fetchedAt).getTime() > STALE_MS
-}
+export const revalidate = 60
 
 const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
   group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },
@@ -138,44 +134,11 @@ export default async function SchedulePage({
   const selectedWeek = Number(weekParam) || 1
   const weeks = Array.from({ length: 15 }, (_, i) => i + 1)
 
-  let { data: gamesData } = await supabase
+  const { data: gamesData } = await supabase
     .from('cached_games')
     .select('*')
     .eq('season_year', pool.season_year)
     .eq('week', selectedWeek)
-
-  const cfbOldestFetch = gamesData?.[0]?.fetched_at ?? null
-  if (!gamesData || gamesData.length === 0 || isStale(cfbOldestFetch)) {
-    try {
-      const { getDataProvider } = await import('@/lib/data-providers')
-      const { createAdminClient } = await import('@/lib/supabase/admin')
-      const provider = getDataProvider()
-      const fetchedGames = await provider.getGamesForWeek(pool.season_year, selectedWeek)
-      const admin = createAdminClient()
-
-      const rows = fetchedGames.map((g) => ({
-        id: g.id,
-        season_year: g.seasonYear,
-        week: g.week,
-        home_team_id: g.homeTeam.id,
-        away_team_id: g.awayTeam.id,
-        home_score: g.homeTeam.score,
-        away_score: g.awayTeam.score,
-        status: g.status,
-        start_time: g.startTime,
-        venue: g.venue,
-        fetched_at: new Date().toISOString(),
-      }))
-
-      if (rows.length > 0) {
-        await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
-      }
-
-      gamesData = rows
-    } catch {
-      gamesData = gamesData ?? []
-    }
-  }
 
   const games = (gamesData ?? []) as CachedGame[]
   const cfbLastFetched = games.length > 0
@@ -293,52 +256,11 @@ async function WorldCupSchedule({
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
 
-  let { data: gamesData } = await supabase
+  const { data: gamesData } = await supabase
     .from('cached_games')
     .select('*')
     .eq('game_type', 'world_cup')
     .eq('season_year', pool.season_year)
-
-  // Fetch from ESPN if no cached games or data is stale (>15 min)
-  const wcOldestFetch = gamesData?.[0]?.fetched_at ?? null
-  if (!gamesData || gamesData.length === 0 || isStale(wcOldestFetch)) {
-    try {
-      const { getWorldCupProvider } = await import('@/lib/data-providers/world-cup/provider')
-      const { createAdminClient } = await import('@/lib/supabase/admin')
-      const provider = getWorldCupProvider()
-      const fetchedGames = await provider.getAllGames(pool.season_year)
-      const admin = createAdminClient()
-
-      const rows = fetchedGames.map((g) => ({
-        id: g.id,
-        season_year: pool.season_year,
-        week: null,
-        home_team_id: g.homeTeam.id,
-        away_team_id: g.awayTeam.id,
-        home_score: g.homeTeam.score,
-        away_score: g.awayTeam.score,
-        status: g.status,
-        start_time: g.startTime,
-        venue: g.venue,
-        game_type: 'world_cup' as const,
-        stage: g.stage,
-        is_overtime: g.isOvertime,
-        is_shootout: g.isShootout,
-        home_penalty_score: g.homePenaltyScore,
-        away_penalty_score: g.awayPenaltyScore,
-        manual_entry: false,
-        fetched_at: new Date().toISOString(),
-      }))
-
-      if (rows.length > 0) {
-        await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
-      }
-
-      gamesData = rows
-    } catch {
-      gamesData = gamesData ?? []
-    }
-  }
 
   const allGames = (gamesData ?? []) as CachedGame[]
   const wcLastFetched = allGames.length > 0

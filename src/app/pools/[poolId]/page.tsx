@@ -8,6 +8,8 @@ import { Separator } from '@/components/ui/separator'
 import { Users, Trophy, Calendar, Share2 } from 'lucide-react'
 import { InviteLinkButton } from '@/components/pool/invite-link'
 
+export const revalidate = 60
+
 export default async function PoolDashboard({ params }: { params: Promise<{ poolId: string }> }) {
   const { poolId } = await params
   const [pool, members, userId] = await Promise.all([

@@ -1,5 +1,6 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPool } from '@/lib/pools/queries'
@@ -15,11 +16,18 @@ export async function refreshSchedule(poolId: string): Promise<{ error?: string 
 
   const admin = createAdminClient()
 
+  let result: { error?: string }
   if (pool.game_type === 'world_cup') {
-    return refreshWcGames(admin, pool.season_year)
+    result = await refreshWcGames(admin, pool.season_year)
   } else {
-    return refreshCfbGames(admin, pool.season_year)
+    result = await refreshCfbGames(admin, pool.season_year)
   }
+
+  // Bust the page cache so all users see fresh data
+  revalidatePath(`/pools/${poolId}/schedule`)
+  revalidatePath(`/pools/${poolId}/standings`)
+
+  return result
 }
 
 async function refreshWcGames(

@@ -29,7 +29,9 @@ export async function GET(request: NextRequest) {
     cached.every((g) => g.fetched_at > fifteenMinAgo)
 
   if (isFresh) {
-    return NextResponse.json(cached)
+    return NextResponse.json(cached, {
+      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=300' },
+    })
   }
 
   // Fetch from ESPN and cache
@@ -64,7 +66,9 @@ export async function GET(request: NextRequest) {
       await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
     }
 
-    return NextResponse.json(rows)
+    return NextResponse.json(rows, {
+      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=300' },
+    })
   } catch (err) {
     if (cached && cached.length > 0) {
       return NextResponse.json(cached)

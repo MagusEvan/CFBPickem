@@ -23,7 +23,9 @@ export async function GET(request: NextRequest) {
     cached.every((t) => t.fetched_at > sixHoursAgo)
 
   if (isFresh) {
-    return NextResponse.json(cached)
+    return NextResponse.json(cached, {
+      headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=3600' },
+    })
   }
 
   // Load from static data and upsert into cache
@@ -47,5 +49,7 @@ export async function GET(request: NextRequest) {
     await admin.from('cached_teams').upsert(rows, { onConflict: 'id,season_year' })
   }
 
-  return NextResponse.json(rows)
+  return NextResponse.json(rows, {
+    headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=3600' },
+  })
 }

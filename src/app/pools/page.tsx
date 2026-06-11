@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Plus } from 'lucide-react'
 import type { Pool, PoolMember } from '@/lib/types'
 
+export const revalidate = 60
+
 export default async function PoolsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

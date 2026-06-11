@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 
+export const revalidate = 60
+
 const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
   group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },
   knockout: {
