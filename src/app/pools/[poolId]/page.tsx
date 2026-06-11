@@ -5,7 +5,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Users, Trophy, Calendar, Share2 } from 'lucide-react'
+import { Users, Trophy, Calendar, Settings, Share2 } from 'lucide-react'
 import { InviteLinkButton } from '@/components/pool/invite-link'
 
 export const revalidate = 60
@@ -75,6 +75,20 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
                 <p className="font-medium">Schedule</p>
                 <p className="text-sm text-muted-foreground">
                   {pool.game_type === 'world_cup' ? 'Match schedule' : 'Weekly matchups'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href={`/pools/${pool.id}/settings`}>
+          <Card className="py-0 transition-colors hover:bg-muted/50">
+            <CardContent className="flex items-center gap-3 px-4 py-4">
+              <Settings className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="font-medium">Settings</p>
+                <p className="text-sm text-muted-foreground">
+                  {isAdmin ? 'Manage pool' : 'View settings'}
                 </p>
               </div>
             </CardContent>

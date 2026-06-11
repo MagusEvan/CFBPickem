@@ -1,18 +1,15 @@
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { DeletePoolButton } from '@/components/pool/delete-pool'
 import { deletePool } from '@/lib/pools/actions'
 import type { WorldCupScoringConfig } from '@/lib/types'
-
-const STAGE_LABELS: Record<string, string> = {
-  group: 'Group Stage',
-  knockout: 'Knockout Rounds',
-}
 
 export default async function PoolSettingsPage({ params }: { params: Promise<{ poolId: string }> }) {
   const { poolId } = await params
@@ -23,8 +20,8 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
   ])
 
   if (!pool) notFound()
-  if (pool.admin_id !== userId) redirect(`/pools/${poolId}`)
 
+  const isAdmin = pool.admin_id === userId
   const isWorldCup = pool.game_type === 'world_cup'
 
   async function updatePool(formData: FormData) {
@@ -101,54 +98,55 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <h1 className="text-2xl font-bold">Pool Settings</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Pool Settings</h1>
+        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+          &lt; Return to Pool
+        </Link>
+      </div>
 
+      {/* General Settings */}
       <Card>
         <CardHeader>
           <CardTitle>General</CardTitle>
         </CardHeader>
-        <form action={updatePool}>
+        {isAdmin ? (
+          <form action={updatePool}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Pool Name</Label>
+                <Input id="name" name="name" defaultValue={pool.name} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="max_managers">Max Managers</Label>
+                <Input
+                  id="max_managers"
+                  name="max_managers"
+                  type="number"
+                  defaultValue={pool.max_managers}
+                  min={Math.max(2, members.length)}
+                  max={isWorldCup ? 48 : 16}
+                />
+              </div>
+              <PoolInfoFields pool={pool} isWorldCup={isWorldCup} />
+            </CardContent>
+            <CardFooter>
+              <Button type="submit">Save Changes</Button>
+            </CardFooter>
+          </form>
+        ) : (
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Pool Name</Label>
-              <Input id="name" name="name" defaultValue={pool.name} required />
+              <Label>Pool Name</Label>
+              <p className="text-sm">{pool.name}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="max_managers">Max Managers</Label>
-              <Input
-                id="max_managers"
-                name="max_managers"
-                type="number"
-                defaultValue={pool.max_managers}
-                min={Math.max(2, members.length)}
-                max={isWorldCup ? 48 : 16}
-              />
+              <Label>Max Managers</Label>
+              <p className="text-sm">{pool.max_managers}</p>
             </div>
-            <div className="space-y-2">
-              <Label>Game Type</Label>
-              <Badge variant="secondary">{isWorldCup ? 'World Cup' : 'College Football'}</Badge>
-            </div>
-            {isWorldCup && (
-              <div className="space-y-2">
-                <Label>Teams per Manager</Label>
-                <p className="text-sm text-muted-foreground">{pool.teams_per_manager}</p>
-              </div>
-            )}
-            {!isWorldCup && (
-              <div className="space-y-2">
-                <Label>Conferences</Label>
-                <div className="flex flex-wrap gap-1">
-                  {((pool.conferences ?? []) as string[]).map((conf) => (
-                    <Badge key={conf} variant="secondary">{conf}</Badge>
-                  ))}
-                </div>
-              </div>
-            )}
+            <PoolInfoFields pool={pool} isWorldCup={isWorldCup} />
           </CardContent>
-          <CardFooter>
-            <Button type="submit">Save Changes</Button>
-          </CardFooter>
-        </form>
+        )}
       </Card>
 
       {/* World Cup Scoring Config */}
@@ -156,45 +154,31 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
         <Card>
           <CardHeader>
             <CardTitle>Scoring Settings</CardTitle>
-            <CardDescription>Adjust point values for each stage</CardDescription>
+            <CardDescription>
+              {isAdmin ? 'Adjust point values for each stage' : 'Point values for each stage'}
+            </CardDescription>
           </CardHeader>
-          <form action={updateScoringConfig}>
+          {isAdmin ? (
+            <form action={updateScoringConfig}>
+              <CardContent className="space-y-6">
+                <ScoringSection label="Group Stage" config={scoringConfig.group} prefix="group" readOnly={false} />
+                <KnockoutScoringSection config={scoringConfig.knockout} readOnly={false} />
+              </CardContent>
+              <CardFooter>
+                <Button type="submit">Save Scoring</Button>
+              </CardFooter>
+            </form>
+          ) : (
             <CardContent className="space-y-6">
-              {/* Group Stage */}
-              <div className="space-y-3">
-                <p className="text-sm font-semibold">Group Stage</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <ScoringInput label="Win" name="group_win" defaultValue={scoringConfig.group.win} />
-                  <ScoringInput label="Draw" name="group_draw" defaultValue={scoringConfig.group.draw} />
-                  <ScoringInput label="Points per goal" name="group_goal_points" defaultValue={scoringConfig.group.goal_points} />
-                  <ScoringInput label="Goal cap" name="group_goal_cap" defaultValue={scoringConfig.group.goal_cap} />
-                  <ScoringInput label="Shutout" name="group_shutout" defaultValue={scoringConfig.group.shutout} />
-                </div>
-              </div>
-
-              {/* Knockout */}
-              <div className="space-y-3">
-                <p className="text-sm font-semibold">Knockout Rounds</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <ScoringInput label="Outright win" name="knockout_win" defaultValue={scoringConfig.knockout.win} />
-                  <ScoringInput label="OT win" name="knockout_ot_win" defaultValue={scoringConfig.knockout.ot_win} />
-                  <ScoringInput label="Shootout win" name="knockout_shootout_win" defaultValue={scoringConfig.knockout.shootout_win} />
-                  <ScoringInput label="Shootout loss" name="knockout_shootout_loss" defaultValue={scoringConfig.knockout.shootout_loss} />
-                  <ScoringInput label="OT loss" name="knockout_ot_loss" defaultValue={scoringConfig.knockout.ot_loss} />
-                  <ScoringInput label="Outright loss" name="knockout_loss" defaultValue={scoringConfig.knockout.loss} />
-                  <ScoringInput label="Points per goal" name="knockout_goal_points" defaultValue={scoringConfig.knockout.goal_points} />
-                  <ScoringInput label="Shutout" name="knockout_shutout" defaultValue={scoringConfig.knockout.shutout} />
-                </div>
-              </div>
+              <ScoringSection label="Group Stage" config={scoringConfig.group} prefix="group" readOnly />
+              <KnockoutScoringSection config={scoringConfig.knockout} readOnly />
             </CardContent>
-            <CardFooter>
-              <Button type="submit">Save Scoring</Button>
-            </CardFooter>
-          </form>
+          )}
         </Card>
       )}
 
-      {pool.draft_status === 'pre_draft' && pool.draft_order_mode === 'manual' && (
+      {/* Draft Order (admin only, pre-draft only) */}
+      {isAdmin && pool.draft_status === 'pre_draft' && pool.draft_order_mode === 'manual' && (
         <Card>
           <CardHeader>
             <CardTitle>Draft Order</CardTitle>
@@ -223,42 +207,145 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
         </Card>
       )}
 
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle>Danger Zone</CardTitle>
-          <CardDescription>
-            Permanently delete this pool and all associated data.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DeletePoolButton poolId={poolId} poolName={pool.name} deleteAction={deletePool} />
-        </CardContent>
-      </Card>
+      {/* Danger Zone (admin only) */}
+      {isAdmin && (
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle>Danger Zone</CardTitle>
+            <CardDescription>
+              Permanently delete this pool and all associated data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DeletePoolButton poolId={poolId} poolName={pool.name} deleteAction={deletePool} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
 
-function ScoringInput({
+function PoolInfoFields({
+  pool,
+  isWorldCup,
+}: {
+  pool: { game_type: string; teams_per_manager: number | null; conferences: string[] | null }
+  isWorldCup: boolean
+}) {
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Game Type</Label>
+        <Badge variant="secondary">{isWorldCup ? 'World Cup' : 'College Football'}</Badge>
+      </div>
+      {isWorldCup && (
+        <div className="space-y-2">
+          <Label>Teams per Manager</Label>
+          <p className="text-sm text-muted-foreground">{pool.teams_per_manager}</p>
+        </div>
+      )}
+      {!isWorldCup && (
+        <div className="space-y-2">
+          <Label>Conferences</Label>
+          <div className="flex flex-wrap gap-1">
+            {((pool.conferences ?? []) as string[]).map((conf) => (
+              <Badge key={conf} variant="secondary">{conf}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+function ScoringSection({
+  label,
+  config,
+  prefix,
+  readOnly,
+}: {
+  label: string
+  config: { win: number; draw: number; goal_points: number; goal_cap: number; shutout: number }
+  prefix: string
+  readOnly: boolean
+}) {
+  const fields = [
+    { label: 'Win', name: `${prefix}_win`, value: config.win },
+    { label: 'Draw', name: `${prefix}_draw`, value: config.draw },
+    { label: 'Points per goal', name: `${prefix}_goal_points`, value: config.goal_points },
+    { label: 'Goal cap', name: `${prefix}_goal_cap`, value: config.goal_cap },
+    { label: 'Shutout', name: `${prefix}_shutout`, value: config.shutout },
+  ]
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-semibold">{label}</p>
+      <div className="grid grid-cols-2 gap-3">
+        {fields.map((f) => (
+          <ScoringField key={f.name} label={f.label} name={f.name} value={f.value} readOnly={readOnly} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function KnockoutScoringSection({
+  config,
+  readOnly,
+}: {
+  config: WorldCupScoringConfig['knockout']
+  readOnly: boolean
+}) {
+  const fields = [
+    { label: 'Outright win', name: 'knockout_win', value: config.win },
+    { label: 'OT win', name: 'knockout_ot_win', value: config.ot_win },
+    { label: 'Shootout win', name: 'knockout_shootout_win', value: config.shootout_win },
+    { label: 'Shootout loss', name: 'knockout_shootout_loss', value: config.shootout_loss },
+    { label: 'OT loss', name: 'knockout_ot_loss', value: config.ot_loss },
+    { label: 'Outright loss', name: 'knockout_loss', value: config.loss },
+    { label: 'Points per goal', name: 'knockout_goal_points', value: config.goal_points },
+    { label: 'Shutout', name: 'knockout_shutout', value: config.shutout },
+  ]
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-semibold">Knockout Rounds</p>
+      <div className="grid grid-cols-2 gap-3">
+        {fields.map((f) => (
+          <ScoringField key={f.name} label={f.label} name={f.name} value={f.value} readOnly={readOnly} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ScoringField({
   label,
   name,
-  defaultValue,
+  value,
+  readOnly,
 }: {
   label: string
   name: string
-  defaultValue: number
+  value: number
+  readOnly: boolean
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground" htmlFor={name}>{label}</Label>
-      <Input
-        id={name}
-        name={name}
-        type="number"
-        defaultValue={defaultValue}
-        min={0}
-        max={20}
-        className="h-8 text-sm"
-      />
+      {readOnly ? (
+        <p className="h-8 text-sm leading-8">{value}</p>
+      ) : (
+        <Input
+          id={name}
+          name={name}
+          type="number"
+          defaultValue={value}
+          min={0}
+          max={20}
+          className="h-8 text-sm"
+        />
+      )}
     </div>
   )
 }
