@@ -77,6 +77,7 @@ function parseGame(event: any): WcGame | null {
       score: away.score != null ? Number(away.score) : null,
     },
     status: gameStatus,
+    statusDetail: event.status?.type?.detail ?? null,
     startTime: event.date || null,
     venue: formatVenue(competition.venue) || null,
     isOvertime,

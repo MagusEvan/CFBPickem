@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
       home_score: g.homeTeam.score,
       away_score: g.awayTeam.score,
       status: g.status,
+      status_detail: g.statusDetail,
       start_time: g.startTime,
       venue: g.venue,
       broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,

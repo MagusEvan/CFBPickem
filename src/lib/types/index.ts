@@ -139,6 +139,7 @@ export interface CachedGame {
   home_score: number | null
   away_score: number | null
   status: 'scheduled' | 'in_progress' | 'final'
+  status_detail: string | null
   start_time: string | null
   venue: string | null
   game_type: 'cfb' | 'world_cup'

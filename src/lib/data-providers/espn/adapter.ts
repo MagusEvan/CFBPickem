@@ -27,7 +27,7 @@ interface EspnEvent {
       homeAway: 'home' | 'away'
       score?: string
     }[]
-    status: { type: { completed: boolean; description: string } }
+    status: { type: { completed: boolean; description: string; detail?: string; name?: string } }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     geoBroadcasts?: any[]
   }[]
@@ -60,7 +60,9 @@ export function adaptEspnGame(event: EspnEvent): CfbGame {
   const comp = event.competitions[0]
   const home = comp.competitors.find((c) => c.homeAway === 'home')!
   const away = comp.competitors.find((c) => c.homeAway === 'away')!
+  const statusName = comp.status.type.name ?? ''
   const isCompleted = comp.status.type.completed
+  const isInProgress = statusName.includes('STATUS_IN_PROGRESS') || statusName.includes('STATUS_HALFTIME')
 
   return {
     id: event.id,
@@ -76,7 +78,8 @@ export function adaptEspnGame(event: EspnEvent): CfbGame {
       name: away.team.displayName,
       score: away.score ? Number(away.score) : null,
     },
-    status: isCompleted ? 'final' : 'scheduled',
+    status: isCompleted ? 'final' : isInProgress ? 'in_progress' : 'scheduled',
+    statusDetail: comp.status.type.detail ?? null,
     startTime: event.date,
     venue: formatCfbVenue(comp.venue) ?? null,
     broadcasts: parseEspnBroadcasts(comp.geoBroadcasts),

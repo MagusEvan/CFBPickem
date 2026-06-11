@@ -17,6 +17,7 @@ export interface CfbGame {
   homeTeam: { id: string; name: string; score: number | null }
   awayTeam: { id: string; name: string; score: number | null }
   status: 'scheduled' | 'in_progress' | 'final'
+  statusDetail: string | null
   startTime: string | null
   venue: string | null
   broadcasts: import('@/lib/types').GameBroadcast[]
@@ -55,6 +56,7 @@ export interface WcGame {
   homeTeam: { id: string; name: string; score: number | null }
   awayTeam: { id: string; name: string; score: number | null }
   status: 'scheduled' | 'in_progress' | 'final'
+  statusDetail: string | null
   startTime: string | null
   venue: string | null
   isOvertime: boolean

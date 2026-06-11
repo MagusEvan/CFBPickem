@@ -62,6 +62,7 @@ export function adaptGame(game: CfbdGame): CfbGame {
       score: game.away_points,
     },
     status: game.completed ? 'final' : 'scheduled',
+    statusDetail: null,
     startTime: game.start_date,
     venue: game.venue,
     broadcasts: [],
