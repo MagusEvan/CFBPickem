@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { DeletePoolButton } from '@/components/pool/delete-pool'
+import { deletePool } from '@/lib/pools/actions'
 import type { WorldCupScoringConfig } from '@/lib/types'
 
 const STAGE_LABELS: Record<string, string> = {
@@ -220,6 +222,18 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
           </form>
         </Card>
       )}
+
+      <Card className="border-destructive/50">
+        <CardHeader>
+          <CardTitle>Danger Zone</CardTitle>
+          <CardDescription>
+            Permanently delete this pool and all associated data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DeletePoolButton poolId={poolId} poolName={pool.name} deleteAction={deletePool} />
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -169,6 +169,30 @@ export async function joinPool(inviteCode: string) {
   redirect(`/pools/${pool.id}`)
 }
 
+export async function deletePool(poolId: string): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  // Verify the caller is the pool admin
+  const admin = createAdminClient()
+  const { data: pool } = await admin
+    .from('pools')
+    .select('admin_id')
+    .eq('id', poolId)
+    .single()
+
+  if (!pool) return { error: 'Pool not found' }
+  if (pool.admin_id !== user.id) return { error: 'Only the pool admin can delete this pool' }
+
+  // CASCADE on FK constraints handles pool_members, draft_picks, draft_state,
+  // team_scraps, wc_scraps_teams automatically
+  const { error } = await admin.from('pools').delete().eq('id', poolId)
+  if (error) return { error: error.message }
+
+  redirect('/pools')
+}
+
 export async function getDefaultConferences() {
   return DEFAULT_CONFERENCES
 }
