@@ -62,7 +62,8 @@ async function refreshWcGames(
     }))
 
     if (rows.length > 0) {
-      await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+      const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+      if (error) return { error: `DB upsert failed: ${error.message}` }
     }
     return {}
   } catch (err) {
@@ -97,7 +98,8 @@ async function refreshCfbGames(
       }))
 
       if (rows.length > 0) {
-        await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+        const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+        if (error) return { error: `DB upsert failed: ${error.message}` }
       }
     }
     return {}
