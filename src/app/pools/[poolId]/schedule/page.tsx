@@ -96,9 +96,11 @@ export default async function SchedulePage({
   const teams = (teamsRes.data ?? []) as CachedTeam[]
   const wcScraps = (wcScrapsRes.data ?? []) as WcScrapsTeam[]
 
-  // Build lookup: team_id -> manager/scraps display name
+  // Build lookups: team_id -> manager name, team_id -> draft round
   const teamToManager = new Map<string, string>()
+  const teamToRound = new Map<string, number>()
   for (const pick of picks) {
+    teamToRound.set(pick.team_id, pick.round)
     if (pick.member_id) {
       const member = members.find((m) => m.id === pick.member_id)
       if (member) {
@@ -123,6 +125,7 @@ export default async function SchedulePage({
         pool={pool}
         teamMap={teamMap}
         teamToManager={teamToManager}
+        teamToRound={teamToRound}
         draftedTeamIds={draftedTeamIds}
         selectedStage={stageParam || 'group'}
         scoringConfig={pool.scoring_config ?? DEFAULT_WC_SCORING}
@@ -202,6 +205,7 @@ export default async function SchedulePage({
                 game={game}
                 teamMap={teamMap}
                 teamToManager={teamToManager}
+                teamToRound={teamToRound}
               />
             ))}
           </div>
@@ -219,6 +223,7 @@ export default async function SchedulePage({
               game={game}
               teamMap={teamMap}
               teamToManager={teamToManager}
+              teamToRound={teamToRound}
             />
           ))}
         </div>
@@ -240,6 +245,7 @@ async function WorldCupSchedule({
   pool,
   teamMap,
   teamToManager,
+  teamToRound,
   draftedTeamIds,
   isAdmin,
   selectedStage,
@@ -249,6 +255,7 @@ async function WorldCupSchedule({
   pool: { season_year: number }
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
+  teamToRound: Map<string, number>
   draftedTeamIds: Set<string>
   selectedStage: string
   scoringConfig: WorldCupScoringConfig
@@ -342,6 +349,7 @@ async function WorldCupSchedule({
                 game={game}
                 teamMap={teamMap}
                 teamToManager={teamToManager}
+                teamToRound={teamToRound}
                 scoringConfig={scoringConfig}
               />
             ))}
@@ -360,6 +368,7 @@ async function WorldCupSchedule({
               game={game}
               teamMap={teamMap}
               teamToManager={teamToManager}
+              teamToRound={teamToRound}
               scoringConfig={scoringConfig}
             />
           ))}
@@ -381,15 +390,19 @@ function GameCard({
   game,
   teamMap,
   teamToManager,
+  teamToRound,
 }: {
   game: CachedGame
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
+  teamToRound: Map<string, number>
 }) {
   const homeTeam = teamMap.get(game.home_team_id)
   const awayTeam = teamMap.get(game.away_team_id)
   const homeManager = teamToManager.get(game.home_team_id)
   const awayManager = teamToManager.get(game.away_team_id)
+  const homeRound = teamToRound.get(game.home_team_id)
+  const awayRound = teamToRound.get(game.away_team_id)
 
   return (
     <Card>
@@ -412,8 +425,9 @@ function GameCard({
             )}
             <div>
               <span className="font-medium">{awayTeam?.name ?? game.away_team_id}</span>
+              {awayRound && <span className="ml-1 text-xs text-muted-foreground">(r{awayRound})</span>}
               {awayManager && (
-                <span className="ml-2 text-xs text-muted-foreground">({awayManager})</span>
+                <span className="ml-1 text-xs text-muted-foreground">— {awayManager}</span>
               )}
             </div>
           </div>
@@ -427,8 +441,9 @@ function GameCard({
             )}
             <div>
               <span className="font-medium">{homeTeam?.name ?? game.home_team_id}</span>
+              {homeRound && <span className="ml-1 text-xs text-muted-foreground">(r{homeRound})</span>}
               {homeManager && (
-                <span className="ml-2 text-xs text-muted-foreground">({homeManager})</span>
+                <span className="ml-1 text-xs text-muted-foreground">— {homeManager}</span>
               )}
             </div>
           </div>
@@ -446,17 +461,21 @@ function WcGameCard({
   game,
   teamMap,
   teamToManager,
+  teamToRound,
   scoringConfig,
 }: {
   game: CachedGame
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
+  teamToRound: Map<string, number>
   scoringConfig: WorldCupScoringConfig
 }) {
   const homeTeam = teamMap.get(game.home_team_id)
   const awayTeam = teamMap.get(game.away_team_id)
   const homeManager = teamToManager.get(game.home_team_id)
   const awayManager = teamToManager.get(game.away_team_id)
+  const homeRound = teamToRound.get(game.home_team_id)
+  const awayRound = teamToRound.get(game.away_team_id)
 
   const statusDetail = game.status === 'in_progress'
     ? (game.status_detail ?? 'Live')
@@ -488,8 +507,9 @@ function WcGameCard({
           )}
           <div>
             <span className="font-medium">{homeTeam?.name ?? game.home_team_id}</span>
+            {homeRound && <span className="ml-1 text-xs text-muted-foreground">(r{homeRound})</span>}
             {homeManager && (
-              <span className="ml-2 text-xs text-muted-foreground">({homeManager})</span>
+              <span className="ml-1 text-xs text-muted-foreground">— {homeManager}</span>
             )}
           </div>
         </div>
@@ -510,8 +530,9 @@ function WcGameCard({
           )}
           <div>
             <span className="font-medium">{awayTeam?.name ?? game.away_team_id}</span>
+            {awayRound && <span className="ml-1 text-xs text-muted-foreground">(r{awayRound})</span>}
             {awayManager && (
-              <span className="ml-2 text-xs text-muted-foreground">({awayManager})</span>
+              <span className="ml-1 text-xs text-muted-foreground">— {awayManager}</span>
             )}
           </div>
         </div>
@@ -541,6 +562,7 @@ function WcGameCard({
               <ScoreBreakdownRow
                 managerName={homeManager}
                 teamName={homeTeam?.name ?? game.home_team_id}
+                round={homeRound}
                 breakdown={homeBreakdown}
               />
             )}
@@ -548,6 +570,7 @@ function WcGameCard({
               <ScoreBreakdownRow
                 managerName={awayManager}
                 teamName={awayTeam?.name ?? game.away_team_id}
+                round={awayRound}
                 breakdown={awayBreakdown}
               />
             )}
@@ -561,16 +584,18 @@ function WcGameCard({
 function ScoreBreakdownRow({
   managerName,
   teamName,
+  round,
   breakdown,
 }: {
   managerName: string
   teamName: string
+  round?: number
   breakdown: NonNullable<ReturnType<typeof scoreWorldCupGame>>
 }) {
   return (
     <div className="rounded-md bg-muted/50 p-2 text-sm">
       <div className="flex items-center justify-between">
-        <span className="font-medium">{teamName} <span className="text-muted-foreground">({managerName})</span></span>
+        <span className="font-medium">{teamName}{round && <span className="font-normal text-muted-foreground"> (r{round})</span>} <span className="text-muted-foreground">— {managerName}</span></span>
         <span className="font-bold">{breakdown.points} pts</span>
       </div>
       <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">

@@ -173,6 +173,7 @@ async function WorldCupStandings({
   const games = (gamesRes.data ?? []) as CachedGame[]
   const wcScraps = (wcScrapsRes.data ?? []) as WcScrapsTeam[]
   const config = pool.scoring_config ?? DEFAULT_WC_SCORING
+  const teamToRound = new Map(picks.map((p) => [p.team_id, p.round]))
 
   const managerStandings = calculateWorldCupStandings(members, picks, games, config)
 
@@ -292,7 +293,12 @@ async function WorldCupStandings({
                   .map((tb) => (
                     <details key={tb.teamId} className="rounded-md border">
                       <summary className="flex cursor-pointer list-none items-center justify-between p-2">
-                        <span className="text-sm font-medium">{tb.teamName}</span>
+                        <span className="text-sm font-medium">
+                          {tb.teamName}
+                          {teamToRound.has(tb.teamId) && (
+                            <span className="ml-1 font-normal text-muted-foreground">(r{teamToRound.get(tb.teamId)})</span>
+                          )}
+                        </span>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className="text-xs">
                             {tb.gamesPlayed} GP
