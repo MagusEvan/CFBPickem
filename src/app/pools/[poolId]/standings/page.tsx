@@ -220,10 +220,42 @@ async function WorldCupStandings({
     | { type: 'manager'; memberId: string; displayName: string; totalPoints: number; teamBreakdowns: TeamBreakdownWithGames[] }
     | { type: 'scraps'; scrapsTeamNumber: number; displayName: string; totalPoints: number; teamBreakdowns: TeamBreakdownWithGames[] }
 
+  // Aggregate scoring categories per entry
+  function aggregateCategories(teamBreakdowns: TeamBreakdownWithGames[]) {
+    const totals: Record<string, number> = {}
+    for (const tb of teamBreakdowns) {
+      for (const gb of tb.gameBreakdowns) {
+        for (const item of gb.itemized) {
+          totals[item.label] = (totals[item.label] ?? 0) + item.value
+        }
+      }
+    }
+    return totals
+  }
+
+  // Column order for scoring categories
+  const categoryOrder = ['Win', 'Draw', 'OT Win', 'PK Win', 'PK Loss', 'OT Loss', 'Goals', 'Shutout']
+
   const combined: StandingEntry[] = [
     ...enrichedManagerStandings.map((s) => ({ type: 'manager' as const, ...s })),
     ...scrapsStandings.map((s) => ({ type: 'scraps' as const, ...s })),
   ].sort((a, b) => b.totalPoints - a.totalPoints)
+
+  // Find which categories actually have points across all entries
+  const allCategories = new Map<string, number>()
+  for (const entry of combined) {
+    const cats = aggregateCategories(entry.teamBreakdowns)
+    for (const [label, val] of Object.entries(cats)) {
+      allCategories.set(label, (allCategories.get(label) ?? 0) + val)
+    }
+  }
+  const activeCategories = categoryOrder.filter((c) => allCategories.has(c))
+
+  // Short labels for column headers
+  const shortLabel: Record<string, string> = {
+    'Win': 'W', 'Draw': 'D', 'OT Win': 'OTW', 'PK Win': 'PKW',
+    'PK Loss': 'PKL', 'OT Loss': 'OTL', 'Goals': 'G', 'Shutout': 'SO',
+  }
 
   return (
     <div className="space-y-6">
@@ -236,20 +268,25 @@ async function WorldCupStandings({
         <CardHeader>
           <CardTitle>Leaderboard</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
-                <th className="px-2 py-2 text-left">Rank</th>
+                <th className="px-2 py-2 text-left">#</th>
                 <th className="px-2 py-2 text-left">Manager</th>
-                <th className="px-2 py-2 text-center">Teams</th>
-                <th className="px-2 py-2 text-center">Points</th>
+                {activeCategories.map((cat) => (
+                  <th key={cat} className="px-2 py-2 text-center text-xs" title={cat}>
+                    {shortLabel[cat] ?? cat}
+                  </th>
+                ))}
+                <th className="px-2 py-2 text-center">Pts</th>
               </tr>
             </thead>
             <tbody>
               {combined.map((s, i) => {
                 const key = s.type === 'manager' ? s.memberId : `scraps-${s.scrapsTeamNumber}`
                 const isScraps = s.type === 'scraps'
+                const cats = aggregateCategories(s.teamBreakdowns)
                 return (
                   <tr key={key} className={`border-b ${isScraps ? 'bg-muted/30' : ''}`}>
                     <td className={`px-2 py-2 font-medium ${isScraps ? 'text-muted-foreground' : ''}`}>{i + 1}</td>
@@ -265,7 +302,11 @@ async function WorldCupStandings({
                         s.displayName
                       )}
                     </td>
-                    <td className={`px-2 py-2 text-center ${isScraps ? 'text-muted-foreground' : ''}`}>{s.teamBreakdowns.length}</td>
+                    {activeCategories.map((cat) => (
+                      <td key={cat} className={`px-2 py-2 text-center ${isScraps ? 'text-muted-foreground' : ''}`}>
+                        {cats[cat] ?? 0}
+                      </td>
+                    ))}
                     <td className={`px-2 py-2 text-center font-bold ${isScraps ? 'text-muted-foreground' : ''}`}>{s.totalPoints}</td>
                   </tr>
                 )
