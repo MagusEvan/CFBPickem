@@ -5,7 +5,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Users, Trophy, Calendar, Settings, Share2 } from 'lucide-react'
+import { Users, Trophy, Calendar, Settings, Shield, Share2 } from 'lucide-react'
 import { InviteLinkButton } from '@/components/pool/invite-link'
 
 export const revalidate = 60
@@ -21,6 +21,7 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
   if (!pool) notFound()
 
   const isAdmin = pool.admin_id === userId
+  const myMember = members.find((m) => m.user_id === userId)
 
   return (
     <div className="space-y-6">
@@ -94,6 +95,20 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
             </CardContent>
           </Card>
         </Link>
+
+        {pool.draft_status === 'completed' && myMember && (
+          <Link href={`/pools/${pool.id}/rosters/${myMember.id}`}>
+            <Card className="py-0 transition-colors hover:bg-muted/50">
+              <CardContent className="flex items-center gap-3 px-4 py-4">
+                <Shield className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">My Squad</p>
+                  <p className="text-sm text-muted-foreground">View your roster</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
 
         {isAdmin && pool.draft_status === 'pre_draft' && (
           <InviteLinkButton inviteCode={pool.invite_code} />

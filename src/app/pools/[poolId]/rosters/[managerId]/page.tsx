@@ -2,11 +2,21 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-react'
-import type { DraftPick, CachedTeam } from '@/lib/types'
+import { buttonVariants } from '@/components/ui/button'
+import type { DraftPick, CachedTeam, CachedGame, WorldCupScoringConfig } from '@/lib/types'
+import { calculateTeamPoints } from '@/lib/scoring/strategies/world-cup'
+
+export const revalidate = 60
+
+const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
+  group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },
+  knockout: {
+    win: 6, ot_win: 5, shootout_win: 4, shootout_loss: 2, ot_loss: 1, loss: 0,
+    goal_points: 1, goal_cap: null, shutout: 1,
+  },
+}
 
 export default async function RosterPage({
   params,
@@ -25,56 +35,87 @@ export default async function RosterPage({
   if (!member) notFound()
 
   const supabase = await createClient()
-  const [picksRes, teamsRes] = await Promise.all([
+  const isWorldCup = pool.game_type === 'world_cup'
+
+  const [picksRes, teamsRes, gamesRes] = await Promise.all([
     supabase.from('draft_picks').select('*').eq('pool_id', poolId).eq('member_id', managerId).order('round'),
     supabase.from('cached_teams').select('*').eq('season_year', pool.season_year),
+    isWorldCup
+      ? supabase.from('cached_games').select('*').eq('game_type', 'world_cup').eq('season_year', pool.season_year)
+      : Promise.resolve({ data: null }),
   ])
 
   const picks = (picksRes.data ?? []) as DraftPick[]
   const teams = (teamsRes.data ?? []) as CachedTeam[]
   const teamMap = new Map(teams.map((t) => [t.id, t]))
+  const games = (gamesRes.data ?? []) as CachedGame[]
+  const scoringConfig = (pool.scoring_config ?? DEFAULT_WC_SCORING) as WorldCupScoringConfig
 
-  const totalWins = picks.reduce((sum, p) => sum + (teamMap.get(p.team_id)?.wins ?? 0), 0)
-  const totalLosses = picks.reduce((sum, p) => sum + (teamMap.get(p.team_id)?.losses ?? 0), 0)
+  // Calculate per-team stats
+  const teamStats = picks.map((pick) => {
+    if (isWorldCup) {
+      const { totalPoints, breakdown } = calculateTeamPoints(games, pick.team_id, scoringConfig)
+      return { pick, totalPoints, gamesPlayed: breakdown.length, wins: 0, losses: 0 }
+    }
+    const team = teamMap.get(pick.team_id)
+    return { pick, totalPoints: 0, gamesPlayed: 0, wins: team?.wins ?? 0, losses: team?.losses ?? 0 }
+  })
+
+  const aggPoints = teamStats.reduce((sum, s) => sum + s.totalPoints, 0)
+  const aggWins = teamStats.reduce((sum, s) => sum + s.wins, 0)
+  const aggLosses = teamStats.reduce((sum, s) => sum + s.losses, 0)
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href={`/pools/${poolId}/standings`}>
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+        <Link href={`/pools/${poolId}/standings`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+          &lt; Return to Standings
         </Link>
-        <div>
-          <h1 className="text-2xl font-bold">{member.profiles.display_name}&apos;s Roster</h1>
-          <p className="text-muted-foreground">
-            {totalWins}W - {totalLosses}L &middot; {picks.length} teams
-          </p>
-        </div>
+      </div>
+      <div>
+        <h1 className="text-2xl font-bold">{member.profiles.display_name}&apos;s Roster</h1>
+        <p className="text-muted-foreground">
+          {isWorldCup
+            ? `${aggPoints} pts · ${picks.length} teams`
+            : `${aggWins}W - ${aggLosses}L · ${picks.length} teams`}
+        </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {picks.map((pick) => {
-          const team = teamMap.get(pick.team_id)
+        {teamStats.map((stat) => {
+          const team = teamMap.get(stat.pick.team_id)
           return (
-            <Card key={pick.id}>
+            <Card key={stat.pick.id}>
               <CardContent className="flex items-center gap-4 py-4">
                 {team?.logo_url && (
-                  <img src={team.logo_url} alt={pick.team_name} className="h-12 w-12 object-contain" />
+                  <img src={team.logo_url} alt={stat.pick.team_name} className="h-12 w-12 object-contain" />
                 )}
                 <div className="flex-1">
-                  <p className="font-semibold">{pick.team_name}</p>
+                  <p className="font-semibold">
+                    {stat.pick.team_name}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">(r{stat.pick.round})</span>
+                  </p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Badge variant="outline" className="text-xs">{pick.conference_key}</Badge>
-                    <span>Round {pick.round}</span>
-                    {pick.is_bonus_pick && (
+                    {!isWorldCup && (
+                      <Badge variant="outline" className="text-xs">{stat.pick.conference_key}</Badge>
+                    )}
+                    {stat.pick.is_bonus_pick && (
                       <Badge variant="secondary" className="text-xs">Bonus</Badge>
+                    )}
+                    {isWorldCup && (
+                      <span>{stat.gamesPlayed} GP</span>
                     )}
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-bold">{team?.wins ?? 0}W</p>
-                  <p className="text-sm text-muted-foreground">{team?.losses ?? 0}L</p>
+                  {isWorldCup ? (
+                    <p className="text-lg font-bold">{stat.totalPoints} pts</p>
+                  ) : (
+                    <>
+                      <p className="text-lg font-bold">{stat.wins}W</p>
+                      <p className="text-sm text-muted-foreground">{stat.losses}L</p>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
