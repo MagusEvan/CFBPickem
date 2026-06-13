@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
@@ -42,15 +43,10 @@ function sortByTime<T extends { start_time: string | null }>(games: T[]): T[] {
   })
 }
 
-function isToday(startTime: string | null): boolean {
+function isToday(startTime: string | null, tz: string): boolean {
   if (!startTime) return false
-  const gameDate = new Date(startTime)
-  const now = new Date()
-  return (
-    gameDate.getFullYear() === now.getFullYear() &&
-    gameDate.getMonth() === now.getMonth() &&
-    gameDate.getDate() === now.getDate()
-  )
+  const fmt = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: tz })
+  return fmt(new Date(startTime)) === fmt(new Date())
 }
 
 export default async function SchedulePage({
@@ -71,6 +67,8 @@ export default async function SchedulePage({
   if (!pool) notFound()
 
   const isAdmin = userId === pool.admin_id
+  const cookieStore = await cookies()
+  const userTz = cookieStore.get('tz')?.value || 'America/Chicago'
 
   if (pool.draft_status === 'pre_draft') {
     return (
@@ -141,6 +139,7 @@ export default async function SchedulePage({
         selectedStage={stageParam || 'group'}
         scoringConfig={pool.scoring_config ?? DEFAULT_WC_SCORING}
         isAdmin={isAdmin}
+        userTz={userTz}
       />
     )
   }
@@ -205,7 +204,7 @@ export default async function SchedulePage({
       <h2 className="text-lg font-semibold">Week {selectedWeek}</h2>
 
       {(() => {
-        const todayGames = relevantGames.filter((g) => isToday(g.start_time))
+        const todayGames = relevantGames.filter((g) => isToday(g.start_time, userTz))
         const todayGameIds = new Set(todayGames.map((g) => g.id))
         const remainingGames = relevantGames.filter((g) => !todayGameIds.has(g.id))
         const remainingH2h = h2hGames.filter((g) => !todayGameIds.has(g.id))
@@ -291,6 +290,7 @@ async function WorldCupSchedule({
   isAdmin,
   selectedStage,
   scoringConfig,
+  userTz,
 }: {
   poolId: string
   pool: { season_year: number }
@@ -301,6 +301,7 @@ async function WorldCupSchedule({
   selectedStage: string
   scoringConfig: WorldCupScoringConfig
   isAdmin: boolean
+  userTz: string
 }) {
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
@@ -379,7 +380,7 @@ async function WorldCupSchedule({
       <h2 className="text-lg font-semibold">{STAGE_LABELS[selectedStage] ?? selectedStage}</h2>
 
       {(() => {
-        const todayGames = relevantGames.filter((g) => isToday(g.start_time))
+        const todayGames = relevantGames.filter((g) => isToday(g.start_time, userTz))
         const todayGameIds = new Set(todayGames.map((g) => g.id))
         const remainingGames = relevantGames.filter((g) => !todayGameIds.has(g.id))
         const remainingH2h = h2hGames.filter((g) => !todayGameIds.has(g.id))
