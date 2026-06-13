@@ -42,6 +42,17 @@ function sortByTime<T extends { start_time: string | null }>(games: T[]): T[] {
   })
 }
 
+function isToday(startTime: string | null): boolean {
+  if (!startTime) return false
+  const gameDate = new Date(startTime)
+  const now = new Date()
+  return (
+    gameDate.getFullYear() === now.getFullYear() &&
+    gameDate.getMonth() === now.getMonth() &&
+    gameDate.getDate() === now.getDate()
+  )
+}
+
 export default async function SchedulePage({
   params,
   searchParams,
@@ -160,8 +171,6 @@ export default async function SchedulePage({
       && !homeManager.startsWith('Scraps Team') && !awayManager.startsWith('Scraps Team')
   })
 
-  const h2hGameIds = new Set(h2hGames.map((g) => g.id))
-
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -195,47 +204,79 @@ export default async function SchedulePage({
 
       <h2 className="text-lg font-semibold">Week {selectedWeek}</h2>
 
-      {h2hGames.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {sortByTime(h2hGames).map((game) => (
-              <GameCard
-                key={game.id}
-                game={game}
-                teamMap={teamMap}
-                teamToManager={teamToManager}
-                teamToRound={teamToRound}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {(() => {
+        const todayGames = relevantGames.filter((g) => isToday(g.start_time))
+        const todayGameIds = new Set(todayGames.map((g) => g.id))
+        const remainingGames = relevantGames.filter((g) => !todayGameIds.has(g.id))
+        const remainingH2h = h2hGames.filter((g) => !todayGameIds.has(g.id))
+        const remainingH2hIds = new Set(remainingH2h.map((g) => g.id))
+        const remainingOther = remainingGames.filter((g) => !remainingH2hIds.has(g.id))
 
-      {h2hGames.length > 0 && relevantGames.length > h2hGames.length && (
-        <h3 className="font-medium text-muted-foreground">Other Games</h3>
-      )}
-      {relevantGames.filter((g) => !h2hGameIds.has(g.id)).length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {sortByTime(relevantGames.filter((g) => !h2hGameIds.has(g.id))).map((game) => (
-            <GameCard
-              key={game.id}
-              game={game}
-              teamMap={teamMap}
-              teamToManager={teamToManager}
-              teamToRound={teamToRound}
-            />
-          ))}
-        </div>
-      )}
+        return (
+          <>
+            {todayGames.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-medium text-primary">Today&apos;s Matchups</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {sortByTime(todayGames).map((game) => (
+                    <GameCard
+                      key={game.id}
+                      game={game}
+                      teamMap={teamMap}
+                      teamToManager={teamToManager}
+                      teamToRound={teamToRound}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-      {relevantGames.length === 0 && (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No games found for week {selectedWeek}. Try syncing schedule data.
-          </CardContent>
-        </Card>
-      )}
+            {remainingH2h.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {sortByTime(remainingH2h).map((game) => (
+                    <GameCard
+                      key={game.id}
+                      game={game}
+                      teamMap={teamMap}
+                      teamToManager={teamToManager}
+                      teamToRound={teamToRound}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {remainingOther.length > 0 && (
+              <>
+                {(todayGames.length > 0 || remainingH2h.length > 0) && (
+                  <h3 className="font-medium text-muted-foreground">Other Games</h3>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {sortByTime(remainingOther).map((game) => (
+                    <GameCard
+                      key={game.id}
+                      game={game}
+                      teamMap={teamMap}
+                      teamToManager={teamToManager}
+                      teamToRound={teamToRound}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {relevantGames.length === 0 && (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No games found for week {selectedWeek}. Try syncing schedule data.
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )
+      })()}
     </div>
   )
 }
@@ -297,8 +338,6 @@ async function WorldCupSchedule({
       && !homeManager.startsWith('Scraps Team') && !awayManager.startsWith('Scraps Team')
   })
 
-  const h2hGameIds = new Set(h2hGames.map((g) => g.id))
-
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -339,49 +378,82 @@ async function WorldCupSchedule({
 
       <h2 className="text-lg font-semibold">{STAGE_LABELS[selectedStage] ?? selectedStage}</h2>
 
-      {h2hGames.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {sortByTime(h2hGames).map((game) => (
-              <WcGameCard
-                key={game.id}
-                game={game}
-                teamMap={teamMap}
-                teamToManager={teamToManager}
-                teamToRound={teamToRound}
-                scoringConfig={scoringConfig}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {(() => {
+        const todayGames = relevantGames.filter((g) => isToday(g.start_time))
+        const todayGameIds = new Set(todayGames.map((g) => g.id))
+        const remainingGames = relevantGames.filter((g) => !todayGameIds.has(g.id))
+        const remainingH2h = h2hGames.filter((g) => !todayGameIds.has(g.id))
+        const remainingH2hIds = new Set(remainingH2h.map((g) => g.id))
+        const remainingOther = remainingGames.filter((g) => !remainingH2hIds.has(g.id))
 
-      {h2hGames.length > 0 && relevantGames.length > h2hGames.length && (
-        <h3 className="font-medium text-muted-foreground">Other Games</h3>
-      )}
-      {relevantGames.filter((g) => !h2hGameIds.has(g.id)).length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {sortByTime(relevantGames.filter((g) => !h2hGameIds.has(g.id))).map((game) => (
-            <WcGameCard
-              key={game.id}
-              game={game}
-              teamMap={teamMap}
-              teamToManager={teamToManager}
-              teamToRound={teamToRound}
-              scoringConfig={scoringConfig}
-            />
-          ))}
-        </div>
-      )}
+        return (
+          <>
+            {todayGames.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-medium text-primary">Today&apos;s Matchups</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {sortByTime(todayGames).map((game) => (
+                    <WcGameCard
+                      key={game.id}
+                      game={game}
+                      teamMap={teamMap}
+                      teamToManager={teamToManager}
+                      teamToRound={teamToRound}
+                      scoringConfig={scoringConfig}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-      {relevantGames.length === 0 && (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No games involving your drafted teams in this stage yet.
-          </CardContent>
-        </Card>
-      )}
+            {remainingH2h.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {sortByTime(remainingH2h).map((game) => (
+                    <WcGameCard
+                      key={game.id}
+                      game={game}
+                      teamMap={teamMap}
+                      teamToManager={teamToManager}
+                      teamToRound={teamToRound}
+                      scoringConfig={scoringConfig}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {remainingOther.length > 0 && (
+              <>
+                {(todayGames.length > 0 || remainingH2h.length > 0) && (
+                  <h3 className="font-medium text-muted-foreground">Other Games</h3>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {sortByTime(remainingOther).map((game) => (
+                    <WcGameCard
+                      key={game.id}
+                      game={game}
+                      teamMap={teamMap}
+                      teamToManager={teamToManager}
+                      teamToRound={teamToRound}
+                      scoringConfig={scoringConfig}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {relevantGames.length === 0 && (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No games involving your drafted teams in this stage yet.
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )
+      })()}
     </div>
   )
 }
