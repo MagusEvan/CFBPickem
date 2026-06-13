@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import type { DraftPick, CachedTeam, CachedGame, WorldCupScoringConfig } from '@/lib/types'
-import { calculateTeamPoints } from '@/lib/scoring/strategies/world-cup'
+import { calculateTeamPoints, type GamePointBreakdown } from '@/lib/scoring/strategies/world-cup'
 
 export const revalidate = 60
 
@@ -55,11 +55,38 @@ export default async function RosterPage({
   const teamStats = picks.map((pick) => {
     if (isWorldCup) {
       const { totalPoints, breakdown } = calculateTeamPoints(games, pick.team_id, scoringConfig)
-      return { pick, totalPoints, gamesPlayed: breakdown.length, wins: 0, losses: 0 }
+      return { pick, totalPoints, gamesPlayed: breakdown.length, wins: 0, losses: 0, breakdown }
     }
     const team = teamMap.get(pick.team_id)
-    return { pick, totalPoints: 0, gamesPlayed: 0, wins: team?.wins ?? 0, losses: team?.losses ?? 0 }
+    return { pick, totalPoints: 0, gamesPlayed: 0, wins: team?.wins ?? 0, losses: team?.losses ?? 0, breakdown: [] as GamePointBreakdown[] }
   })
+
+  // Aggregate scoring categories per team
+  const categoryOrder = ['Win', 'Draw', 'OT Win', 'PK Win', 'PK Loss', 'OT Loss', 'Goals', 'Shutout']
+  const shortLabel: Record<string, string> = {
+    'Win': 'W', 'Draw': 'D', 'OT Win': 'OTW', 'PK Win': 'PKW',
+    'PK Loss': 'PKL', 'OT Loss': 'OTL', 'Goals': 'G', 'Shutout': 'SO',
+  }
+
+  function aggregateCategories(breakdown: GamePointBreakdown[]) {
+    const totals: Record<string, number> = {}
+    for (const gb of breakdown) {
+      for (const item of gb.itemized) {
+        totals[item.label] = (totals[item.label] ?? 0) + item.value
+      }
+    }
+    return totals
+  }
+
+  // Find which categories are active across all teams
+  const allCategories = new Map<string, number>()
+  for (const stat of teamStats) {
+    const cats = aggregateCategories(stat.breakdown)
+    for (const [label, val] of Object.entries(cats)) {
+      allCategories.set(label, (allCategories.get(label) ?? 0) + val)
+    }
+  }
+  const activeCategories = categoryOrder.filter((c) => allCategories.has(c))
 
   const aggPoints = teamStats.reduce((sum, s) => sum + s.totalPoints, 0)
   const aggWins = teamStats.reduce((sum, s) => sum + s.wins, 0)
@@ -81,47 +108,86 @@ export default async function RosterPage({
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {teamStats.map((stat) => {
-          const team = teamMap.get(stat.pick.team_id)
-          return (
-            <Card key={stat.pick.id}>
-              <CardContent className="flex items-center gap-4 py-4">
-                {team?.logo_url && (
-                  <img src={team.logo_url} alt={stat.pick.team_name} className="h-12 w-12 object-contain" />
-                )}
-                <div className="flex-1">
-                  <p className="font-semibold">
-                    {stat.pick.team_name}
-                    <span className="ml-1 text-sm font-normal text-muted-foreground">(r{stat.pick.round})</span>
-                  </p>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    {!isWorldCup && (
-                      <Badge variant="outline" className="text-xs">{stat.pick.conference_key}</Badge>
-                    )}
-                    {stat.pick.is_bonus_pick && (
-                      <Badge variant="secondary" className="text-xs">Bonus</Badge>
-                    )}
-                    {isWorldCup && (
-                      <span>{stat.gamesPlayed} GP</span>
-                    )}
-                  </div>
-                </div>
-                <div className="text-right">
-                  {isWorldCup ? (
-                    <p className="text-lg font-bold">{stat.totalPoints} pts</p>
-                  ) : (
-                    <>
-                      <p className="text-lg font-bold">{stat.wins}W</p>
-                      <p className="text-sm text-muted-foreground">{stat.losses}L</p>
-                    </>
+      {isWorldCup ? (
+        <Card>
+          <CardContent className="overflow-x-auto py-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="px-2 py-2 text-left">Team</th>
+                  <th className="px-2 py-2 text-center text-xs">GP</th>
+                  {activeCategories.map((cat) => (
+                    <th key={cat} className="px-2 py-2 text-center text-xs" title={cat}>
+                      {shortLabel[cat] ?? cat}
+                    </th>
+                  ))}
+                  <th className="px-2 py-2 text-center">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamStats
+                  .sort((a, b) => b.totalPoints - a.totalPoints)
+                  .map((stat) => {
+                    const team = teamMap.get(stat.pick.team_id)
+                    const cats = aggregateCategories(stat.breakdown)
+                    return (
+                      <tr key={stat.pick.id} className="border-b">
+                        <td className="px-2 py-2">
+                          <div className="flex items-center gap-2">
+                            {team?.logo_url && (
+                              <img src={team.logo_url} alt={stat.pick.team_name} className="h-6 w-6 object-contain" />
+                            )}
+                            <span className="font-medium">{stat.pick.team_name}</span>
+                            <span className="text-xs text-muted-foreground">(r{stat.pick.round})</span>
+                            {stat.pick.is_bonus_pick && (
+                              <Badge variant="secondary" className="text-xs">Bonus</Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-2 py-2 text-center">{stat.gamesPlayed}</td>
+                        {activeCategories.map((cat) => (
+                          <td key={cat} className="px-2 py-2 text-center">{cats[cat] ?? 0}</td>
+                        ))}
+                        <td className="px-2 py-2 text-center font-bold">{stat.totalPoints}</td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-3">
+          {teamStats.map((stat) => {
+            const team = teamMap.get(stat.pick.team_id)
+            return (
+              <Card key={stat.pick.id}>
+                <CardContent className="flex items-center gap-4 py-4">
+                  {team?.logo_url && (
+                    <img src={team.logo_url} alt={stat.pick.team_name} className="h-12 w-12 object-contain" />
                   )}
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+                  <div className="flex-1">
+                    <p className="font-semibold">
+                      {stat.pick.team_name}
+                      <span className="ml-1 text-sm font-normal text-muted-foreground">(r{stat.pick.round})</span>
+                    </p>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Badge variant="outline" className="text-xs">{stat.pick.conference_key}</Badge>
+                      {stat.pick.is_bonus_pick && (
+                        <Badge variant="secondary" className="text-xs">Bonus</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold">{stat.wins}W</p>
+                    <p className="text-sm text-muted-foreground">{stat.losses}L</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
