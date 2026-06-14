@@ -3,6 +3,16 @@ import { parseEspnBroadcasts } from '@/lib/broadcasts'
 
 const ESPN_WC_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
 
+// ESPN abbreviations that differ from our static team IDs
+const ESPN_TO_LOCAL_ID: Record<string, string> = {
+  'CUW': 'CUR', // Curaçao
+  'ESP': 'SPA', // Spain
+}
+
+function normalizeTeamId(espnAbbr: string): string {
+  return ESPN_TO_LOCAL_ID[espnAbbr] ?? espnAbbr
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function formatVenue(venue: any): string | null {
   if (!venue) return null
@@ -68,12 +78,12 @@ function parseGame(event: any): WcGame | null {
     id: event.id,
     stage: mapStage(stageName, event),
     homeTeam: {
-      id: home.team?.abbreviation || home.team?.id,
+      id: normalizeTeamId(home.team?.abbreviation || home.team?.id),
       name: home.team?.displayName || home.team?.name || '',
       score: home.score != null ? Number(home.score) : null,
     },
     awayTeam: {
-      id: away.team?.abbreviation || away.team?.id,
+      id: normalizeTeamId(away.team?.abbreviation || away.team?.id),
       name: away.team?.displayName || away.team?.name || '',
       score: away.score != null ? Number(away.score) : null,
     },
