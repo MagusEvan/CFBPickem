@@ -56,11 +56,10 @@ export default async function SchedulePage({
   searchParams,
 }: {
   params: Promise<{ poolId: string }>
-  searchParams: Promise<{ week?: string; stage?: string; mine?: string }>
+  searchParams: Promise<{ week?: string; stage?: string }>
 }) {
   const { poolId } = await params
-  const { week: weekParam, stage: stageParam, mine: mineParam } = await searchParams
-  const mineOnly = mineParam === 'true'
+  const { week: weekParam, stage: stageParam } = await searchParams
   const [pool, members, userId] = await Promise.all([
     getPool(poolId),
     getPoolMembers(poolId),
@@ -149,7 +148,6 @@ export default async function SchedulePage({
         scoringConfig={pool.scoring_config ?? DEFAULT_WC_SCORING}
         isAdmin={isAdmin}
         userTz={userTz}
-        mineOnly={mineOnly}
         myTeamIds={myTeamIds}
       />
     )
@@ -170,9 +168,8 @@ export default async function SchedulePage({
     ? games.reduce((latest, g) => g.fetched_at > latest ? g.fetched_at : latest, games[0].fetched_at)
     : null
 
-  const filterIds = mineOnly ? myTeamIds : draftedTeamIds
   const relevantGames = games.filter(
-    (g) => filterIds.has(g.home_team_id) || filterIds.has(g.away_team_id)
+    (g) => draftedTeamIds.has(g.home_team_id) || draftedTeamIds.has(g.away_team_id)
   )
 
   const h2hGames = relevantGames.filter((g) => {
@@ -197,14 +194,14 @@ export default async function SchedulePage({
         <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Pool
         </Link>
-        <MyTeamsToggle active={mineOnly} />
+        <MyTeamsToggle />
       </div>
 
       <div className="flex flex-wrap gap-2">
         {weeks.map((w) => (
           <a
             key={w}
-            href={`/pools/${poolId}/schedule?week=${w}${mineOnly ? '&mine=true' : ''}`}
+            href={`/pools/${poolId}/schedule?week=${w}`}
             className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-colors ${
               w === selectedWeek
                 ? 'bg-primary text-primary-foreground'
@@ -229,7 +226,7 @@ export default async function SchedulePage({
         return (
           <>
             {todayGames.length > 0 && (
-              <div className="space-y-3">
+              <div className="game-section space-y-3">
                 <h3 className="font-medium text-primary">Today&apos;s Matchups</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {sortByTime(todayGames).map((game) => (
@@ -239,6 +236,7 @@ export default async function SchedulePage({
                       teamMap={teamMap}
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
+                      isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
                   ))}
                 </div>
@@ -246,7 +244,7 @@ export default async function SchedulePage({
             )}
 
             {remainingH2h.length > 0 && (
-              <div className="space-y-3">
+              <div className="game-section space-y-3">
                 <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {sortByTime(remainingH2h).map((game) => (
@@ -256,6 +254,7 @@ export default async function SchedulePage({
                       teamMap={teamMap}
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
+                      isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
                   ))}
                 </div>
@@ -263,9 +262,9 @@ export default async function SchedulePage({
             )}
 
             {remainingOther.length > 0 && (
-              <>
+              <div className="game-section">
                 {(todayGames.length > 0 || remainingH2h.length > 0) && (
-                  <h3 className="font-medium text-muted-foreground">Other Games</h3>
+                  <h3 className="mb-3 font-medium text-muted-foreground">Other Games</h3>
                 )}
                 <div className="grid gap-3 sm:grid-cols-2">
                   {sortByTime(remainingOther).map((game) => (
@@ -275,10 +274,11 @@ export default async function SchedulePage({
                       teamMap={teamMap}
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
+                      isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
                   ))}
                 </div>
-              </>
+              </div>
             )}
 
             {relevantGames.length === 0 && (
@@ -306,7 +306,6 @@ async function WorldCupSchedule({
   selectedStage,
   scoringConfig,
   userTz,
-  mineOnly,
   myTeamIds,
 }: {
   poolId: string
@@ -319,7 +318,6 @@ async function WorldCupSchedule({
   scoringConfig: WorldCupScoringConfig
   isAdmin: boolean
   userTz: string
-  mineOnly: boolean
   myTeamIds: Set<string>
 }) {
   const { createClient } = await import('@/lib/supabase/server')
@@ -346,10 +344,9 @@ async function WorldCupSchedule({
 
   const stageGames = gamesByStage.get(selectedStage) ?? []
 
-  // Filter to relevant games (involving drafted/my teams)
-  const filterIds = mineOnly ? myTeamIds : draftedTeamIds
+  // Filter to relevant games (involving drafted teams)
   const relevantGames = stageGames.filter(
-    (g) => filterIds.has(g.home_team_id) || filterIds.has(g.away_team_id)
+    (g) => draftedTeamIds.has(g.home_team_id) || draftedTeamIds.has(g.away_team_id)
   )
 
   const h2hGames = relevantGames.filter((g) => {
@@ -374,7 +371,7 @@ async function WorldCupSchedule({
         <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Pool
         </Link>
-        <MyTeamsToggle active={mineOnly} />
+        <MyTeamsToggle />
       </div>
 
       {/* Stage selector */}
@@ -384,7 +381,7 @@ async function WorldCupSchedule({
           return (
             <a
               key={stage}
-              href={`/pools/${poolId}/schedule?stage=${stage}${mineOnly ? '&mine=true' : ''}`}
+              href={`/pools/${poolId}/schedule?stage=${stage}`}
               className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm transition-colors ${
                 stage === selectedStage
                   ? 'bg-primary text-primary-foreground'
@@ -413,7 +410,7 @@ async function WorldCupSchedule({
         return (
           <>
             {todayGames.length > 0 && (
-              <div className="space-y-3">
+              <div className="game-section space-y-3">
                 <h3 className="font-medium text-primary">Today&apos;s Matchups</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {sortByTime(todayGames).map((game) => (
@@ -424,6 +421,7 @@ async function WorldCupSchedule({
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
                       scoringConfig={scoringConfig}
+                      isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
                   ))}
                 </div>
@@ -431,7 +429,7 @@ async function WorldCupSchedule({
             )}
 
             {remainingH2h.length > 0 && (
-              <div className="space-y-3">
+              <div className="game-section space-y-3">
                 <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {sortByTime(remainingH2h).map((game) => (
@@ -442,6 +440,7 @@ async function WorldCupSchedule({
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
                       scoringConfig={scoringConfig}
+                      isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
                   ))}
                 </div>
@@ -449,9 +448,9 @@ async function WorldCupSchedule({
             )}
 
             {remainingOther.length > 0 && (
-              <>
+              <div className="game-section">
                 {(todayGames.length > 0 || remainingH2h.length > 0) && (
-                  <h3 className="font-medium text-muted-foreground">Other Games</h3>
+                  <h3 className="mb-3 font-medium text-muted-foreground">Other Games</h3>
                 )}
                 <div className="grid gap-3 sm:grid-cols-2">
                   {sortByTime(remainingOther).map((game) => (
@@ -462,10 +461,11 @@ async function WorldCupSchedule({
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
                       scoringConfig={scoringConfig}
+                      isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
                   ))}
                 </div>
-              </>
+              </div>
             )}
 
             {relevantGames.length === 0 && (
@@ -487,11 +487,13 @@ function GameCard({
   teamMap,
   teamToManager,
   teamToRound,
+  isMine,
 }: {
   game: CachedGame
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
   teamToRound: Map<string, number>
+  isMine: boolean
 }) {
   const homeTeam = teamMap.get(game.home_team_id)
   const awayTeam = teamMap.get(game.away_team_id)
@@ -501,7 +503,7 @@ function GameCard({
   const awayRound = teamToRound.get(game.away_team_id)
 
   return (
-    <Card>
+    <Card data-mine={isMine}>
       <CardContent className="py-3">
         {game.start_time && (
           <div className="mb-2 text-center text-xs text-muted-foreground">
@@ -559,12 +561,14 @@ function WcGameCard({
   teamToManager,
   teamToRound,
   scoringConfig,
+  isMine,
 }: {
   game: CachedGame
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
   teamToRound: Map<string, number>
   scoringConfig: WorldCupScoringConfig
+  isMine: boolean
 }) {
   const homeTeam = teamMap.get(game.home_team_id)
   const awayTeam = teamMap.get(game.away_team_id)
@@ -642,14 +646,14 @@ function WcGameCard({
 
   if (!hasBreakdown) {
     return (
-      <Card>
+      <Card data-mine={isMine}>
         <CardContent className="py-3">{gameContent}</CardContent>
       </Card>
     )
   }
 
   return (
-    <Card>
+    <Card data-mine={isMine}>
       <CardContent className="py-3">
         <details>
           <summary className="cursor-pointer list-none">{gameContent}</summary>
