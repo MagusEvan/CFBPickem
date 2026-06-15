@@ -299,6 +299,7 @@ async function WorldCupStandings({
               <tr className="border-b">
                 <th className="px-2 py-2 text-left">#</th>
                 <th className="px-2 py-2 text-left">Manager</th>
+                <th className="px-2 py-2 text-center text-xs border-r">GP</th>
                 {activeCategories.map((cat) => (
                   <th key={cat} className="px-2 py-2 text-center text-xs" title={cat}>
                     {shortLabel[cat] ?? cat}
@@ -326,6 +327,9 @@ async function WorldCupStandings({
                       ) : (
                         s.displayName
                       )}
+                    </td>
+                    <td className={`px-2 py-2 text-center border-r ${isScraps ? 'text-muted-foreground' : ''}`}>
+                      {s.teamBreakdowns.reduce((sum, tb) => sum + tb.gamesPlayed, 0)}
                     </td>
                     {activeCategories.map((cat) => (
                       <td key={cat} className={`px-2 py-2 text-center ${isScraps ? 'text-muted-foreground' : ''}`}>
