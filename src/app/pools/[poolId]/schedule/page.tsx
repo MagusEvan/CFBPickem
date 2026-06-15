@@ -11,6 +11,7 @@ import { scoreWorldCupGame } from '@/lib/scoring/strategies/world-cup'
 import { getBroadcastForLocale } from '@/lib/broadcasts'
 import { GameTime } from '@/components/schedule/game-time'
 import { ScheduleHeader } from '@/components/schedule/refresh-schedule'
+import { MyTeamsToggle } from '@/components/schedule/my-teams-toggle'
 import { refreshSchedule } from '@/lib/schedule/actions'
 
 export const revalidate = 60
@@ -55,10 +56,11 @@ export default async function SchedulePage({
   searchParams,
 }: {
   params: Promise<{ poolId: string }>
-  searchParams: Promise<{ week?: string; stage?: string }>
+  searchParams: Promise<{ week?: string; stage?: string; mine?: string }>
 }) {
   const { poolId } = await params
-  const { week: weekParam, stage: stageParam } = await searchParams
+  const { week: weekParam, stage: stageParam, mine: mineParam } = await searchParams
+  const mineOnly = mineParam === 'true'
   const [pool, members, userId] = await Promise.all([
     getPool(poolId),
     getPoolMembers(poolId),
@@ -126,6 +128,12 @@ export default async function SchedulePage({
     ...picks.map((p) => p.team_id),
     ...wcScraps.map((s) => s.team_id),
   ])
+
+  // Current user's teams for "my teams only" filter
+  const myMember = members.find((m) => m.user_id === userId)
+  const myTeamIds = new Set(
+    picks.filter((p) => p.member_id === myMember?.id).map((p) => p.team_id)
+  )
   const teamMap = new Map(teams.map((t) => [t.id, t]))
 
   if (pool.game_type === 'world_cup') {
@@ -141,6 +149,8 @@ export default async function SchedulePage({
         scoringConfig={pool.scoring_config ?? DEFAULT_WC_SCORING}
         isAdmin={isAdmin}
         userTz={userTz}
+        mineOnly={mineOnly}
+        myTeamIds={myTeamIds}
       />
     )
   }
@@ -160,8 +170,9 @@ export default async function SchedulePage({
     ? games.reduce((latest, g) => g.fetched_at > latest ? g.fetched_at : latest, games[0].fetched_at)
     : null
 
+  const filterIds = mineOnly ? myTeamIds : draftedTeamIds
   const relevantGames = games.filter(
-    (g) => draftedTeamIds.has(g.home_team_id) || draftedTeamIds.has(g.away_team_id)
+    (g) => filterIds.has(g.home_team_id) || filterIds.has(g.away_team_id)
   )
 
   const h2hGames = relevantGames.filter((g) => {
@@ -182,15 +193,18 @@ export default async function SchedulePage({
           refreshAction={refreshSchedule}
         />
       </div>
-      <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
-        &lt; Return to Pool
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+          &lt; Return to Pool
+        </Link>
+        <MyTeamsToggle active={mineOnly} />
+      </div>
 
       <div className="flex flex-wrap gap-2">
         {weeks.map((w) => (
           <a
             key={w}
-            href={`/pools/${poolId}/schedule?week=${w}`}
+            href={`/pools/${poolId}/schedule?week=${w}${mineOnly ? '&mine=true' : ''}`}
             className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-colors ${
               w === selectedWeek
                 ? 'bg-primary text-primary-foreground'
@@ -292,6 +306,8 @@ async function WorldCupSchedule({
   selectedStage,
   scoringConfig,
   userTz,
+  mineOnly,
+  myTeamIds,
 }: {
   poolId: string
   pool: { season_year: number }
@@ -303,6 +319,8 @@ async function WorldCupSchedule({
   scoringConfig: WorldCupScoringConfig
   isAdmin: boolean
   userTz: string
+  mineOnly: boolean
+  myTeamIds: Set<string>
 }) {
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
@@ -328,9 +346,10 @@ async function WorldCupSchedule({
 
   const stageGames = gamesByStage.get(selectedStage) ?? []
 
-  // Filter to relevant games (involving drafted teams)
+  // Filter to relevant games (involving drafted/my teams)
+  const filterIds = mineOnly ? myTeamIds : draftedTeamIds
   const relevantGames = stageGames.filter(
-    (g) => draftedTeamIds.has(g.home_team_id) || draftedTeamIds.has(g.away_team_id)
+    (g) => filterIds.has(g.home_team_id) || filterIds.has(g.away_team_id)
   )
 
   const h2hGames = relevantGames.filter((g) => {
@@ -351,9 +370,12 @@ async function WorldCupSchedule({
           refreshAction={refreshSchedule}
         />
       </div>
-      <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
-        &lt; Return to Pool
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+          &lt; Return to Pool
+        </Link>
+        <MyTeamsToggle active={mineOnly} />
+      </div>
 
       {/* Stage selector */}
       <div className="flex flex-wrap gap-2">
@@ -362,7 +384,7 @@ async function WorldCupSchedule({
           return (
             <a
               key={stage}
-              href={`/pools/${poolId}/schedule?stage=${stage}`}
+              href={`/pools/${poolId}/schedule?stage=${stage}${mineOnly ? '&mine=true' : ''}`}
               className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm transition-colors ${
                 stage === selectedStage
                   ? 'bg-primary text-primary-foreground'
