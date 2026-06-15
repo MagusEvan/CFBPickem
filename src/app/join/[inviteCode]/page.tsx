@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button, buttonVariants } from '@/components/ui/button'
 
+export const revalidate = 60
+
 export default async function JoinPoolPage({ params }: { params: Promise<{ inviteCode: string }> }) {
   const { inviteCode } = await params
   const pool = await getPoolByInviteCode(inviteCode)

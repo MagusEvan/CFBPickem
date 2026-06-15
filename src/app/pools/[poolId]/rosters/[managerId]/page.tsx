@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
+import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
@@ -41,7 +42,7 @@ export default async function RosterPage({
     supabase.from('draft_picks').select('*').eq('pool_id', poolId).eq('member_id', managerId).order('round'),
     supabase.from('cached_teams').select('*').eq('season_year', pool.season_year),
     isWorldCup
-      ? supabase.from('cached_games').select('*').eq('game_type', 'world_cup').eq('season_year', pool.season_year)
+      ? supabase.from('cached_games').select('id,home_team_id,away_team_id,home_score,away_score,status,stage,is_overtime,is_shootout,home_penalty_score,away_penalty_score').eq('game_type', 'world_cup').eq('season_year', pool.season_year)
       : Promise.resolve({ data: null }),
   ])
 
@@ -135,7 +136,7 @@ export default async function RosterPage({
                         <td className="px-2 py-2">
                           <div className="flex items-center gap-2">
                             {team?.logo_url && (
-                              <img src={team.logo_url} alt={stat.pick.team_name} className="h-6 w-6 object-contain" />
+                              <Image src={team.logo_url} alt={stat.pick.team_name} width={24} height={24} className="h-6 w-6 object-contain" />
                             )}
                             <span className="font-medium">{stat.pick.team_name}</span>
                             <span className="text-xs text-muted-foreground">(r{stat.pick.round})</span>
@@ -164,7 +165,7 @@ export default async function RosterPage({
               <Card key={stat.pick.id}>
                 <CardContent className="flex items-center gap-4 py-4">
                   {team?.logo_url && (
-                    <img src={team.logo_url} alt={stat.pick.team_name} className="h-12 w-12 object-contain" />
+                    <Image src={team.logo_url} alt={stat.pick.team_name} width={48} height={48} className="h-12 w-12 object-contain" />
                   )}
                   <div className="flex-1">
                     <p className="font-semibold">

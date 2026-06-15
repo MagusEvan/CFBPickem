@@ -2,6 +2,8 @@ import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import { notFound } from 'next/navigation'
 import { DraftRoom } from '@/components/draft/draft-room'
 
+export const revalidate = 60
+
 export default async function DraftPage({ params }: { params: Promise<{ poolId: string }> }) {
   const { poolId } = await params
   const [pool, members, userId] = await Promise.all([

@@ -80,29 +80,32 @@ async function refreshCfbGames(
     const { getDataProvider } = await import('@/lib/data-providers')
     const provider = getDataProvider()
 
-    // Refresh all 15 weeks
-    for (let week = 1; week <= 15; week++) {
-      const games = await provider.getGamesForWeek(seasonYear, week)
-      const rows = games.map((g) => ({
-        id: g.id,
-        season_year: g.seasonYear,
-        week: g.week,
-        home_team_id: g.homeTeam.id,
-        away_team_id: g.awayTeam.id,
-        home_score: g.homeTeam.score,
-        away_score: g.awayTeam.score,
-        status: g.status,
-        status_detail: g.statusDetail,
-        start_time: g.startTime,
-        venue: g.venue,
-        broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
-        fetched_at: new Date().toISOString(),
-      }))
+    // Fetch all 15 weeks in parallel
+    const weeks = Array.from({ length: 15 }, (_, i) => i + 1)
+    const allGames = await Promise.all(
+      weeks.map((week) => provider.getGamesForWeek(seasonYear, week))
+    )
 
-      if (rows.length > 0) {
-        const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
-        if (error) return { error: `DB upsert failed: ${error.message}` }
-      }
+    const now = new Date().toISOString()
+    const rows = allGames.flat().map((g) => ({
+      id: g.id,
+      season_year: g.seasonYear,
+      week: g.week,
+      home_team_id: g.homeTeam.id,
+      away_team_id: g.awayTeam.id,
+      home_score: g.homeTeam.score,
+      away_score: g.awayTeam.score,
+      status: g.status,
+      status_detail: g.statusDetail,
+      start_time: g.startTime,
+      venue: g.venue,
+      broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
+      fetched_at: now,
+    }))
+
+    if (rows.length > 0) {
+      const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+      if (error) return { error: `DB upsert failed: ${error.message}` }
     }
     return {}
   } catch (err) {

@@ -6,6 +6,7 @@ import { calculateStandings, calculateWorldCupStandings } from '@/lib/scoring/en
 import { calculateTeamPoints, type GamePointBreakdown } from '@/lib/scoring/strategies/world-cup'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import Image from 'next/image'
 import { Badge } from '@/components/ui/badge'
 import type { DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 
@@ -53,7 +54,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   // CFB standings
   const [picksRes, teamsRes, scrapsRes] = await Promise.all([
     supabase.from('draft_picks').select('*').eq('pool_id', poolId),
-    supabase.from('cached_teams').select('*').eq('season_year', pool.season_year),
+    supabase.from('cached_teams').select('id,name,wins,losses,logo_url').eq('season_year', pool.season_year),
     supabase.from('team_scraps').select('*').eq('pool_id', poolId),
   ])
 
@@ -133,7 +134,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
                   <div key={s.id} className="flex items-center justify-between rounded-md border p-2">
                     <div className="flex items-center gap-2">
                       {team?.logo_url && (
-                        <img src={team.logo_url} alt={s.team_name} className="h-6 w-6 object-contain" />
+                        <Image src={team.logo_url} alt={s.team_name} width={24} height={24} className="h-6 w-6 object-contain" />
                       )}
                       <span className="text-sm font-medium">{s.team_name}</span>
                     </div>
@@ -165,7 +166,7 @@ async function WorldCupStandings({
 
   const [picksRes, gamesRes, wcScrapsRes] = await Promise.all([
     supabase.from('draft_picks').select('*').eq('pool_id', poolId),
-    supabase.from('cached_games').select('*').eq('game_type', 'world_cup').eq('season_year', pool.season_year),
+    supabase.from('cached_games').select('id,home_team_id,away_team_id,home_score,away_score,status,stage,is_overtime,is_shootout,home_penalty_score,away_penalty_score').eq('game_type', 'world_cup').eq('season_year', pool.season_year),
     supabase.from('wc_scraps_teams').select('*').eq('pool_id', poolId),
   ])
 
@@ -175,29 +176,53 @@ async function WorldCupStandings({
   const config = pool.scoring_config ?? DEFAULT_WC_SCORING
   const teamToRound = new Map(picks.map((p) => [p.team_id, p.round]))
 
-  const managerStandings = calculateWorldCupStandings(members, picks, games, config)
+  // Pre-compute team points once — avoids calling calculateTeamPoints multiple times per team
+  const allTeamIds = new Set([
+    ...picks.map((p) => p.team_id),
+    ...wcScraps.map((s) => s.team_id),
+  ])
+  const teamPointsCache = new Map<string, ReturnType<typeof calculateTeamPoints>>()
+  for (const teamId of allTeamIds) {
+    teamPointsCache.set(teamId, calculateTeamPoints(games, teamId, config))
+  }
 
-  // Enrich manager standings with per-game breakdowns
-  const enrichedManagerStandings = managerStandings.map((ms) => ({
-    ...ms,
-    teamBreakdowns: ms.teamBreakdowns.map((tb) => {
-      const { breakdown } = calculateTeamPoints(games, tb.teamId, config)
-      return { ...tb, gameBreakdowns: breakdown }
-    }),
-  }))
+  // Build manager standings directly from cache (avoids redundant calculateTeamPoints calls in engine)
+  const enrichedManagerStandings = members
+    .map((member) => {
+      const memberPicks = picks.filter((p) => p.member_id === member.id)
+      let totalPoints = 0
+      const teamBreakdowns = memberPicks.map((pick) => {
+        const cached = teamPointsCache.get(pick.team_id)!
+        totalPoints += cached.totalPoints
+        return {
+          teamId: pick.team_id,
+          teamName: pick.team_name,
+          points: cached.totalPoints,
+          gamesPlayed: cached.breakdown.length,
+          gameBreakdowns: cached.breakdown,
+        }
+      })
+      return {
+        memberId: member.id,
+        displayName: member.profiles.display_name,
+        totalPoints,
+        teamBreakdowns,
+      }
+    })
+    .sort((a, b) => b.totalPoints - a.totalPoints)
 
   // Build scraps team standings
   const scrapsTeamNumbers = [...new Set(wcScraps.map((s) => s.scraps_team_number))].sort()
   const scrapsStandings = scrapsTeamNumbers.map((num) => {
     const teamRows = wcScraps.filter((s) => s.scraps_team_number === num)
     const teamBreakdowns = teamRows.map((row) => {
-      const { totalPoints: teamPts, breakdown } = calculateTeamPoints(games, row.team_id, config)
+      const cached = teamPointsCache.get(row.team_id)!
       return {
         teamId: row.team_id,
         teamName: row.team_name,
-        points: teamPts,
-        gamesPlayed: breakdown.length,
-        gameBreakdowns: breakdown,
+        points: cached.totalPoints,
+        gamesPlayed: cached.breakdown.length,
+        gameBreakdowns: cached.breakdown,
       }
     })
     return {

@@ -11,6 +11,8 @@ import { DeletePoolButton } from '@/components/pool/delete-pool'
 import { deletePool } from '@/lib/pools/actions'
 import type { WorldCupScoringConfig } from '@/lib/types'
 
+export const revalidate = 300
+
 export default async function PoolSettingsPage({ params }: { params: Promise<{ poolId: string }> }) {
   const { poolId } = await params
   const [pool, members, userId] = await Promise.all([

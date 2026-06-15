@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useDraftRealtime } from '@/hooks/use-draft-realtime'
 import { startDraft, makePick, resetDraft, undoPick, generateWcScraps } from '@/lib/draft/actions'
 import { generateSnakeOrder, getPickInfo, getAvailableConferences } from '@/lib/draft/engine'
@@ -386,7 +387,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
           <CardContent className="space-y-4">
             <div className="flex items-center gap-3">
               {pendingPick.logo_url && (
-                <img src={pendingPick.logo_url} alt={pendingPick.name} className="h-12 w-12 object-contain" />
+                <Image src={pendingPick.logo_url} alt={pendingPick.name} width={48} height={48} className="h-12 w-12 object-contain" />
               )}
               <div>
                 <p className="text-lg font-bold">{pendingPick.name}</p>
@@ -428,7 +429,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
               >
                 <CardContent className="flex items-center gap-3 py-3">
                   {team.logo_url && (
-                    <img src={team.logo_url} alt={team.name} className="h-8 w-8 object-contain" />
+                    <Image src={team.logo_url} alt={team.name} width={32} height={32} className="h-8 w-8 object-contain" />
                   )}
                   <div>
                     <p className="font-medium">{team.name}</p>
@@ -487,7 +488,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
               >
                 <CardContent className="flex items-center gap-3 py-3">
                   {team.logo_url && (
-                    <img src={team.logo_url} alt={team.name} className="h-8 w-8 object-contain" />
+                    <Image src={team.logo_url} alt={team.name} width={32} height={32} className="h-8 w-8 object-contain" />
                   )}
                   <div>
                     <p className="font-medium">{team.name}</p>

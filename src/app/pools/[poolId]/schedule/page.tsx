@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
+import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
 import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 import { scoreWorldCupGame } from '@/lib/scoring/strategies/world-cup'
@@ -494,7 +495,7 @@ function GameCard({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {awayTeam?.logo_url && (
-              <img src={awayTeam.logo_url} alt="" className="h-6 w-6 object-contain" />
+              <Image src={awayTeam.logo_url} alt="" width={24} height={24} className="h-6 w-6 object-contain" />
             )}
             <div>
               <span className="font-medium">{awayTeam?.name ?? game.away_team_id}</span>
@@ -510,7 +511,7 @@ function GameCard({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {homeTeam?.logo_url && (
-              <img src={homeTeam.logo_url} alt="" className="h-6 w-6 object-contain" />
+              <Image src={homeTeam.logo_url} alt="" width={24} height={24} className="h-6 w-6 object-contain" />
             )}
             <div>
               <span className="font-medium">{homeTeam?.name ?? game.home_team_id}</span>
@@ -576,7 +577,7 @@ function WcGameCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {homeTeam?.logo_url && (
-            <img src={homeTeam.logo_url} alt="" className="h-6 w-6 object-contain" />
+            <Image src={homeTeam.logo_url} alt="" width={24} height={24} className="h-6 w-6 object-contain" />
           )}
           <div>
             <span className="font-medium">{homeTeam?.name ?? game.home_team_id}</span>
@@ -599,7 +600,7 @@ function WcGameCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {awayTeam?.logo_url && (
-            <img src={awayTeam.logo_url} alt="" className="h-6 w-6 object-contain" />
+            <Image src={awayTeam.logo_url} alt="" width={24} height={24} className="h-6 w-6 object-contain" />
           )}
           <div>
             <span className="font-medium">{awayTeam?.name ?? game.away_team_id}</span>
