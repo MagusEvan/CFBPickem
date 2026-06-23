@@ -32,7 +32,7 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore }: P
                 R{r + 1}
               </th>
             ))}
-            <th className="px-2 py-2 text-center text-xs text-muted-foreground border-l">Score</th>
+            <th className="px-2 py-2 text-center text-xs text-muted-foreground border-l">Contribution</th>
           </tr>
         </thead>
         <tbody>
@@ -129,7 +129,7 @@ function ManagerRow({
             )
           })}
           <td className="px-2 py-1.5 text-center text-xs border-l">
-            {formatScoreToPar(golfer.totalScore)}
+            {formatScoreToPar(golfer.contribution)}
           </td>
         </tr>
       ))}

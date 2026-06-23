@@ -7,8 +7,10 @@ export interface GolferRoundScore {
   status: PgaGolfer['status']
   teeTime: string | null
   thru: string | null
-  totalScore: number | null    // relative to par
+  totalScore: number | null    // relative to par (all rounds)
   totalStrokes: number | null
+  /** Sum of only the rounds where this golfer counted toward the manager total */
+  contribution: number | null
   roundStrokes: (number | null)[]  // R1-R4
   roundScores: (number | null)[]   // R1-R4 relative to par
   /** Whether this golfer's score counts toward the manager's total for each round */
@@ -103,6 +105,7 @@ export function calculatePgaStandings(
         thru: golfer?.thru ?? null,
         totalScore,
         totalStrokes,
+        contribution: null,
         roundStrokes,
         roundScores,
         countsForRound: [false, false, false, false],
@@ -128,15 +131,31 @@ export function calculatePgaStandings(
       // Sort by score-to-par ascending (lower/more negative is better)
       withScores.sort((a, b) => a.score - b.score)
 
-      // Take best topN
-      const counting = withScores.slice(0, topN)
-      const roundScoreTotal = counting.reduce((sum, x) => sum + x.score, 0)
+      // Take best topN, but include all golfers tied with the Nth score
+      const cutoffScore = withScores[Math.min(topN - 1, withScores.length - 1)].score
+      const counting = withScores.filter((x, i) => i < topN || x.score === cutoffScore)
+
+      // Round total uses only the best topN scores (not extras from ties)
+      const roundScoreTotal = withScores.slice(0, topN).reduce((sum, x) => sum + x.score, 0)
       roundTotals.push(roundScoreTotal)
 
-      // Mark which golfers count
+      // Mark all tied golfers as counting (for contribution display)
       for (const c of counting) {
         golferScores[c.idx].countsForRound[r] = true
       }
+    }
+
+    // Compute contribution per golfer: sum of roundScores where they counted
+    for (const gs of golferScores) {
+      let contribSum = 0
+      let hasContrib = false
+      for (let r = 0; r < 4; r++) {
+        if (gs.countsForRound[r] && gs.roundScores[r] !== null) {
+          contribSum += gs.roundScores[r]!
+          hasContrib = true
+        }
+      }
+      gs.contribution = hasContrib ? contribSum : null
     }
 
     // Cumulative score = sum of round totals (to par)
