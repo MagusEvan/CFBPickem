@@ -29,6 +29,8 @@ export async function createTournament(formData: FormData): Promise<void> {
   const topNScoring = Number(formData.get('top_n_scoring') || 5)
   const enableScraps = formData.get('enable_scraps') === 'true'
   const draftOrderMode = (formData.get('draft_order_mode') as string) || 'random'
+  const coursePar = Number(formData.get('course_par') || 72)
+  const missedCutScore = Number(formData.get('missed_cut_score') || 80)
   const memberIds = formData.getAll('member_ids') as string[]
 
   if (!name) throw new Error('Tournament name is required')
@@ -51,6 +53,8 @@ export async function createTournament(formData: FormData): Promise<void> {
       top_n_scoring: topNScoring,
       enable_scraps: enableScraps,
       draft_order_mode: draftOrderMode,
+      course_par: coursePar,
+      missed_cut_score: missedCutScore,
     })
     .select()
     .single()
@@ -172,6 +176,16 @@ export async function refreshTournamentGolfers(
         .from('pga_golfers')
         .upsert(rows, { onConflict: 'id,tournament_id' })
       if (error) return { error: error.message }
+    }
+
+    // Also update course par if we can extract it from ESPN
+    try {
+      const par = await provider.getEventCoursePar(tournament.espn_event_id)
+      if (par !== null) {
+        await admin.from('pga_tournaments').update({ course_par: par }).eq('id', tournamentId)
+      }
+    } catch {
+      // Non-fatal
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -29,7 +29,10 @@ export default async function PgaStandingsPage({
   if (!pool || !tournament) notFound()
 
   const isAdmin = pool.admin_id === userId
-  const standings = calculatePgaStandings(members, picks, golfers, tournament.top_n_scoring)
+  const standings = calculatePgaStandings(
+    members, picks, golfers, tournament.top_n_scoring,
+    tournament.course_par, tournament.missed_cut_score
+  )
 
   // Find the latest fetched_at for display
   const lastFetched = golfers.length > 0
@@ -74,10 +77,12 @@ export default async function PgaStandingsPage({
       ) : (
         <Card>
           <CardContent className="py-4">
-            <PgaLeaderboard standings={standings} topN={tournament.top_n_scoring} />
-            <p className="mt-3 text-xs text-muted-foreground">
-              * = score counts toward manager&apos;s round total (best {tournament.top_n_scoring})
-            </p>
+            <PgaLeaderboard
+              standings={standings}
+              topN={tournament.top_n_scoring}
+              coursePar={tournament.course_par}
+              missedCutScore={tournament.missed_cut_score}
+            />
           </CardContent>
         </Card>
       )}

@@ -22,6 +22,7 @@ interface EspnEvent {
   startDate: string | null
   endDate: string | null
   venue: string | null
+  coursePar?: number | null
   status: string
 }
 
@@ -40,6 +41,8 @@ export default function NewTournamentPage({
   const [golfersPerManager, setGolfersPerManager] = useState(7)
   const [topNScoring, setTopNScoring] = useState(5)
   const [enableScraps, setEnableScraps] = useState(false)
+  const [coursePar, setCoursePar] = useState(72)
+  const [missedCutScore, setMissedCutScore] = useState(80)
   const [members, setMembers] = useState<PoolMemberInfo[]>([])
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set())
   const [loadingMembers, setLoadingMembers] = useState(true)
@@ -82,6 +85,7 @@ export default function NewTournamentPage({
   function selectEvent(event: EspnEvent) {
     setSelectedEvent(event)
     setName(event.name)
+    if (event.coursePar) setCoursePar(event.coursePar)
   }
 
   async function handleSubmit(formData: FormData) {
@@ -94,6 +98,8 @@ export default function NewTournamentPage({
       formData.set('golfers_per_manager', String(golfersPerManager))
       formData.set('top_n_scoring', String(topNScoring))
       formData.set('enable_scraps', String(enableScraps))
+      formData.set('course_par', String(coursePar))
+      formData.set('missed_cut_score', String(missedCutScore))
       formData.set('draft_order_mode', 'random')
       if (selectedEvent) {
         formData.set('espn_event_id', selectedEvent.id)
@@ -216,6 +222,34 @@ export default function NewTournamentPage({
                 />
                 <p className="text-xs text-muted-foreground">
                   Best {topNScoring} of {golfersPerManager} scores count per round
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="course_par">Course Par</Label>
+                <Input
+                  id="course_par"
+                  type="number"
+                  value={coursePar}
+                  onChange={(e) => setCoursePar(Number(e.target.value))}
+                  min={60}
+                  max={80}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="missed_cut_score">Missed Cut Score</Label>
+                <Input
+                  id="missed_cut_score"
+                  type="number"
+                  value={missedCutScore}
+                  onChange={(e) => setMissedCutScore(Number(e.target.value))}
+                  min={70}
+                  max={100}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Strokes assigned per round for CUT/WD golfers
                 </p>
               </div>
             </div>

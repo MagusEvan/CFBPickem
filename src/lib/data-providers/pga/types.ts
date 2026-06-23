@@ -22,5 +22,6 @@ export interface PgaEventInfo {
   startDate: string | null
   endDate: string | null
   venue: string | null
+  coursePar: number | null
   status: string
 }

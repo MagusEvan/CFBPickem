@@ -89,6 +89,53 @@ function parseGolfer(competitor: any): PgaGolferData {
 }
 
 /**
+ * Extract course par from an ESPN event object.
+ * Tries courses[0].par first, then infers from golfer data (even-par round).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractCoursePar(event: any): number | null {
+  // Try direct course par field
+  const courses = event.competitions?.[0]?.courses
+  if (Array.isArray(courses) && courses.length > 0 && courses[0].par != null) {
+    return Number(courses[0].par)
+  }
+
+  // Infer from golfer data: if someone shot even par (roundScore "E"), their strokes = par
+  const competitors = event.competitions?.[0]?.competitors || []
+  for (const c of competitors) {
+    const linescores = c.linescores || []
+    for (const ls of linescores) {
+      if ((ls.displayValue === 'E' || ls.displayValue === 'e') && ls.value != null) {
+        return Number(ls.value)
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Fetch course par for a specific event.
+ */
+export async function fetchEventCoursePar(eventId: string): Promise<number | null> {
+  const url = `${ESPN_PGA_BASE}/scoreboard?event=${eventId}`
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    next: { revalidate: 3600 },
+  })
+
+  if (!res.ok) return null
+
+  const data = await res.json()
+  const events = data.events || []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const event = events.find((e: any) => String(e.id) === eventId) || events[0]
+  if (!event) return null
+
+  return extractCoursePar(event)
+}
+
+/**
  * Fetch the list of major events for a given season year.
  */
 export async function fetchPgaMajors(year: number): Promise<PgaEventInfo[]> {
@@ -112,6 +159,7 @@ export async function fetchPgaMajors(year: number): Promise<PgaEventInfo[]> {
     startDate: e.date || null,
     endDate: e.endDate || null,
     venue: e.competitions?.[0]?.venue?.fullName || null,
+    coursePar: extractCoursePar(e),
     status: e.status?.type?.name || 'scheduled',
   }))
 }

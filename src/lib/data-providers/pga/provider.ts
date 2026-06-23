@@ -1,9 +1,10 @@
 import type { PgaGolferData, PgaEventInfo } from './types'
-import { fetchPgaMajors, fetchPgaEventGolfers } from './espn-adapter'
+import { fetchPgaMajors, fetchPgaEventGolfers, fetchEventCoursePar } from './espn-adapter'
 
 export interface PgaDataProvider {
   getMajors(year: number): Promise<PgaEventInfo[]>
   getEventGolfers(eventId: string): Promise<PgaGolferData[]>
+  getEventCoursePar(eventId: string): Promise<number | null>
 }
 
 export class EspnPgaProvider implements PgaDataProvider {
@@ -13,6 +14,10 @@ export class EspnPgaProvider implements PgaDataProvider {
 
   async getEventGolfers(eventId: string): Promise<PgaGolferData[]> {
     return fetchPgaEventGolfers(eventId)
+  }
+
+  async getEventCoursePar(eventId: string): Promise<number | null> {
+    return fetchEventCoursePar(eventId)
   }
 }
 

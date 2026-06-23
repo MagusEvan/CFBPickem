@@ -168,6 +168,8 @@ export interface PgaTournament {
   enable_scraps: boolean
   draft_status: 'pre_draft' | 'in_progress' | 'completed'
   draft_order_mode: 'manual' | 'random'
+  course_par: number
+  missed_cut_score: number
   created_at: string
 }
 

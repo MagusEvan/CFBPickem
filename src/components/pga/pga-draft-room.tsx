@@ -385,47 +385,34 @@ function PgaDraftBoard({
   return (
     <div>
       <h2 className="mb-3 text-lg font-semibold">Draft Board</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="px-2 py-2 text-left font-medium text-muted-foreground">Manager</th>
-              {rounds.map((r) => (
-                <th key={r} className="px-2 py-2 text-center font-medium text-muted-foreground">
-                  R{r}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {[...members]
-              .sort((a, b) => (a.draft_position ?? 99) - (b.draft_position ?? 99))
-              .map((member) => {
-                const memberPicks = memberPickMap.get(member.id) ?? []
-                return (
-                  <tr key={member.id} className="border-b">
-                    <td className="px-2 py-2 font-medium whitespace-nowrap">
-                      {member.pool_member?.profiles?.display_name}
-                    </td>
-                    {rounds.map((r) => {
-                      const pick = memberPicks.find((p) => p.round === r)
-                      return (
-                        <td key={r} className="px-2 py-2 text-center">
-                          {pick ? (
-                            <Badge variant="secondary" className="text-xs">
-                              {pick.golfer_name}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })}
-          </tbody>
-        </table>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[...members]
+          .sort((a, b) => (a.draft_position ?? 99) - (b.draft_position ?? 99))
+          .map((member) => {
+            const memberPicks = memberPickMap.get(member.id) ?? []
+            return (
+              <div key={member.id} className="rounded-lg border p-3">
+                <h3 className="font-semibold text-sm mb-2">
+                  {member.pool_member?.profiles?.display_name}
+                </h3>
+                <ol className="space-y-1 text-sm">
+                  {rounds.map((r) => {
+                    const pick = memberPicks.find((p) => p.round === r)
+                    return (
+                      <li key={r} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-4">{r}.</span>
+                        {pick ? (
+                          <span>{pick.golfer_name}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ol>
+              </div>
+            )
+          })}
       </div>
     </div>
   )

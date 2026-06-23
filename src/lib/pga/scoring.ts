@@ -13,31 +13,37 @@ export interface GolferRoundScore {
   roundScores: (number | null)[]   // R1-R4 relative to par
   /** Whether this golfer's score counts toward the manager's total for each round */
   countsForRound: boolean[]
+  /** Whether each round is a penalty (missed cut / WD) */
+  isPenalty: boolean[]
 }
 
 export interface ManagerStanding {
   memberId: string
   memberName: string
   golfers: GolferRoundScore[]
-  /** Best top-N strokes per round (sum of counting scores) */
+  /** Best top-N score-to-par per round (sum of counting golfers' roundScores) */
   roundTotals: (number | null)[]
-  /** Cumulative strokes across all rounds (sum of roundTotals) */
+  /** Cumulative strokes across all rounds */
   cumulativeStrokes: number | null
-  /** Cumulative score relative to par */
+  /** Cumulative score relative to par (sum of roundTotals) */
   cumulativeScore: number | null
 }
 
 /**
- * Calculate PGA standings with top-N scoring.
+ * Calculate PGA standings with top-N scoring and missed-cut penalties.
  *
- * For each round, a manager's score is the sum of the best `topN` round strokes
- * among their drafted golfers. Lower cumulative strokes = better.
+ * For each round, a manager's score is the sum of the best `topN` round scores (to par)
+ * among their drafted golfers. Lower cumulative score = better.
+ *
+ * Cut/WD golfers receive `missedCutScore` strokes for missing rounds.
  */
 export function calculatePgaStandings(
   members: PgaTournamentMember[],
   picks: PgaDraftPick[],
   golfers: PgaGolfer[],
-  topN: number
+  topN: number,
+  coursePar: number,
+  missedCutScore: number
 ): ManagerStanding[] {
   const golferMap = new Map(golfers.map((g) => [g.id, g]))
 
@@ -46,52 +52,86 @@ export function calculatePgaStandings(
 
     const golferScores: GolferRoundScore[] = memberPicks.map((pick) => {
       const golfer = golferMap.get(pick.golfer_id)
+      const status = golfer?.status ?? 'active'
+
+      const roundStrokes: (number | null)[] = [
+        golfer?.r1_strokes ?? null,
+        golfer?.r2_strokes ?? null,
+        golfer?.r3_strokes ?? null,
+        golfer?.r4_strokes ?? null,
+      ]
+      const roundScores: (number | null)[] = [
+        golfer?.r1_score ?? null,
+        golfer?.r2_score ?? null,
+        golfer?.r3_score ?? null,
+        golfer?.r4_score ?? null,
+      ]
+      const isPenalty = [false, false, false, false]
+
+      // Apply missed-cut/WD penalties for missing rounds
+      if (status === 'cut' || status === 'withdrawn') {
+        // Only apply penalty to rounds where the golfer has no score
+        // but at least one earlier round was played (so the tournament has started for them)
+        const hasPlayedAnyRound = roundStrokes.some((s) => s !== null)
+        if (hasPlayedAnyRound) {
+          for (let r = 0; r < 4; r++) {
+            if (roundStrokes[r] === null) {
+              roundStrokes[r] = missedCutScore
+              roundScores[r] = missedCutScore - coursePar
+              isPenalty[r] = true
+            }
+          }
+        }
+      }
+
+      // Recalculate totals
+      const playedStrokes = roundStrokes.filter((s): s is number => s !== null)
+      const totalStrokes = playedStrokes.length > 0
+        ? playedStrokes.reduce((a, b) => a + b, 0)
+        : null
+      const playedScores = roundScores.filter((s): s is number => s !== null)
+      const totalScore = playedScores.length > 0
+        ? playedScores.reduce((a, b) => a + b, 0)
+        : null
+
       return {
         golferId: pick.golfer_id,
         golferName: pick.golfer_name,
         position: golfer?.position ?? null,
-        status: golfer?.status ?? 'active',
+        status,
         teeTime: golfer?.tee_time ?? null,
         thru: golfer?.thru ?? null,
-        totalScore: golfer?.total_score ?? null,
-        totalStrokes: golfer?.total_strokes ?? null,
-        roundStrokes: [
-          golfer?.r1_strokes ?? null,
-          golfer?.r2_strokes ?? null,
-          golfer?.r3_strokes ?? null,
-          golfer?.r4_strokes ?? null,
-        ],
-        roundScores: [
-          golfer?.r1_score ?? null,
-          golfer?.r2_score ?? null,
-          golfer?.r3_score ?? null,
-          golfer?.r4_score ?? null,
-        ],
+        totalScore,
+        totalStrokes,
+        roundStrokes,
+        roundScores,
         countsForRound: [false, false, false, false],
+        isPenalty,
       }
     })
 
-    // For each round, pick the best topN strokes
+    // For each round, pick the best topN scores (to par)
     const roundTotals: (number | null)[] = []
 
     for (let r = 0; r < 4; r++) {
-      // Get golfers who have a score for this round
       const withScores = golferScores
-        .map((gs, idx) => ({ gs, idx, strokes: gs.roundStrokes[r] }))
-        .filter((x) => x.strokes !== null) as { gs: GolferRoundScore; idx: number; strokes: number }[]
+        .map((gs, idx) => ({ gs, idx, score: gs.roundScores[r], strokes: gs.roundStrokes[r] }))
+        .filter((x) => x.score !== null && x.strokes !== null) as {
+          gs: GolferRoundScore; idx: number; score: number; strokes: number
+        }[]
 
       if (withScores.length === 0) {
         roundTotals.push(null)
         continue
       }
 
-      // Sort by strokes ascending (lower is better)
-      withScores.sort((a, b) => a.strokes - b.strokes)
+      // Sort by score-to-par ascending (lower/more negative is better)
+      withScores.sort((a, b) => a.score - b.score)
 
       // Take best topN
       const counting = withScores.slice(0, topN)
-      const total = counting.reduce((sum, x) => sum + x.strokes, 0)
-      roundTotals.push(total)
+      const roundScoreTotal = counting.reduce((sum, x) => sum + x.score, 0)
+      roundTotals.push(roundScoreTotal)
 
       // Mark which golfers count
       for (const c of counting) {
@@ -99,22 +139,22 @@ export function calculatePgaStandings(
       }
     }
 
-    // Cumulative strokes = sum of round totals where we have data
+    // Cumulative score = sum of round totals (to par)
     const validRounds = roundTotals.filter((r): r is number => r !== null)
-    const cumulativeStrokes = validRounds.length > 0 ? validRounds.reduce((a, b) => a + b, 0) : null
+    const cumulativeScore = validRounds.length > 0 ? validRounds.reduce((a, b) => a + b, 0) : null
 
-    // Cumulative score relative to par = sum of counting golfers' round scores
-    let cumulativeScore: number | null = null
-    if (cumulativeStrokes !== null) {
-      let scoreSum = 0
+    // Cumulative strokes for reference
+    let cumulativeStrokes: number | null = null
+    if (cumulativeScore !== null) {
+      let strokeSum = 0
       for (let r = 0; r < 4; r++) {
         for (const gs of golferScores) {
-          if (gs.countsForRound[r] && gs.roundScores[r] !== null) {
-            scoreSum += gs.roundScores[r]!
+          if (gs.countsForRound[r] && gs.roundStrokes[r] !== null) {
+            strokeSum += gs.roundStrokes[r]!
           }
         }
       }
-      cumulativeScore = scoreSum
+      cumulativeStrokes = strokeSum
     }
 
     return {
@@ -127,12 +167,12 @@ export function calculatePgaStandings(
     }
   })
 
-  // Sort: lower cumulative strokes is better, null goes to bottom
+  // Sort: lower cumulative score is better, null goes to bottom
   standings.sort((a, b) => {
-    if (a.cumulativeStrokes === null && b.cumulativeStrokes === null) return 0
-    if (a.cumulativeStrokes === null) return 1
-    if (b.cumulativeStrokes === null) return -1
-    return a.cumulativeStrokes - b.cumulativeStrokes
+    if (a.cumulativeScore === null && b.cumulativeScore === null) return 0
+    if (a.cumulativeScore === null) return 1
+    if (b.cumulativeScore === null) return -1
+    return a.cumulativeScore - b.cumulativeScore
   })
 
   return standings
