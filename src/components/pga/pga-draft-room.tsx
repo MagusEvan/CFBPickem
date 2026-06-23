@@ -298,6 +298,11 @@ export function PgaDraftRoom({
         </Card>
       )}
 
+      {/* Draft board */}
+      <PgaDraftBoard picks={picks} members={members} numRounds={tournament.golfers_per_manager} />
+
+      <Separator />
+
       {/* Golfer selection */}
       {canPick && !pendingPick && (
         <div>
@@ -352,11 +357,6 @@ export function PgaDraftRoom({
           </div>
         </div>
       )}
-
-      <Separator />
-
-      {/* Draft board */}
-      <PgaDraftBoard picks={picks} members={members} numRounds={tournament.golfers_per_manager} />
     </div>
   )
 }
