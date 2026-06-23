@@ -116,7 +116,7 @@ export default async function TournamentDetailPage({
         </div>
       </div>
 
-      {/* Golfer field info */}
+      {/* Golfer field */}
       {golfers.length > 0 && (
         <>
           <Separator />
@@ -129,12 +129,52 @@ export default async function TournamentDetailPage({
                 <RefreshGolfersButton tournamentId={tournamentId} />
               )}
             </div>
-            <p className="text-sm text-muted-foreground">
-              {golfers.filter((g) => g.status === 'active').length} active
-              {golfers.some((g) => g.status === 'cut') && (
-                <> · {golfers.filter((g) => g.status === 'cut').length} cut</>
-              )}
-            </p>
+            <Card>
+              <CardContent className="overflow-x-auto py-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="px-2 py-2 text-left text-xs text-muted-foreground">Golfer</th>
+                      <th className="px-2 py-2 text-center text-xs text-muted-foreground">DraftKings</th>
+                      <th className="px-2 py-2 text-center text-xs text-muted-foreground">MGM</th>
+                      <th className="px-2 py-2 text-center text-xs text-muted-foreground">BetOnline</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {golfers
+                      .filter((g) => g.status === 'active')
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((g) => (
+                        <tr key={g.id} className="border-b">
+                          <td className="px-2 py-2">
+                            <span className="font-medium">{g.name}</span>
+                            {g.amateur && (
+                              <Badge variant="outline" className="ml-1 text-[10px]">AM</Badge>
+                            )}
+                            {g.country && (
+                              <span className="ml-1 text-xs text-muted-foreground">{g.country}</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2 text-center text-xs">{g.odds_draftkings || '—'}</td>
+                          <td className="px-2 py-2 text-center text-xs">{g.odds_mgm || '—'}</td>
+                          <td className="px-2 py-2 text-center text-xs">{g.odds_betonline || '—'}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+                {golfers.some((g) => g.status !== 'active') && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {golfers.filter((g) => g.status === 'cut').length > 0 && (
+                      <>{golfers.filter((g) => g.status === 'cut').length} cut</>
+                    )}
+                    {golfers.filter((g) => g.status === 'withdrawn').length > 0 && (
+                      <> · {golfers.filter((g) => g.status === 'withdrawn').length} withdrawn</>
+                    )}
+                    {' '}(not shown)
+                  </p>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </>
       )}
