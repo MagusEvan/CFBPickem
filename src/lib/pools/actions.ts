@@ -24,6 +24,14 @@ const wcScoringConfigSchema = z.object({
   }),
 })
 
+const createPgaPoolSchema = z.object({
+  game_type: z.literal('pga'),
+  name: z.string().min(1).max(100),
+  season_year: z.number().int().min(2024).max(2030),
+  max_managers: z.number().int().min(2).max(48),
+  draft_order_mode: z.enum(['manual', 'random']),
+})
+
 const createCfbPoolSchema = z.object({
   game_type: z.literal('cfb'),
   name: z.string().min(1).max(100),
@@ -56,7 +64,30 @@ export async function createPool(formData: FormData) {
 
   let poolInsert: Record<string, unknown>
 
-  if (gameType === 'world_cup') {
+  if (gameType === 'pga') {
+    const input = createPgaPoolSchema.parse({
+      game_type: 'pga',
+      name: formData.get('name'),
+      season_year: Number(formData.get('season_year')),
+      max_managers: Number(formData.get('max_managers')),
+      draft_order_mode: formData.get('draft_order_mode') || 'random',
+    })
+
+    poolInsert = {
+      name: input.name,
+      admin_id: user.id,
+      season_year: input.season_year,
+      invite_code: inviteCode,
+      max_managers: input.max_managers,
+      game_type: 'pga',
+      conferences: null,
+      num_rounds: 0,
+      teams_per_manager: null,
+      scoring_config: null,
+      scoring_strategy: 'pga',
+      draft_order_mode: input.draft_order_mode,
+    }
+  } else if (gameType === 'world_cup') {
     const input = createWcPoolSchema.parse({
       game_type: 'world_cup',
       name: formData.get('name'),

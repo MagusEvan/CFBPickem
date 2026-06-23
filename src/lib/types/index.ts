@@ -19,7 +19,7 @@ export interface Pool {
   scoring_strategy: string
   draft_status: 'pre_draft' | 'in_progress' | 'completed'
   draft_order_mode: 'manual' | 'random'
-  game_type: 'cfb' | 'world_cup'
+  game_type: 'cfb' | 'world_cup' | 'pga'
   teams_per_manager: number | null
   scoring_config: WorldCupScoringConfig | null
   created_at: string
@@ -119,7 +119,7 @@ export interface CachedTeam {
   season_year: number
   wins: number
   losses: number
-  game_type: 'cfb' | 'world_cup'
+  game_type: 'cfb' | 'world_cup' | 'pga'
   fetched_at: string
 }
 
@@ -142,7 +142,7 @@ export interface CachedGame {
   status_detail: string | null
   start_time: string | null
   venue: string | null
-  game_type: 'cfb' | 'world_cup'
+  game_type: 'cfb' | 'world_cup' | 'pga'
   stage: string | null
   is_overtime: boolean
   is_shootout: boolean
@@ -151,4 +151,77 @@ export interface CachedGame {
   manual_entry: boolean
   broadcasts: GameBroadcast[] | null
   fetched_at: string
+}
+
+// PGA Types
+
+export interface PgaTournament {
+  id: string
+  pool_id: string
+  espn_event_id: string | null
+  name: string
+  season_year: number
+  start_date: string | null
+  end_date: string | null
+  golfers_per_manager: number
+  top_n_scoring: number
+  enable_scraps: boolean
+  draft_status: 'pre_draft' | 'in_progress' | 'completed'
+  draft_order_mode: 'manual' | 'random'
+  created_at: string
+}
+
+export interface PgaTournamentMember {
+  id: string
+  tournament_id: string
+  pool_member_id: string
+  draft_position: number | null
+  // Joined
+  pool_member?: PoolMember & { profiles: Profile }
+}
+
+export interface PgaGolfer {
+  id: string
+  tournament_id: string
+  name: string
+  amateur: boolean
+  country: string | null
+  image_url: string | null
+  odds_draftkings: string | null
+  odds_mgm: string | null
+  odds_betonline: string | null
+  status: 'active' | 'cut' | 'withdrawn' | 'disqualified'
+  position: string | null
+  total_score: number | null
+  total_strokes: number | null
+  r1_score: number | null
+  r2_score: number | null
+  r3_score: number | null
+  r4_score: number | null
+  r1_strokes: number | null
+  r2_strokes: number | null
+  r3_strokes: number | null
+  r4_strokes: number | null
+  tee_time: string | null
+  thru: string | null
+  fetched_at: string
+}
+
+export interface PgaDraftState {
+  tournament_id: string
+  current_round: number
+  current_pick_number: number
+  current_member_id: string | null
+  updated_at: string
+}
+
+export interface PgaDraftPick {
+  id: string
+  tournament_id: string
+  member_id: string
+  round: number
+  pick_number: number
+  golfer_id: string
+  golfer_name: string
+  picked_at: string
 }

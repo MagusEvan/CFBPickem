@@ -35,7 +35,7 @@ const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
 }
 
 export default function CreatePoolPage() {
-  const [gameType, setGameType] = useState<'cfb' | 'world_cup'>('cfb')
+  const [gameType, setGameType] = useState<'cfb' | 'world_cup' | 'pga'>('cfb')
   const [selectedConferences, setSelectedConferences] = useState<string[]>(DEFAULT_SELECTED)
   const [maxManagers, setMaxManagers] = useState(10)
   const [teamsPerManager, setTeamsPerManager] = useState(4)
@@ -80,7 +80,9 @@ export default function CreatePoolPage() {
 
   const isValid = gameType === 'cfb'
     ? selectedConferences.length > 0
-    : !wcTeamOverflow && teamsPerManager >= 1
+    : gameType === 'world_cup'
+      ? !wcTeamOverflow && teamsPerManager >= 1
+      : true // PGA — no extra validation needed
 
   return (
     <div className="mx-auto max-w-lg">
@@ -98,7 +100,7 @@ export default function CreatePoolPage() {
             {/* Game Type Selector */}
             <div className="space-y-2">
               <Label>Game Type</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setGameType('cfb')}
@@ -121,6 +123,17 @@ export default function CreatePoolPage() {
                 >
                   World Cup
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setGameType('pga')}
+                  className={`rounded-md border p-3 text-sm font-medium transition-colors ${
+                    gameType === 'pga'
+                      ? 'border-primary bg-primary/5 text-primary'
+                      : 'border-border text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  PGA Tour
+                </button>
               </div>
             </div>
 
@@ -129,7 +142,7 @@ export default function CreatePoolPage() {
               <Input
                 id="name"
                 name="name"
-                placeholder={gameType === 'cfb' ? 'e.g. The Gridiron League' : 'e.g. World Cup 2026 Draft'}
+                placeholder={gameType === 'cfb' ? 'e.g. The Gridiron League' : gameType === 'world_cup' ? 'e.g. World Cup 2026 Draft' : 'e.g. Masters League 2026'}
                 required
               />
             </div>
@@ -143,7 +156,7 @@ export default function CreatePoolPage() {
                   id="season_year"
                   name="season_year"
                   type="number"
-                  defaultValue={gameType === 'cfb' ? new Date().getFullYear() : 2026}
+                  defaultValue={gameType === 'cfb' ? new Date().getFullYear() : new Date().getFullYear()}
                   key={gameType} // reset when game type changes
                   min={2024}
                   max={2030}
@@ -159,6 +172,7 @@ export default function CreatePoolPage() {
                   onChange={(e) => setMaxManagers(Number(e.target.value))}
                   min={2}
                   max={gameType === 'cfb' ? 16 : 48}
+                  key={`max-${gameType}`}
                 />
               </div>
             </div>

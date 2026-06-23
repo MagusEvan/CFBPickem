@@ -5,7 +5,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Users, Trophy, Calendar, Settings, Shield, Share2 } from 'lucide-react'
+import { Users, Trophy, Calendar, Settings, Shield, Share2, Flag } from 'lucide-react'
 import { InviteLinkButton } from '@/components/pool/invite-link'
 
 export const revalidate = 60
@@ -29,7 +29,7 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
         <div>
           <h1 className="text-2xl font-bold">{pool.name}</h1>
           <p className="text-muted-foreground">
-            {pool.game_type === 'world_cup' ? `World Cup ${pool.season_year}` : `${pool.season_year} Season`}
+            {pool.game_type === 'world_cup' ? `World Cup ${pool.season_year}` : pool.game_type === 'pga' ? `PGA Tour ${pool.season_year}` : `${pool.season_year} Season`}
           </p>
         </div>
         <Badge variant={pool.draft_status === 'completed' ? 'secondary' : 'outline'}>
@@ -41,73 +41,105 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
 
       {/* Quick nav cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Link href={`/pools/${pool.id}/draft`}>
-          <Card className="py-0 transition-colors hover:bg-muted/50">
-            <CardContent className="flex items-center gap-3 px-4 py-4">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Draft</p>
-                <p className="text-sm text-muted-foreground">
-                  {pool.draft_status === 'pre_draft' ? 'Not started' :
-                   pool.draft_status === 'in_progress' ? 'In progress' : 'View results'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+        {pool.game_type === 'pga' ? (
+          <>
+            <Link href={`/pools/${pool.id}/tournaments`}>
+              <Card className="py-0 transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center gap-3 px-4 py-4">
+                  <Flag className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Tournaments</p>
+                    <p className="text-sm text-muted-foreground">View events & drafts</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
 
-        <Link href={`/pools/${pool.id}/standings`}>
-          <Card className="py-0 transition-colors hover:bg-muted/50">
-            <CardContent className="flex items-center gap-3 px-4 py-4">
-              <Trophy className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Standings</p>
-                <p className="text-sm text-muted-foreground">Leaderboard</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+            <Link href={`/pools/${pool.id}/settings`}>
+              <Card className="py-0 transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center gap-3 px-4 py-4">
+                  <Settings className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Settings</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isAdmin ? 'Manage league' : 'View settings'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link href={`/pools/${pool.id}/draft`}>
+              <Card className="py-0 transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center gap-3 px-4 py-4">
+                  <Users className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Draft</p>
+                    <p className="text-sm text-muted-foreground">
+                      {pool.draft_status === 'pre_draft' ? 'Not started' :
+                       pool.draft_status === 'in_progress' ? 'In progress' : 'View results'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
 
-        <Link href={`/pools/${pool.id}/schedule`}>
-          <Card className="py-0 transition-colors hover:bg-muted/50">
-            <CardContent className="flex items-center gap-3 px-4 py-4">
-              <Calendar className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Schedule</p>
-                <p className="text-sm text-muted-foreground">
-                  {pool.game_type === 'world_cup' ? 'Match schedule' : 'Weekly matchups'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+            <Link href={`/pools/${pool.id}/standings`}>
+              <Card className="py-0 transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center gap-3 px-4 py-4">
+                  <Trophy className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Standings</p>
+                    <p className="text-sm text-muted-foreground">Leaderboard</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
 
-        <Link href={`/pools/${pool.id}/settings`}>
-          <Card className="py-0 transition-colors hover:bg-muted/50">
-            <CardContent className="flex items-center gap-3 px-4 py-4">
-              <Settings className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Settings</p>
-                <p className="text-sm text-muted-foreground">
-                  {isAdmin ? 'Manage pool' : 'View settings'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+            <Link href={`/pools/${pool.id}/schedule`}>
+              <Card className="py-0 transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center gap-3 px-4 py-4">
+                  <Calendar className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Schedule</p>
+                    <p className="text-sm text-muted-foreground">
+                      {pool.game_type === 'world_cup' ? 'Match schedule' : 'Weekly matchups'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
 
-        {pool.draft_status === 'completed' && myMember && (
-          <Link href={`/pools/${pool.id}/rosters/${myMember.id}`}>
-            <Card className="py-0 transition-colors hover:bg-muted/50">
-              <CardContent className="flex items-center gap-3 px-4 py-4">
-                <Shield className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="font-medium">My Squad</p>
-                  <p className="text-sm text-muted-foreground">View your roster</p>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
+            <Link href={`/pools/${pool.id}/settings`}>
+              <Card className="py-0 transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center gap-3 px-4 py-4">
+                  <Settings className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Settings</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isAdmin ? 'Manage pool' : 'View settings'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+
+            {pool.draft_status === 'completed' && myMember && (
+              <Link href={`/pools/${pool.id}/rosters/${myMember.id}`}>
+                <Card className="py-0 transition-colors hover:bg-muted/50">
+                  <CardContent className="flex items-center gap-3 px-4 py-4">
+                    <Shield className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="font-medium">My Squad</p>
+                      <p className="text-sm text-muted-foreground">View your roster</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            )}
+          </>
         )}
 
         {isAdmin && pool.draft_status === 'pre_draft' && (
