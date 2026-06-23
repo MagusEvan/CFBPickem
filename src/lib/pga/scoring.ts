@@ -49,12 +49,26 @@ export function calculatePgaStandings(
 ): ManagerStanding[] {
   const golferMap = new Map(golfers.map((g) => [g.id, g]))
 
+  // Determine which rounds have real data across the entire field.
+  // A round "exists" if any golfer in the tournament has real strokes (> 0) for it.
+  // This lets us detect missed cuts: if R3 exists but a golfer has 0/null for R3,
+  // they missed the cut — even if ESPN doesn't set STATUS_CUT.
+  const roundHasData = [false, false, false, false]
+  for (const g of golfers) {
+    const strokes = [g.r1_strokes, g.r2_strokes, g.r3_strokes, g.r4_strokes]
+    for (let r = 0; r < 4; r++) {
+      if (strokes[r] !== null && strokes[r] !== undefined && strokes[r]! > 0) {
+        roundHasData[r] = true
+      }
+    }
+  }
+
   const standings: ManagerStanding[] = members.map((member) => {
     const memberPicks = picks.filter((p) => p.member_id === member.id)
 
     const golferScores: GolferRoundScore[] = memberPicks.map((pick) => {
       const golfer = golferMap.get(pick.golfer_id)
-      const status = golfer?.status ?? 'active'
+      let status = golfer?.status ?? 'active'
 
       const roundStrokes: (number | null)[] = [
         golfer?.r1_strokes ?? null,
@@ -70,11 +84,17 @@ export function calculatePgaStandings(
       ]
       const isPenalty = [false, false, false, false]
 
+      // Detect missed cut from data: golfer has real R1+R2 scores but
+      // missing/zero R3 when R3 exists in the tournament field
+      const hasR1 = roundStrokes[0] !== null && roundStrokes[0]! > 0
+      const hasR2 = roundStrokes[1] !== null && roundStrokes[1]! > 0
+      const missingR3 = roundStrokes[2] === null || roundStrokes[2] === 0
+      if (hasR1 && hasR2 && missingR3 && roundHasData[2]) {
+        status = 'cut'
+      }
+
       // Apply missed-cut/WD penalties for missing rounds
       if (status === 'cut' || status === 'withdrawn') {
-        // Only apply penalty to rounds where the golfer has no real score
-        // but at least one earlier round was played (so the tournament has started for them)
-        // Note: 0 strokes is impossible in golf, so treat it as unplayed too
         const hasPlayedAnyRound = roundStrokes.some((s) => s !== null && s > 0)
         if (hasPlayedAnyRound) {
           for (let r = 0; r < 4; r++) {
@@ -101,7 +121,7 @@ export function calculatePgaStandings(
         golferId: pick.golfer_id,
         golferName: pick.golfer_name,
         position: golfer?.position ?? null,
-        status,
+        status,  // may be overridden to 'cut' by inference above
         teeTime: golfer?.tee_time ?? null,
         thru: golfer?.thru ?? null,
         totalScore,
