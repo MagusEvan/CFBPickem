@@ -72,12 +72,13 @@ export function calculatePgaStandings(
 
       // Apply missed-cut/WD penalties for missing rounds
       if (status === 'cut' || status === 'withdrawn') {
-        // Only apply penalty to rounds where the golfer has no score
+        // Only apply penalty to rounds where the golfer has no real score
         // but at least one earlier round was played (so the tournament has started for them)
-        const hasPlayedAnyRound = roundStrokes.some((s) => s !== null)
+        // Note: 0 strokes is impossible in golf, so treat it as unplayed too
+        const hasPlayedAnyRound = roundStrokes.some((s) => s !== null && s > 0)
         if (hasPlayedAnyRound) {
           for (let r = 0; r < 4; r++) {
-            if (roundStrokes[r] === null) {
+            if (roundStrokes[r] === null || roundStrokes[r] === 0) {
               roundStrokes[r] = missedCutScore
               roundScores[r] = missedCutScore - coursePar
               isPenalty[r] = true

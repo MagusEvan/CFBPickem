@@ -32,7 +32,8 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore }: P
                 R{r + 1}
               </th>
             ))}
-            <th className="px-2 py-2 text-center text-xs text-muted-foreground border-l">Contribution</th>
+            <th className="px-2 py-2 text-center text-xs text-muted-foreground border-l">Score</th>
+            <th className="px-2 py-2 text-center text-xs text-muted-foreground">Contribution</th>
           </tr>
         </thead>
         <tbody>
@@ -48,7 +49,9 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore }: P
         </tbody>
       </table>
       <div className="mt-3 space-y-0.5 text-xs text-muted-foreground">
-        <p>* = score counts toward manager&apos;s round total (best {topN})</p>
+        <p className="flex items-center gap-1">
+          <span className="font-bold text-[#228B22]">Green bold</span> = score counts toward manager&apos;s round total (best {topN})
+        </p>
         <p>CUT/WD penalty: {missedCutScore} strokes ({formatScoreToPar(missedCutScore - coursePar)}) per round</p>
       </div>
     </div>
@@ -59,7 +62,6 @@ function ManagerRow({
   standing,
   rank,
   activeRounds,
-  topN,
 }: {
   standing: ManagerStanding
   rank: number
@@ -82,6 +84,7 @@ function ManagerRow({
         <td className="px-2 py-2 text-center font-bold border-l">
           {formatScoreToPar(standing.cumulativeScore)}
         </td>
+        <td className="px-2 py-2" />
       </tr>
 
       {/* Golfer rows — always expanded */}
@@ -119,16 +122,19 @@ function ManagerRow({
                   penalty
                     ? 'text-muted-foreground/50 italic'
                     : counts
-                      ? 'font-medium'
+                      ? 'font-bold'
                       : 'text-muted-foreground'
                 }`}
+                style={counts && !penalty ? { color: '#228B22' } : undefined}
               >
                 {formatScoreToPar(score)}
-                {counts && !penalty && <span className="text-[8px] text-primary ml-0.5">*</span>}
               </td>
             )
           })}
           <td className="px-2 py-1.5 text-center text-xs border-l">
+            {formatScoreToPar(golfer.totalScore)}
+          </td>
+          <td className="px-2 py-1.5 text-center text-xs">
             {formatScoreToPar(golfer.contribution)}
           </td>
         </tr>
