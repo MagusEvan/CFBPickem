@@ -9,6 +9,12 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+
+interface PoolMemberInfo {
+  id: string
+  display_name: string
+}
 
 interface EspnEvent {
   id: string
@@ -34,10 +40,30 @@ export default function NewTournamentPage({
   const [golfersPerManager, setGolfersPerManager] = useState(7)
   const [topNScoring, setTopNScoring] = useState(5)
   const [enableScraps, setEnableScraps] = useState(false)
+  const [members, setMembers] = useState<PoolMemberInfo[]>([])
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set())
+  const [loadingMembers, setLoadingMembers] = useState(true)
   const seasonYear = new Date().getFullYear()
 
   useEffect(() => {
-    async function loadEvents() {
+    async function loadData() {
+      // Load members
+      const supabase = createClient()
+      const { data: memberData } = await supabase
+        .from('pool_members')
+        .select('id, profiles(display_name)')
+        .eq('pool_id', poolId)
+        .order('joined_at')
+      const mapped = (memberData ?? []).map((m) => ({
+        id: m.id,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        display_name: (m.profiles as any)?.display_name ?? 'Unknown',
+      }))
+      setMembers(mapped)
+      setSelectedMemberIds(new Set(mapped.map((m) => m.id)))
+      setLoadingMembers(false)
+
+      // Load events
       try {
         const res = await fetch(`/api/data/pga-events?year=${seasonYear}`)
         if (res.ok) {
@@ -50,8 +76,8 @@ export default function NewTournamentPage({
         setLoadingEvents(false)
       }
     }
-    loadEvents()
-  }, [seasonYear])
+    loadData()
+  }, [poolId, seasonYear])
 
   function selectEvent(event: EspnEvent) {
     setSelectedEvent(event)
@@ -74,6 +100,9 @@ export default function NewTournamentPage({
         if (selectedEvent.startDate) formData.set('start_date', selectedEvent.startDate.split('T')[0])
         if (selectedEvent.endDate) formData.set('end_date', selectedEvent.endDate.split('T')[0])
       }
+      for (const id of selectedMemberIds) {
+        formData.append('member_ids', id)
+      }
       await createTournament(formData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -81,7 +110,16 @@ export default function NewTournamentPage({
     }
   }
 
-  const isValid = name.length > 0 && topNScoring <= golfersPerManager
+  function toggleMember(id: string) {
+    setSelectedMemberIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const isValid = name.length > 0 && topNScoring <= golfersPerManager && selectedMemberIds.size >= 2
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -180,6 +218,40 @@ export default function NewTournamentPage({
                   Best {topNScoring} of {golfersPerManager} scores count per round
                 </p>
               </div>
+            </div>
+
+            {/* Participant selection */}
+            <div className="space-y-2">
+              <Label>Participants ({selectedMemberIds.size} of {members.length})</Label>
+              {loadingMembers ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Spinner /> Loading managers...
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {members.map((m) => (
+                    <label
+                      key={m.id}
+                      className={`flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm transition-colors ${
+                        selectedMemberIds.has(m.id)
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedMemberIds.has(m.id)}
+                        onChange={() => toggleMember(m.id)}
+                        className="accent-primary"
+                      />
+                      {m.display_name}
+                    </label>
+                  ))}
+                  {selectedMemberIds.size < 2 && (
+                    <p className="text-xs text-red-600">Select at least 2 participants.</p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
