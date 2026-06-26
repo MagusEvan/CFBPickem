@@ -27,13 +27,14 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore }: P
           <tr className="border-b">
             <th className="px-2 py-2 text-left text-xs text-muted-foreground w-8">#</th>
             <th className="px-2 py-2 text-left text-xs text-muted-foreground">Manager</th>
+            <th className="px-2 py-2 text-center text-xs text-muted-foreground border-l">Pos</th>
+            <th className="px-2 py-2 text-center text-xs text-muted-foreground">Total</th>
             {activeRounds.map((r) => (
-              <th key={r} className="px-2 py-2 text-center text-xs text-muted-foreground">
+              <th key={r} className="px-2 py-2 text-center text-xs text-muted-foreground border-l first:border-l">
                 R{r + 1}
               </th>
             ))}
-            <th className="px-2 py-2 text-center text-xs text-muted-foreground border-l">Score</th>
-            <th className="px-2 py-2 text-center text-xs text-muted-foreground">Contribution</th>
+            <th className="px-2 py-2 text-center text-xs text-muted-foreground border-l">Contribution</th>
           </tr>
         </thead>
         <tbody>
@@ -76,15 +77,18 @@ function ManagerRow({
         <td className="px-2 py-2 font-medium whitespace-nowrap">
           {standing.memberName}
         </td>
+        <td className="px-2 py-2 text-center font-bold border-l">
+          {rank}
+        </td>
+        <td className="px-2 py-2 text-center font-bold">
+          {formatScoreToPar(standing.cumulativeScore)}
+        </td>
         {activeRounds.map((r) => (
-          <td key={r} className="px-2 py-2 text-center font-medium">
+          <td key={r} className="px-2 py-2 text-center font-medium border-l">
             {formatScoreToPar(standing.roundTotals[r])}
           </td>
         ))}
-        <td className="px-2 py-2 text-center font-bold border-l">
-          {formatScoreToPar(standing.cumulativeScore)}
-        </td>
-        <td className="px-2 py-2" />
+        <td className="px-2 py-2 border-l" />
       </tr>
 
       {/* Golfer rows — always expanded */}
@@ -100,9 +104,6 @@ function ManagerRow({
               {golfer.status === 'withdrawn' && (
                 <Badge variant="outline" className="text-[10px]">WD</Badge>
               )}
-              {golfer.position && golfer.status === 'active' && (
-                <span className="text-[10px] text-muted-foreground">({golfer.position})</span>
-              )}
               {golfer.thru && golfer.status === 'active' && golfer.thru !== 'F' && (
                 <span className="text-[10px] text-muted-foreground">thru {golfer.thru}</span>
               )}
@@ -111,6 +112,12 @@ function ManagerRow({
               )}
             </div>
           </td>
+          <td className="px-2 py-1.5 text-center text-xs text-muted-foreground border-l">
+            {golfer.position ?? '—'}
+          </td>
+          <td className="px-2 py-1.5 text-center text-xs">
+            {formatScoreToPar(golfer.totalScore)}
+          </td>
           {activeRounds.map((r) => {
             const score = golfer.roundScores[r]
             const counts = golfer.countsForRound[r]
@@ -118,7 +125,7 @@ function ManagerRow({
             return (
               <td
                 key={r}
-                className={`px-2 py-1.5 text-center text-xs ${
+                className={`px-2 py-1.5 text-center text-xs border-l ${
                   penalty
                     ? 'text-muted-foreground/50 italic'
                     : counts
@@ -132,9 +139,6 @@ function ManagerRow({
             )
           })}
           <td className="px-2 py-1.5 text-center text-xs border-l">
-            {formatScoreToPar(golfer.totalScore)}
-          </td>
-          <td className="px-2 py-1.5 text-center text-xs">
             {formatScoreToPar(golfer.contribution)}
           </td>
         </tr>
