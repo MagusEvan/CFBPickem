@@ -157,28 +157,40 @@ export default function NewTournamentPage({
                 </div>
               ) : events.length > 0 ? (
                 <div className="grid gap-2">
-                  {events.map((event) => (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => selectEvent(event)}
-                      className={`rounded-md border p-3 text-left text-sm transition-colors ${
-                        selectedEvent?.id === event.id
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border text-muted-foreground hover:bg-muted/50'
-                      }`}
-                    >
-                      <p className="font-medium text-foreground">{event.name}</p>
-                      <p className="text-xs">
-                        {event.startDate
-                          ? new Date(event.startDate).toLocaleDateString('en-US', {
-                              month: 'short', day: 'numeric', year: 'numeric',
-                            })
-                          : 'TBD'}
-                        {event.venue && ` · ${event.venue}`}
-                      </p>
-                    </button>
-                  ))}
+                  {events.map((event) => {
+                    const isCompleted = event.status === 'STATUS_FINAL'
+                    const isLive = event.status === 'STATUS_IN_PROGRESS'
+                    const isDisabled = isCompleted || isLive
+                    return (
+                      <button
+                        key={event.id}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => !isDisabled && selectEvent(event)}
+                        className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                          isDisabled
+                            ? 'opacity-50 cursor-not-allowed border-border'
+                            : selectedEvent?.id === event.id
+                              ? 'border-primary bg-primary/5 text-primary'
+                              : 'border-border text-muted-foreground hover:bg-muted/50'
+                        }`}
+                      >
+                        <p className={`font-medium ${isDisabled ? 'text-muted-foreground' : 'text-foreground'}`}>
+                          {event.name}
+                          {isCompleted && <span className="ml-2 text-xs font-normal text-muted-foreground">(Completed)</span>}
+                          {isLive && <span className="ml-2 text-xs font-normal text-muted-foreground">(In Progress)</span>}
+                        </p>
+                        <p className="text-xs">
+                          {event.startDate
+                            ? new Date(event.startDate).toLocaleDateString('en-US', {
+                                month: 'short', day: 'numeric', year: 'numeric',
+                              })
+                            : 'TBD'}
+                          {event.venue && ` · ${event.venue}`}
+                        </p>
+                      </button>
+                    )
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">

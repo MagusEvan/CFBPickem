@@ -9,6 +9,7 @@ const MAJOR_KEYWORDS = [
   'u.s. open',
   'the open',
   'british open',
+  'players',
 ]
 
 function isMajor(name: string): boolean {
