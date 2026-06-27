@@ -49,6 +49,22 @@ export function calculatePgaStandings(
 ): ManagerStanding[] {
   const golferMap = new Map(golfers.map((g) => [g.id, g]))
 
+  // Compute tournament positions from total_score across the entire field.
+  // Sort all golfers by total_score ascending, assign positions with ties (T1, T2, etc.)
+  const positionMap = new Map<string, string>()
+  const sortedField = [...golfers]
+    .filter((g) => g.total_score !== null && g.total_score !== undefined)
+    .sort((a, b) => a.total_score! - b.total_score!)
+  for (let i = 0; i < sortedField.length; i++) {
+    // Find how many golfers share this score
+    const score = sortedField[i].total_score!
+    const tiedStart = sortedField.findIndex((g) => g.total_score === score)
+    const tiedCount = sortedField.filter((g) => g.total_score === score).length
+    const pos = tiedStart + 1
+    const label = tiedCount > 1 ? `T${pos}` : `${pos}`
+    positionMap.set(sortedField[i].id, label)
+  }
+
   // Determine which rounds have real data across the entire field.
   // A round "exists" if any golfer in the tournament has real strokes (> 0) for it.
   // This lets us detect missed cuts: if R3 exists but a golfer has 0/null for R3,
@@ -120,7 +136,7 @@ export function calculatePgaStandings(
       return {
         golferId: pick.golfer_id,
         golferName: pick.golfer_name,
-        position: golfer?.position ?? null,
+        position: positionMap.get(pick.golfer_id) ?? golfer?.position ?? null,
         status,  // may be overridden to 'cut' by inference above
         teeTime: golfer?.tee_time ?? null,
         thru: golfer?.thru ?? null,
