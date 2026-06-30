@@ -82,7 +82,7 @@ export default async function PgaStandingsPage({
               topN={tournament.top_n_scoring}
               coursePar={tournament.course_par}
               missedCutScore={tournament.missed_cut_score}
-              countingHighlightColor={pool.counting_highlight_color}
+              countingHighlightColor={pool.counting_highlight_color ?? '#e6f4e6'}
             />
           </CardContent>
         </Card>

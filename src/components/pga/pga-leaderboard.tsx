@@ -77,7 +77,7 @@ function ManagerRow({
   return (
     <>
       {/* Manager summary row */}
-      <tr className="border-b bg-muted/20">
+      <tr className="border-b bg-muted/50">
         <td className="px-2 py-2 text-muted-foreground">{rank}</td>
         <td className="px-2 py-2 font-medium whitespace-nowrap">
           {standing.memberName}
