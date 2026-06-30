@@ -136,19 +136,24 @@ export default async function SchedulePage({
   const teamMap = new Map(teams.map((t) => [t.id, t]))
 
   if (pool.game_type === 'world_cup') {
-    // Default to the latest stage that has games (most current round)
+    // Default to the latest stage that has played/in-progress games
     let defaultStage = 'group'
     if (!stageParam) {
       const supabaseWc = await createClient()
       const { data: wcGames } = await supabaseWc
         .from('cached_games')
-        .select('stage')
+        .select('stage, status')
         .eq('game_type', 'world_cup')
         .eq('season_year', pool.season_year)
-      const stages = new Set((wcGames ?? []).map((g: { stage: string | null }) => g.stage ?? 'group'))
-      // Pick the latest stage in STAGE_ORDER that has games
+      const rows = (wcGames ?? []) as { stage: string | null; status: string }[]
+      // Find stages with at least one completed or in-progress game
+      const playedStages = new Set(
+        rows.filter((g) => g.status === 'final' || g.status === 'in_progress')
+          .map((g) => g.stage ?? 'group')
+      )
+      // Pick the latest stage with played games
       for (let i = STAGE_ORDER.length - 1; i >= 0; i--) {
-        if (stages.has(STAGE_ORDER[i])) {
+        if (playedStages.has(STAGE_ORDER[i])) {
           defaultStage = STAGE_ORDER[i]
           break
         }
