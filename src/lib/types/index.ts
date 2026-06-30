@@ -22,6 +22,7 @@ export interface Pool {
   game_type: 'cfb' | 'world_cup' | 'pga'
   teams_per_manager: number | null
   scoring_config: WorldCupScoringConfig | null
+  bg_color: string | null
   created_at: string
 }
 

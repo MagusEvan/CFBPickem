@@ -53,7 +53,10 @@ export default async function PoolsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           {pools.map((pool) => (
             <Link key={pool.id} href={`/pools/${pool.id}`}>
-              <Card className="transition-colors hover:bg-muted/50">
+              <Card
+                className="transition-colors hover:bg-muted/50"
+                style={pool.bg_color ? { backgroundColor: pool.bg_color } : undefined}
+              >
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{pool.name}</CardTitle>

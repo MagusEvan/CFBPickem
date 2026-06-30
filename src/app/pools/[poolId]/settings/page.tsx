@@ -32,10 +32,11 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
     const supabase = await createClient()
     const name = formData.get('name') as string
     const maxManagers = Number(formData.get('max_managers'))
+    const bgColor = (formData.get('bg_color') as string) || null
 
     await supabase
       .from('pools')
-      .update({ name, max_managers: maxManagers })
+      .update({ name, max_managers: maxManagers, bg_color: bgColor })
       .eq('id', poolId)
 
     redirect(`/pools/${poolId}`)
@@ -129,6 +130,21 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
                   min={Math.max(2, members.length)}
                   max={isWorldCup ? 48 : 16}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bg_color">Card Background Color</Label>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="bg_color"
+                    name="bg_color"
+                    type="color"
+                    defaultValue={pool.bg_color || '#ffffff'}
+                    className="h-9 w-14 cursor-pointer rounded border border-input p-1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Shown on the My Pools page
+                  </p>
+                </div>
               </div>
               <PoolInfoFields pool={pool} isWorldCup={isWorldCup} />
             </CardContent>
