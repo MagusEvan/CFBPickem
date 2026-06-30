@@ -35,10 +35,11 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
     const bgColor = (formData.get('bg_color') as string) || null
     const fontColor = (formData.get('font_color') as string) || null
     const subfontColor = (formData.get('subfont_color') as string) || null
+    const borderColor = (formData.get('border_color') as string) || null
 
     await supabase
       .from('pools')
-      .update({ name, max_managers: maxManagers, bg_color: bgColor, font_color: fontColor, subfont_color: subfontColor })
+      .update({ name, max_managers: maxManagers, bg_color: bgColor, font_color: fontColor, subfont_color: subfontColor, border_color: borderColor })
       .eq('id', poolId)
 
     redirect(`/pools/${poolId}`)
@@ -136,7 +137,7 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
               <div className="space-y-2">
                 <Label>Pool Card Colors</Label>
                 <p className="text-xs text-muted-foreground">Shown on the My Pools page</p>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   <div className="space-y-1">
                     <Label htmlFor="bg_color" className="text-xs text-muted-foreground">Background</Label>
                     <input
@@ -164,6 +165,16 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
                       name="subfont_color"
                       type="color"
                       defaultValue={pool.subfont_color || '#737373'}
+                      className="h-9 w-14 cursor-pointer rounded border border-input p-1"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="border_color" className="text-xs text-muted-foreground">Border</Label>
+                    <input
+                      id="border_color"
+                      name="border_color"
+                      type="color"
+                      defaultValue={pool.border_color || '#e5e5e5'}
                       className="h-9 w-14 cursor-pointer rounded border border-input p-1"
                     />
                   </div>

@@ -55,7 +55,10 @@ export default async function PoolsPage() {
             <Link key={pool.id} href={`/pools/${pool.id}`}>
               <Card
                 className="transition-colors hover:bg-muted/50"
-                style={pool.bg_color ? { backgroundColor: pool.bg_color } : undefined}
+                style={{
+                  ...(pool.bg_color ? { backgroundColor: pool.bg_color } : {}),
+                  ...(pool.border_color ? { borderColor: pool.border_color } : {}),
+                }}
               >
                 <CardHeader>
                   <div className="flex items-center justify-between">
