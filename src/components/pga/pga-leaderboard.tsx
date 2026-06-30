@@ -9,9 +9,11 @@ interface PgaLeaderboardProps {
   topN: number
   coursePar: number
   missedCutScore: number
+  countingHighlightColor?: string | null
 }
 
-export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore }: PgaLeaderboardProps) {
+export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore, countingHighlightColor }: PgaLeaderboardProps) {
+  const highlightBg = countingHighlightColor || null
   // Determine which rounds have any data
   const activeRounds: number[] = []
   for (let r = 0; r < 4; r++) {
@@ -45,6 +47,7 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore }: P
               rank={idx + 1}
               activeRounds={activeRounds}
               topN={topN}
+              highlightBg={highlightBg}
             />
           ))}
         </tbody>
@@ -63,11 +66,13 @@ function ManagerRow({
   standing,
   rank,
   activeRounds,
+  highlightBg,
 }: {
   standing: ManagerStanding
   rank: number
   activeRounds: number[]
   topN: number
+  highlightBg: string | null
 }) {
   return (
     <>
@@ -93,16 +98,16 @@ function ManagerRow({
 
       {/* Golfer rows — always expanded */}
       {standing.golfers.map((golfer) => (
-        <tr key={golfer.golferId} className="border-b">
-          <td className="px-2 py-1.5" />
-          <td className="px-2 py-1.5 pl-6 text-muted-foreground">
+        <tr key={golfer.golferId} className="border-b h-9">
+          <td className="px-2" />
+          <td className="px-2 pl-6 text-muted-foreground">
             <div className="flex items-center gap-2">
               <span className="text-xs">{golfer.golferName}</span>
               {golfer.status === 'cut' && (
-                <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">CUT</Badge>
+                <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30 py-0 leading-tight">CUT</Badge>
               )}
               {golfer.status === 'withdrawn' && (
-                <Badge variant="outline" className="text-[10px]">WD</Badge>
+                <Badge variant="outline" className="text-[10px] py-0 leading-tight">WD</Badge>
               )}
               {golfer.thru && golfer.status === 'active' && golfer.thru !== 'F' && (
                 <span className="text-[10px] text-muted-foreground">thru {golfer.thru}</span>
@@ -112,33 +117,38 @@ function ManagerRow({
               )}
             </div>
           </td>
-          <td className="px-2 py-1.5 text-center text-xs text-muted-foreground border-l">
+          <td className="px-2 text-center text-xs text-muted-foreground border-l">
             {golfer.position ?? '—'}
           </td>
-          <td className="px-2 py-1.5 text-center text-xs">
+          <td className="px-2 text-center text-xs">
             {formatScoreToPar(golfer.totalScore)}
           </td>
           {activeRounds.map((r) => {
             const score = golfer.roundScores[r]
             const counts = golfer.countsForRound[r]
             const penalty = golfer.isPenalty[r]
+            const cellStyle: React.CSSProperties = {}
+            if (counts && !penalty) {
+              cellStyle.color = '#228B22'
+              if (highlightBg) cellStyle.backgroundColor = highlightBg
+            }
             return (
               <td
                 key={r}
-                className={`px-2 py-1.5 text-center text-xs border-l ${
+                className={`px-2 text-center text-xs border-l ${
                   penalty
                     ? 'text-muted-foreground/50 italic'
                     : counts
                       ? 'font-bold'
                       : 'text-muted-foreground'
                 }`}
-                style={counts && !penalty ? { color: '#228B22' } : undefined}
+                style={Object.keys(cellStyle).length > 0 ? cellStyle : undefined}
               >
                 {formatScoreToPar(score)}
               </td>
             )
           })}
-          <td className="px-2 py-1.5 text-center text-xs border-l">
+          <td className="px-2 text-center text-xs border-l">
             {formatScoreToPar(golfer.contribution)}
           </td>
         </tr>

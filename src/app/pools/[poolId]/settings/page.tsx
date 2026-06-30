@@ -36,10 +36,11 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
     const fontColor = (formData.get('font_color') as string) || null
     const subfontColor = (formData.get('subfont_color') as string) || null
     const borderColor = (formData.get('border_color') as string) || null
+    const countingHighlightColor = (formData.get('counting_highlight_color') as string) || null
 
     await supabase
       .from('pools')
-      .update({ name, max_managers: maxManagers, bg_color: bgColor, font_color: fontColor, subfont_color: subfontColor, border_color: borderColor })
+      .update({ name, max_managers: maxManagers, bg_color: bgColor, font_color: fontColor, subfont_color: subfontColor, border_color: borderColor, counting_highlight_color: countingHighlightColor })
       .eq('id', poolId)
 
     redirect(`/pools/${poolId}`)
@@ -180,6 +181,23 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
                   </div>
                 </div>
               </div>
+              {pool.game_type === 'pga' && (
+                <div className="space-y-2">
+                  <Label htmlFor="counting_highlight_color">Counting Score Cell Background</Label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      id="counting_highlight_color"
+                      name="counting_highlight_color"
+                      type="color"
+                      defaultValue={pool.counting_highlight_color || '#e6f4e6'}
+                      className="h-9 w-14 cursor-pointer rounded border border-input p-1"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Background color for top-N counting scores on the leaderboard
+                    </p>
+                  </div>
+                </div>
+              )}
               <PoolInfoFields pool={pool} isWorldCup={isWorldCup} />
             </CardContent>
             <CardFooter>

@@ -26,6 +26,7 @@ export interface Pool {
   font_color: string | null
   subfont_color: string | null
   border_color: string | null
+  counting_highlight_color: string | null
   created_at: string
 }
 
