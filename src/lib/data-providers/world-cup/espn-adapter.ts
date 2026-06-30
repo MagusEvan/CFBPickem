@@ -55,13 +55,13 @@ function parseGame(event: any): WcGame | null {
   const status = event.status?.type?.name
   const completed = event.status?.type?.completed === true
   let gameStatus: 'scheduled' | 'in_progress' | 'final' = 'scheduled'
-  if (completed || status === 'STATUS_FINAL' || status === 'STATUS_FULL_TIME') gameStatus = 'final'
+  if (completed || status === 'STATUS_FINAL' || status === 'STATUS_FULL_TIME' || status === 'STATUS_FINAL_PEN' || status === 'STATUS_FINAL_AET') gameStatus = 'final'
   else if (status === 'STATUS_IN_PROGRESS' || status === 'STATUS_HALFTIME' || status === 'STATUS_FIRST_HALF' || status === 'STATUS_SECOND_HALF') gameStatus = 'in_progress'
 
   // Detect OT and shootout from status detail
   const detail = (event.status?.type?.detail || '').toLowerCase()
-  const isOvertime = detail.includes('extra time') || detail.includes('aet') || detail.includes('overtime')
-  const isShootout = detail.includes('penalties') || detail.includes('shootout')
+  const isOvertime = detail.includes('extra time') || detail.includes('aet') || detail.includes('overtime') || status === 'STATUS_FINAL_AET'
+  const isShootout = detail.includes('penalties') || detail.includes('shootout') || detail.includes('pens') || status === 'STATUS_FINAL_PEN'
 
   // Penalty scores are in the competition's format or in competitor stats
   let homePenaltyScore: number | null = null
