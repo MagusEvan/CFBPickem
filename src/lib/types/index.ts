@@ -23,6 +23,8 @@ export interface Pool {
   teams_per_manager: number | null
   scoring_config: WorldCupScoringConfig | null
   bg_color: string | null
+  font_color: string | null
+  subfont_color: string | null
   created_at: string
 }
 

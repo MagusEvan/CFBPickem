@@ -59,10 +59,19 @@ export default async function PoolsPage() {
               >
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{pool.name}</CardTitle>
-                    <DraftStatusBadge status={pool.draft_status} />
+                    <CardTitle
+                      className="text-lg"
+                      style={pool.font_color ? { color: pool.font_color } : undefined}
+                    >
+                      {pool.name}
+                    </CardTitle>
+                    {pool.game_type !== 'pga' && (
+                      <DraftStatusBadge status={pool.draft_status} />
+                    )}
                   </div>
-                  <CardDescription>
+                  <CardDescription
+                    style={pool.subfont_color ? { color: pool.subfont_color } : undefined}
+                  >
                     {pool.game_type === 'world_cup' ? `World Cup ${pool.season_year}` : `${pool.season_year} Season`} &middot; {pool.max_managers} managers
                   </CardDescription>
                 </CardHeader>
@@ -79,7 +88,7 @@ function DraftStatusBadge({ status }: { status: Pool['draft_status'] }) {
   const variants: Record<Pool['draft_status'], { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
     pre_draft: { label: 'Pre-Draft', variant: 'outline' },
     in_progress: { label: 'Drafting', variant: 'default' },
-    completed: { label: 'Season', variant: 'secondary' },
+    completed: { label: 'In-Season', variant: 'secondary' },
   }
   const { label, variant } = variants[status]
   return <Badge variant={variant}>{label}</Badge>

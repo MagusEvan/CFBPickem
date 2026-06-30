@@ -33,10 +33,12 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
     const name = formData.get('name') as string
     const maxManagers = Number(formData.get('max_managers'))
     const bgColor = (formData.get('bg_color') as string) || null
+    const fontColor = (formData.get('font_color') as string) || null
+    const subfontColor = (formData.get('subfont_color') as string) || null
 
     await supabase
       .from('pools')
-      .update({ name, max_managers: maxManagers, bg_color: bgColor })
+      .update({ name, max_managers: maxManagers, bg_color: bgColor, font_color: fontColor, subfont_color: subfontColor })
       .eq('id', poolId)
 
     redirect(`/pools/${poolId}`)
@@ -132,18 +134,39 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="bg_color">Card Background Color</Label>
-                <div className="flex items-center gap-3">
-                  <input
-                    id="bg_color"
-                    name="bg_color"
-                    type="color"
-                    defaultValue={pool.bg_color || '#ffffff'}
-                    className="h-9 w-14 cursor-pointer rounded border border-input p-1"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Shown on the My Pools page
-                  </p>
+                <Label>Pool Card Colors</Label>
+                <p className="text-xs text-muted-foreground">Shown on the My Pools page</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="bg_color" className="text-xs text-muted-foreground">Background</Label>
+                    <input
+                      id="bg_color"
+                      name="bg_color"
+                      type="color"
+                      defaultValue={pool.bg_color || '#ffffff'}
+                      className="h-9 w-14 cursor-pointer rounded border border-input p-1"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="font_color" className="text-xs text-muted-foreground">Title</Label>
+                    <input
+                      id="font_color"
+                      name="font_color"
+                      type="color"
+                      defaultValue={pool.font_color || '#000000'}
+                      className="h-9 w-14 cursor-pointer rounded border border-input p-1"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="subfont_color" className="text-xs text-muted-foreground">Subtitle</Label>
+                    <input
+                      id="subfont_color"
+                      name="subfont_color"
+                      type="color"
+                      defaultValue={pool.subfont_color || '#737373'}
+                      className="h-9 w-14 cursor-pointer rounded border border-input p-1"
+                    />
+                  </div>
                 </div>
               </div>
               <PoolInfoFields pool={pool} isWorldCup={isWorldCup} />
