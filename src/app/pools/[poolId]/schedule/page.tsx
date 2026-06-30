@@ -136,6 +136,25 @@ export default async function SchedulePage({
   const teamMap = new Map(teams.map((t) => [t.id, t]))
 
   if (pool.game_type === 'world_cup') {
+    // Default to the latest stage that has games (most current round)
+    let defaultStage = 'group'
+    if (!stageParam) {
+      const supabaseWc = await createClient()
+      const { data: wcGames } = await supabaseWc
+        .from('cached_games')
+        .select('stage')
+        .eq('game_type', 'world_cup')
+        .eq('season_year', pool.season_year)
+      const stages = new Set((wcGames ?? []).map((g: { stage: string | null }) => g.stage ?? 'group'))
+      // Pick the latest stage in STAGE_ORDER that has games
+      for (let i = STAGE_ORDER.length - 1; i >= 0; i--) {
+        if (stages.has(STAGE_ORDER[i])) {
+          defaultStage = STAGE_ORDER[i]
+          break
+        }
+      }
+    }
+
     return (
       <WorldCupSchedule
         poolId={poolId}
@@ -144,7 +163,7 @@ export default async function SchedulePage({
         teamToManager={teamToManager}
         teamToRound={teamToRound}
         draftedTeamIds={draftedTeamIds}
-        selectedStage={stageParam || 'group'}
+        selectedStage={stageParam || defaultStage}
         scoringConfig={pool.scoring_config ?? DEFAULT_WC_SCORING}
         isAdmin={isAdmin}
         userTz={userTz}
