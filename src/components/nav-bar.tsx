@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { User, LogOut } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export function NavBar() {
   const { user, signOut } = useAuth()
@@ -30,6 +31,8 @@ export function NavBar() {
         <Link href="/pools" className="text-lg font-bold">
           Great Value Pickems
         </Link>
+        <div className="flex items-center gap-1">
+        <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md p-2 hover:bg-muted">
             <User className="h-5 w-5" />
@@ -44,6 +47,7 @@ export function NavBar() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
     </header>
   )
