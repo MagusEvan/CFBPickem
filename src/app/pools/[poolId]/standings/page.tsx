@@ -258,7 +258,7 @@ async function WorldCupStandings({
 
   const [picksRes, gamesRes, wcScrapsRes] = await Promise.all([
     supabase.from('draft_picks').select('*').eq('pool_id', poolId),
-    supabase.from('cached_games').select('id,home_team_id,away_team_id,home_score,away_score,status,stage,is_overtime,is_shootout,home_penalty_score,away_penalty_score').eq('game_type', 'world_cup').eq('season_year', pool.season_year),
+    supabase.from('cached_games').select('id,home_team_id,away_team_id,home_score,away_score,status,stage,is_overtime,is_shootout,home_penalty_score,away_penalty_score,start_time').eq('game_type', 'world_cup').eq('season_year', pool.season_year).order('start_time', { ascending: true, nullsFirst: false }),
     supabase.from('wc_scraps_teams').select('*').eq('pool_id', poolId),
   ])
 
