@@ -34,8 +34,14 @@ const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
   },
 }
 
+const GAME_OPTIONS: { key: 'cfb' | 'world_cup' | 'pga'; name: string; description: string }[] = [
+  { key: 'cfb', name: 'College Football', description: 'Draft conferences and ride your teams all season' },
+  { key: 'world_cup', name: 'World Cup', description: 'Draft national teams through group stage and knockouts' },
+  { key: 'pga', name: 'PGA Tour', description: 'Draft golfers tournament by tournament' },
+]
+
 export default function CreatePoolPage() {
-  const [gameType, setGameType] = useState<'cfb' | 'world_cup' | 'pga'>('cfb')
+  const [gameType, setGameType] = useState<'cfb' | 'world_cup' | 'pga' | null>(null)
   const [selectedConferences, setSelectedConferences] = useState<string[]>(DEFAULT_SELECTED)
   const [maxManagers, setMaxManagers] = useState(10)
   const [teamsPerManager, setTeamsPerManager] = useState(4)
@@ -61,6 +67,7 @@ export default function CreatePoolPage() {
   }
 
   async function handleSubmit(formData: FormData) {
+    if (!gameType) return
     setLoading(true)
     setError(null)
     try {
@@ -84,58 +91,59 @@ export default function CreatePoolPage() {
       ? !wcTeamOverflow && teamsPerManager >= 1
       : true // PGA — no extra validation needed
 
+  // Step 1: game selection only
+  if (gameType === null) {
+    return (
+      <div className="mx-auto max-w-lg">
+        <Card>
+          <CardHeader>
+            <CardTitle>Create a Pool</CardTitle>
+            <CardDescription>Choose a game to get started</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {GAME_OPTIONS.map((game) => (
+              <button
+                key={game.key}
+                type="button"
+                onClick={() => setGameType(game.key)}
+                className="flex w-full flex-col items-start gap-1 rounded-md border border-border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+              >
+                <span className="text-sm font-semibold">{game.name}</span>
+                <span className="text-xs text-muted-foreground">{game.description}</span>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Step 2: league creation options
+  const selectedGame = GAME_OPTIONS.find((g) => g.key === gameType)!
+
   return (
     <div className="mx-auto max-w-lg">
       <Card>
         <CardHeader>
-          <CardTitle>Create a Pool</CardTitle>
-          <CardDescription>Set up your draft pool and invite managers</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Create a {selectedGame.name} Pool</CardTitle>
+              <CardDescription>Set up your draft pool and invite managers</CardDescription>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGameType(null)}
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              Change game
+            </button>
+          </div>
         </CardHeader>
         <form action={handleSubmit}>
           <CardContent className="space-y-6">
             {error && (
               <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>
             )}
-
-            {/* Game Type Selector */}
-            <div className="space-y-2">
-              <Label>Game Type</Label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setGameType('cfb')}
-                  className={`rounded-md border p-3 text-sm font-medium transition-colors ${
-                    gameType === 'cfb'
-                      ? 'border-primary bg-primary/5 text-primary'
-                      : 'border-border text-muted-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  College Football
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGameType('world_cup')}
-                  className={`rounded-md border p-3 text-sm font-medium transition-colors ${
-                    gameType === 'world_cup'
-                      ? 'border-primary bg-primary/5 text-primary'
-                      : 'border-border text-muted-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  World Cup
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGameType('pga')}
-                  className={`rounded-md border p-3 text-sm font-medium transition-colors ${
-                    gameType === 'pga'
-                      ? 'border-primary bg-primary/5 text-primary'
-                      : 'border-border text-muted-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  PGA Tour
-                </button>
-              </div>
-            </div>
 
             <div className="space-y-2">
               <Label htmlFor="name">Pool Name</Label>
