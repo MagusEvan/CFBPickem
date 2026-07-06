@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Users, Trophy, Calendar, Settings, Shield, Share2, Flag } from 'lucide-react'
 import { InviteLinkButton } from '@/components/pool/invite-link'
+import { getGame } from '@/lib/games/registry'
 
 export const revalidate = 60
 
@@ -29,7 +30,7 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
         <div>
           <h1 className="text-2xl font-bold">{pool.name}</h1>
           <p className="text-muted-foreground">
-            {pool.game_type === 'world_cup' ? `World Cup ${pool.season_year}` : pool.game_type === 'pga' ? `PGA Tour ${pool.season_year}` : `${pool.season_year} Season`}
+            {getGame(pool.game_type).poolLabel(pool.season_year)}
           </p>
         </div>
         <Badge variant={pool.draft_status === 'completed' ? 'secondary' : 'outline'}>
@@ -105,7 +106,7 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
                   <div>
                     <p className="font-medium">Schedule</p>
                     <p className="text-sm text-muted-foreground">
-                      {pool.game_type === 'world_cup' ? 'Match schedule' : 'Weekly matchups'}
+                      {getGame(pool.game_type).scheduleDescription}
                     </p>
                   </div>
                 </CardContent>

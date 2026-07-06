@@ -1,0 +1,190 @@
+// Server-side game registry — pool-creation parsing and game-data refresh,
+// keyed by GameType. Client-safe metadata lives in ./registry.ts.
+
+import { z } from 'zod'
+import type { GameType } from '@/lib/types'
+import type { createAdminClient } from '@/lib/supabase/admin'
+import { GAMES, TOTAL_WC_TEAMS } from './registry'
+
+type Admin = ReturnType<typeof createAdminClient>
+
+export interface GameServerDefinition {
+  key: GameType
+  /**
+   * Parse and validate a pool-creation form, returning the game-specific
+   * pool insert fields (name, season_year, max_managers, draft_order_mode,
+   * game_type, scoring_strategy, num_rounds, conferences, teams_per_manager,
+   * scoring_config). Caller adds admin_id and invite_code.
+   */
+  parsePoolInsert: (formData: FormData) => Record<string, unknown>
+  /**
+   * Refresh cached game data from the external provider for a season.
+   * null = game has no pool-level game feed (PGA refreshes per tournament).
+   */
+  refreshGames: ((admin: Admin, seasonYear: number) => Promise<void>) | null
+}
+
+// --- Shared creation-form parsing ---
+
+function baseSchema(gameType: GameType) {
+  const { min, max } = GAMES[gameType].maxManagers
+  return z.object({
+    name: z.string().min(1).max(100),
+    season_year: z.number().int().min(2024).max(2030),
+    max_managers: z.number().int().min(min).max(max),
+    draft_order_mode: z.enum(['manual', 'random']),
+  })
+}
+
+function baseFormValues(formData: FormData) {
+  return {
+    name: formData.get('name'),
+    season_year: Number(formData.get('season_year')),
+    max_managers: Number(formData.get('max_managers')),
+    draft_order_mode: formData.get('draft_order_mode') || 'random',
+  }
+}
+
+const wcScoringConfigSchema = z.object({
+  group: z.object({
+    win: z.number(), draw: z.number(), goal_points: z.number(),
+    goal_cap: z.number(), shutout: z.number(),
+  }),
+  knockout: z.object({
+    win: z.number(), ot_win: z.number(), shootout_win: z.number(),
+    shootout_loss: z.number(), ot_loss: z.number(), loss: z.number(),
+    goal_points: z.number(), goal_cap: z.number().nullable(), shutout: z.number(),
+  }),
+})
+
+// --- Refresh implementations ---
+
+async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> {
+  const { getDataProvider } = await import('@/lib/data-providers')
+  const provider = getDataProvider()
+
+  // Fetch all 15 weeks in parallel
+  const weeks = Array.from({ length: 15 }, (_, i) => i + 1)
+  const allGames = await Promise.all(
+    weeks.map((week) => provider.getGamesForWeek(seasonYear, week))
+  )
+
+  const now = new Date().toISOString()
+  const rows = allGames.flat().map((g) => ({
+    id: g.id,
+    season_year: g.seasonYear,
+    week: g.week,
+    home_team_id: g.homeTeam.id,
+    away_team_id: g.awayTeam.id,
+    home_score: g.homeTeam.score,
+    away_score: g.awayTeam.score,
+    status: g.status,
+    status_detail: g.statusDetail,
+    start_time: g.startTime,
+    venue: g.venue,
+    broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
+    fetched_at: now,
+  }))
+
+  if (rows.length > 0) {
+    const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+    if (error) throw new Error(`DB upsert failed: ${error.message}`)
+  }
+}
+
+async function refreshWcGames(admin: Admin, seasonYear: number): Promise<void> {
+  const { getWorldCupProvider } = await import('@/lib/data-providers/world-cup/provider')
+  const provider = getWorldCupProvider()
+  const games = await provider.getAllGames(seasonYear)
+
+  const rows = games.map((g) => ({
+    id: g.id,
+    season_year: seasonYear,
+    week: null,
+    home_team_id: g.homeTeam.id,
+    away_team_id: g.awayTeam.id,
+    home_score: g.homeTeam.score,
+    away_score: g.awayTeam.score,
+    status: g.status,
+    status_detail: g.statusDetail,
+    start_time: g.startTime,
+    venue: g.venue,
+    game_type: 'world_cup' as const,
+    stage: g.stage,
+    is_overtime: g.isOvertime,
+    is_shootout: g.isShootout,
+    home_penalty_score: g.homePenaltyScore,
+    away_penalty_score: g.awayPenaltyScore,
+    manual_entry: false,
+    broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
+    fetched_at: new Date().toISOString(),
+  }))
+
+  if (rows.length > 0) {
+    const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+    if (error) throw new Error(`DB upsert failed: ${error.message}`)
+  }
+}
+
+// --- Registry ---
+
+export const GAME_SERVERS: Record<GameType, GameServerDefinition> = {
+  cfb: {
+    key: 'cfb',
+    parsePoolInsert: (formData) => {
+      const input = baseSchema('cfb').extend({
+        conferences: z.array(z.string()).min(1).max(15),
+      }).parse({
+        ...baseFormValues(formData),
+        conferences: formData.getAll('conferences'),
+      })
+      return {
+        ...input,
+        game_type: 'cfb',
+        scoring_strategy: 'wins_only',
+        num_rounds: input.conferences.length,
+      }
+    },
+    refreshGames: refreshCfbGames,
+  },
+  world_cup: {
+    key: 'world_cup',
+    parsePoolInsert: (formData) => {
+      const input = baseSchema('world_cup').extend({
+        teams_per_manager: z.number().int().min(1),
+        scoring_config: wcScoringConfigSchema,
+      }).refine(
+        (d) => d.max_managers * d.teams_per_manager <= TOTAL_WC_TEAMS,
+        { message: `Managers × teams per manager must not exceed ${TOTAL_WC_TEAMS}` }
+      ).parse({
+        ...baseFormValues(formData),
+        teams_per_manager: Number(formData.get('teams_per_manager')),
+        scoring_config: JSON.parse(formData.get('scoring_config') as string),
+      })
+      return {
+        ...input,
+        game_type: 'world_cup',
+        scoring_strategy: 'world_cup',
+        conferences: null,
+        num_rounds: input.teams_per_manager,
+      }
+    },
+    refreshGames: refreshWcGames,
+  },
+  pga: {
+    key: 'pga',
+    parsePoolInsert: (formData) => {
+      const input = baseSchema('pga').parse(baseFormValues(formData))
+      return {
+        ...input,
+        game_type: 'pga',
+        scoring_strategy: 'pga',
+        conferences: null,
+        num_rounds: 0,
+        teams_per_manager: null,
+        scoring_config: null,
+      }
+    },
+    refreshGames: null,
+  },
+}

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateSnakeOrder, getPickInfo, validatePick, validateWorldCupPick, checkPac12Depletion, calculateTeamScraps, calculateWcScrapsTeams } from './engine'
 import type { Pool, PoolMember, DraftPick, DraftState, CachedTeam } from '@/lib/types'
+import { getGame } from '@/lib/games/registry'
 
 export async function startDraft(poolId: string) {
   const supabase = await createClient()
@@ -103,10 +104,7 @@ export async function resetDraft(poolId: string) {
 }
 
 function getNumRounds(pool: Pool): number {
-  if (pool.game_type === 'world_cup') {
-    return pool.teams_per_manager ?? 1
-  }
-  return (pool.conferences ?? []).length
+  return getGame(pool.game_type).numRounds(pool)
 }
 
 export async function undoPick(poolId: string) {

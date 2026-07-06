@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Plus } from 'lucide-react'
 import type { Pool, PoolMember } from '@/lib/types'
+import { getGame } from '@/lib/games/registry'
 
 export const revalidate = 60
 
@@ -75,7 +76,7 @@ export default async function PoolsPage() {
                   <CardDescription
                     style={pool.subfont_color ? { color: pool.subfont_color } : undefined}
                   >
-                    {pool.game_type === 'world_cup' ? `World Cup ${pool.season_year}` : `${pool.season_year} Season`} &middot; {pool.max_managers} managers
+                    {getGame(pool.game_type).poolLabel(pool.season_year)} &middot; {pool.max_managers} managers
                   </CardDescription>
                 </CardHeader>
               </Card>

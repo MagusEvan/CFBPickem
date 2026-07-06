@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { getGame } from '@/lib/games/registry'
 
 export const revalidate = 60
 
@@ -57,9 +58,7 @@ export default async function JoinPoolPage({ params }: { params: Promise<{ invit
     )
   }
 
-  const poolLabel = pool.game_type === 'world_cup'
-    ? `World Cup ${pool.season_year}`
-    : `${pool.season_year} Season`
+  const poolLabel = getGame(pool.game_type).poolLabel(pool.season_year)
 
   async function handleJoin() {
     'use server'

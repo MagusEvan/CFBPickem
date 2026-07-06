@@ -1,5 +1,7 @@
 // Domain types — framework-agnostic, portable to React Native
 
+export type GameType = 'cfb' | 'world_cup' | 'pga'
+
 export interface Profile {
   id: string
   display_name: string
@@ -19,7 +21,7 @@ export interface Pool {
   scoring_strategy: string
   draft_status: 'pre_draft' | 'in_progress' | 'completed'
   draft_order_mode: 'manual' | 'random'
-  game_type: 'cfb' | 'world_cup' | 'pga'
+  game_type: GameType
   teams_per_manager: number | null
   scoring_config: WorldCupScoringConfig | null
   bg_color: string | null
@@ -124,7 +126,7 @@ export interface CachedTeam {
   season_year: number
   wins: number
   losses: number
-  game_type: 'cfb' | 'world_cup' | 'pga'
+  game_type: GameType
   fetched_at: string
 }
 
@@ -147,7 +149,7 @@ export interface CachedGame {
   status_detail: string | null
   start_time: string | null
   venue: string | null
-  game_type: 'cfb' | 'world_cup' | 'pga'
+  game_type: GameType
   stage: string | null
   is_overtime: boolean
   is_shootout: boolean

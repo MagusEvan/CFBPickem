@@ -1,4 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { GameType } from '@/lib/types'
+import { GAME_SERVERS } from '@/lib/games/server'
 
 /**
  * Staleness-gated, deduplicated refresh of externally sourced data (ESPN).
@@ -34,19 +36,16 @@ async function claimRefresh(admin: Admin, resource: string): Promise<boolean> {
 }
 
 export async function ensureFreshGames(
-  gameType: 'cfb' | 'world_cup' | 'pga',
+  gameType: GameType,
   seasonYear: number
 ): Promise<void> {
-  if (gameType === 'pga') return // PGA uses ensureFreshGolfers per tournament
+  const refreshGames = GAME_SERVERS[gameType].refreshGames
+  if (!refreshGames) return // e.g. PGA uses ensureFreshGolfers per tournament
 
   const admin = createAdminClient()
   try {
     if (!(await claimRefresh(admin, `games:${gameType}:${seasonYear}`))) return
-    if (gameType === 'world_cup') {
-      await refreshWcGames(admin, seasonYear)
-    } else {
-      await refreshCfbGames(admin, seasonYear)
-    }
+    await refreshGames(admin, seasonYear)
   } catch (err) {
     console.error(`ensureFreshGames(${gameType}, ${seasonYear}) failed:`, err)
   }
@@ -64,73 +63,6 @@ export async function ensureFreshGolfers(
     await fetchAndCacheGolfers(admin, tournamentId, espnEventId)
   } catch (err) {
     console.error(`ensureFreshGolfers(${tournamentId}) failed:`, err)
-  }
-}
-
-async function refreshWcGames(admin: Admin, seasonYear: number): Promise<void> {
-  const { getWorldCupProvider } = await import('@/lib/data-providers/world-cup/provider')
-  const provider = getWorldCupProvider()
-  const games = await provider.getAllGames(seasonYear)
-
-  const rows = games.map((g) => ({
-    id: g.id,
-    season_year: seasonYear,
-    week: null,
-    home_team_id: g.homeTeam.id,
-    away_team_id: g.awayTeam.id,
-    home_score: g.homeTeam.score,
-    away_score: g.awayTeam.score,
-    status: g.status,
-    status_detail: g.statusDetail,
-    start_time: g.startTime,
-    venue: g.venue,
-    game_type: 'world_cup' as const,
-    stage: g.stage,
-    is_overtime: g.isOvertime,
-    is_shootout: g.isShootout,
-    home_penalty_score: g.homePenaltyScore,
-    away_penalty_score: g.awayPenaltyScore,
-    manual_entry: false,
-    broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
-    fetched_at: new Date().toISOString(),
-  }))
-
-  if (rows.length > 0) {
-    const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
-    if (error) throw new Error(`DB upsert failed: ${error.message}`)
-  }
-}
-
-async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> {
-  const { getDataProvider } = await import('@/lib/data-providers')
-  const provider = getDataProvider()
-
-  // Fetch all 15 weeks in parallel
-  const weeks = Array.from({ length: 15 }, (_, i) => i + 1)
-  const allGames = await Promise.all(
-    weeks.map((week) => provider.getGamesForWeek(seasonYear, week))
-  )
-
-  const now = new Date().toISOString()
-  const rows = allGames.flat().map((g) => ({
-    id: g.id,
-    season_year: g.seasonYear,
-    week: g.week,
-    home_team_id: g.homeTeam.id,
-    away_team_id: g.awayTeam.id,
-    home_score: g.homeTeam.score,
-    away_score: g.awayTeam.score,
-    status: g.status,
-    status_detail: g.statusDetail,
-    start_time: g.startTime,
-    venue: g.venue,
-    broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
-    fetched_at: now,
-  }))
-
-  if (rows.length > 0) {
-    const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
-    if (error) throw new Error(`DB upsert failed: ${error.message}`)
   }
 }
 

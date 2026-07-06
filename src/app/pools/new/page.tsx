@@ -7,41 +7,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import type { WorldCupScoringConfig } from '@/lib/types'
+import type { GameType, WorldCupScoringConfig } from '@/lib/types'
+import { GAMES, GAME_LIST, CFB_CONFERENCES, TOTAL_WC_TEAMS, DEFAULT_WC_SCORING } from '@/lib/games/registry'
 
-const ALL_CONFERENCES = [
-  { key: 'ACC', name: 'ACC' },
-  { key: 'B12', name: 'Big 12' },
-  { key: 'B1G', name: 'Big Ten' },
-  { key: 'SEC', name: 'SEC' },
-  { key: 'AAC', name: 'American Athletic' },
-  { key: 'CUSA', name: 'Conference USA' },
-  { key: 'MAC', name: 'MAC' },
-  { key: 'MW', name: 'Mountain West' },
-  { key: 'SBC', name: 'Sun Belt' },
-  { key: 'PAC12_IND', name: 'Pac-12 / Independent' },
-]
-
-const DEFAULT_SELECTED = ALL_CONFERENCES.map((c) => c.key)
-
-const TOTAL_WC_TEAMS = 48
-
-const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
-  group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },
-  knockout: {
-    win: 6, ot_win: 5, shootout_win: 4, shootout_loss: 2,
-    ot_loss: 1, loss: 0, goal_points: 1, goal_cap: null, shutout: 1,
-  },
-}
-
-const GAME_OPTIONS: { key: 'cfb' | 'world_cup' | 'pga'; name: string; description: string }[] = [
-  { key: 'cfb', name: 'College Football', description: 'Draft conferences and ride your teams all season' },
-  { key: 'world_cup', name: 'World Cup', description: 'Draft national teams through group stage and knockouts' },
-  { key: 'pga', name: 'PGA Tour', description: 'Draft golfers tournament by tournament' },
-]
+const DEFAULT_SELECTED = CFB_CONFERENCES.map((c) => c.key)
 
 export default function CreatePoolPage() {
-  const [gameType, setGameType] = useState<'cfb' | 'world_cup' | 'pga' | null>(null)
+  const [gameType, setGameType] = useState<GameType | null>(null)
   const [selectedConferences, setSelectedConferences] = useState<string[]>(DEFAULT_SELECTED)
   const [maxManagers, setMaxManagers] = useState(10)
   const [teamsPerManager, setTeamsPerManager] = useState(4)
@@ -101,7 +73,7 @@ export default function CreatePoolPage() {
             <CardDescription>Choose a game to get started</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {GAME_OPTIONS.map((game) => (
+            {GAME_LIST.map((game) => (
               <button
                 key={game.key}
                 type="button"
@@ -119,7 +91,7 @@ export default function CreatePoolPage() {
   }
 
   // Step 2: league creation options
-  const selectedGame = GAME_OPTIONS.find((g) => g.key === gameType)!
+  const selectedGame = GAMES[gameType]
 
   return (
     <div className="mx-auto max-w-lg">
@@ -150,21 +122,19 @@ export default function CreatePoolPage() {
               <Input
                 id="name"
                 name="name"
-                placeholder={gameType === 'cfb' ? 'e.g. The Gridiron League' : gameType === 'world_cup' ? 'e.g. World Cup 2026 Draft' : 'e.g. Masters League 2026'}
+                placeholder={selectedGame.namePlaceholder}
                 required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="season_year">
-                  {gameType === 'cfb' ? 'Season Year' : 'Tournament Year'}
-                </Label>
+                <Label htmlFor="season_year">{selectedGame.seasonYearLabel}</Label>
                 <Input
                   id="season_year"
                   name="season_year"
                   type="number"
-                  defaultValue={gameType === 'cfb' ? new Date().getFullYear() : new Date().getFullYear()}
+                  defaultValue={new Date().getFullYear()}
                   key={gameType} // reset when game type changes
                   min={2024}
                   max={2030}
@@ -178,8 +148,8 @@ export default function CreatePoolPage() {
                   type="number"
                   value={maxManagers}
                   onChange={(e) => setMaxManagers(Number(e.target.value))}
-                  min={2}
-                  max={gameType === 'cfb' ? 16 : 48}
+                  min={selectedGame.maxManagers.min}
+                  max={selectedGame.maxManagers.max}
                   key={`max-${gameType}`}
                 />
               </div>
@@ -227,7 +197,7 @@ export default function CreatePoolPage() {
               <div className="space-y-2">
                 <Label>Conferences ({selectedConferences.length} selected)</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  {ALL_CONFERENCES.map((conf) => (
+                  {CFB_CONFERENCES.map((conf) => (
                     <label
                       key={conf.key}
                       className={`flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm transition-colors ${
