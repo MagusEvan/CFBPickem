@@ -20,6 +20,98 @@ const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
   },
 }
 
+function didLoseGame(game: CachedGame, teamId: string): boolean {
+  const isHome = game.home_team_id === teamId
+  if (game.is_shootout) {
+    const myPK = isHome ? game.home_penalty_score ?? 0 : game.away_penalty_score ?? 0
+    const oppPK = isHome ? game.away_penalty_score ?? 0 : game.home_penalty_score ?? 0
+    return myPK < oppPK
+  }
+  const myScore = isHome ? game.home_score ?? 0 : game.away_score ?? 0
+  const oppScore = isHome ? game.away_score ?? 0 : game.home_score ?? 0
+  return myScore < oppScore
+}
+
+/**
+ * A team is eliminated when it has no remaining games and either:
+ * - it lost a knockout game, or
+ * - it played all its group games but never advanced to a knockout game
+ *   (only once the knockout bracket has real teams assigned).
+ */
+function computeEliminatedTeams(games: CachedGame[]): Set<string> {
+  const eliminated = new Set<string>()
+
+  const groupTeamIds = new Set<string>()
+  for (const g of games) {
+    if ((g.stage ?? 'group') === 'group') {
+      groupTeamIds.add(g.home_team_id)
+      groupTeamIds.add(g.away_team_id)
+    }
+  }
+  const knockoutStarted = games.some(
+    (g) =>
+      g.stage != null && g.stage !== 'group' &&
+      groupTeamIds.has(g.home_team_id) && groupTeamIds.has(g.away_team_id)
+  )
+
+  const allTeamIds = new Set<string>()
+  for (const g of games) {
+    allTeamIds.add(g.home_team_id)
+    allTeamIds.add(g.away_team_id)
+  }
+
+  for (const teamId of allTeamIds) {
+    const teamGames = games.filter((g) => g.home_team_id === teamId || g.away_team_id === teamId)
+    if (teamGames.some((g) => g.status !== 'final')) continue // still has games to play
+
+    const knockoutGames = teamGames.filter((g) => g.stage != null && g.stage !== 'group')
+    if (knockoutGames.length > 0) {
+      // Out if they lost any knockout game (the champion never loses one)
+      if (knockoutGames.some((g) => didLoseGame(g, teamId))) eliminated.add(teamId)
+    } else {
+      const groupGamesPlayed = teamGames.filter((g) => (g.stage ?? 'group') === 'group').length
+      if (groupGamesPlayed >= 3 && knockoutStarted) eliminated.add(teamId)
+    }
+  }
+
+  return eliminated
+}
+
+const KNOCKOUT_ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter', 'semi', 'final']
+
+/**
+ * Max games a team could still play: games already on their schedule that
+ * aren't final, plus one game per future knockout round if they keep winning.
+ * (Third place isn't counted as extra — it replaces the final for semi losers.)
+ */
+function possibleGamesRemaining(games: CachedGame[], teamId: string, eliminated: Set<string>): number {
+  if (eliminated.has(teamId)) return 0
+
+  const teamGames = games.filter((g) => g.home_team_id === teamId || g.away_team_id === teamId)
+  const scheduled = teamGames.filter((g) => g.status !== 'final').length
+
+  // Semi losers can only play the third-place game (counted in scheduled if assigned)
+  const lostSemi = teamGames.some(
+    (g) => g.stage === 'semi' && g.status === 'final' && didLoseGame(g, teamId)
+  )
+  if (lostSemi) return scheduled
+
+  // Knockout rounds this tournament actually has (fall back to full bracket if none published yet)
+  const stagesPresent = new Set(games.map((g) => g.stage))
+  const rounds = KNOCKOUT_ROUND_ORDER.filter((r) => stagesPresent.has(r))
+  const tournamentRounds = rounds.length > 0 ? rounds : KNOCKOUT_ROUND_ORDER
+
+  // Furthest knockout round the team already appears in
+  let maxIdx = -1
+  for (const g of teamGames) {
+    if (g.stage && g.stage !== 'group' && g.stage !== 'third_place') {
+      maxIdx = Math.max(maxIdx, tournamentRounds.indexOf(g.stage))
+    }
+  }
+
+  return scheduled + (tournamentRounds.length - 1 - maxIdx)
+}
+
 export default async function StandingsPage({ params }: { params: Promise<{ poolId: string }> }) {
   const { poolId } = await params
   const [pool, members] = await Promise.all([
@@ -175,6 +267,12 @@ async function WorldCupStandings({
   const wcScraps = (wcScrapsRes.data ?? []) as WcScrapsTeam[]
   const config = pool.scoring_config ?? DEFAULT_WC_SCORING
   const teamToRound = new Map(picks.map((p) => [p.team_id, p.round]))
+  const eliminatedTeams = computeEliminatedTeams(games)
+  const pgrCache = new Map<string, number>()
+  const teamPgr = (teamId: string) => {
+    if (!pgrCache.has(teamId)) pgrCache.set(teamId, possibleGamesRemaining(games, teamId, eliminatedTeams))
+    return pgrCache.get(teamId)!
+  }
 
   // Pre-compute team points once — avoids calling calculateTeamPoints multiple times per team
   const allTeamIds = new Set([
@@ -299,7 +397,8 @@ async function WorldCupStandings({
               <tr className="border-b">
                 <th className="px-2 py-2 text-left">#</th>
                 <th className="px-2 py-2 text-left">Manager</th>
-                <th className="px-2 py-2 text-center text-xs border-r">GP</th>
+                <th className="px-2 py-2 text-center text-xs">GP</th>
+                <th className="px-2 py-2 text-center text-xs border-r" title="Possible Games Remaining">PGR</th>
                 {activeCategories.map((cat) => (
                   <th key={cat} className="px-2 py-2 text-center text-xs" title={cat}>
                     {shortLabel[cat] ?? cat}
@@ -328,8 +427,11 @@ async function WorldCupStandings({
                         s.displayName
                       )}
                     </td>
-                    <td className={`px-2 py-2 text-center border-r ${isScraps ? 'text-muted-foreground' : ''}`}>
+                    <td className={`px-2 py-2 text-center ${isScraps ? 'text-muted-foreground' : ''}`}>
                       {s.teamBreakdowns.reduce((sum, tb) => sum + tb.gamesPlayed, 0)}
+                    </td>
+                    <td className={`px-2 py-2 text-center border-r ${isScraps ? 'text-muted-foreground' : ''}`}>
+                      {s.teamBreakdowns.reduce((sum, tb) => sum + teamPgr(tb.teamId), 0)}
                     </td>
                     {activeCategories.map((cat) => (
                       <td key={cat} className={`px-2 py-2 text-center ${isScraps ? 'text-muted-foreground' : ''}`}>
@@ -361,7 +463,10 @@ async function WorldCupStandings({
                 {s.teamBreakdowns
                   .sort((a, b) => b.points - a.points)
                   .map((tb) => (
-                    <details key={tb.teamId} className="rounded-md border">
+                    <details
+                      key={tb.teamId}
+                      className={`rounded-md border ${eliminatedTeams.has(tb.teamId) ? 'bg-red-100/60 dark:bg-red-950/40' : ''}`}
+                    >
                       <summary className="flex cursor-pointer list-none items-center justify-between p-2">
                         <span className="text-sm font-medium">
                           {tb.teamName}
