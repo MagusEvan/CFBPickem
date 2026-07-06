@@ -1,13 +1,13 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getPool, getCurrentUserId } from '@/lib/pools/queries'
+import { getPool } from '@/lib/pools/queries'
 import { getTournament, getTournamentMembers, getTournamentGolfers } from '@/lib/pga/queries'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { ArrowLeft, Users, Trophy } from 'lucide-react'
-import { RefreshGolfersButton } from '@/components/pga/refresh-golfers-button'
+import { ensureFreshGolfers } from '@/lib/data-refresh'
 
 export const revalidate = 60
 
@@ -17,17 +17,17 @@ export default async function TournamentDetailPage({
   params: Promise<{ poolId: string; tournamentId: string }>
 }) {
   const { poolId, tournamentId } = await params
-  const [pool, tournament, members, golfers, userId] = await Promise.all([
+  const [pool, tournament, members] = await Promise.all([
     getPool(poolId),
     getTournament(tournamentId),
     getTournamentMembers(tournamentId),
-    getTournamentGolfers(tournamentId),
-    getCurrentUserId(),
   ])
 
   if (!pool || !tournament) notFound()
 
-  const isAdmin = pool.admin_id === userId
+  // Staleness-gated, deduplicated field/score refresh
+  await ensureFreshGolfers(tournamentId, tournament.espn_event_id)
+  const golfers = await getTournamentGolfers(tournamentId)
 
   return (
     <div className="space-y-6">
@@ -125,9 +125,6 @@ export default async function TournamentDetailPage({
               <h2 className="text-lg font-semibold">
                 Field ({golfers.length} golfers)
               </h2>
-              {isAdmin && tournament.espn_event_id && (
-                <RefreshGolfersButton tournamentId={tournamentId} />
-              )}
             </div>
             <Card>
               <CardContent className="overflow-x-auto py-4">

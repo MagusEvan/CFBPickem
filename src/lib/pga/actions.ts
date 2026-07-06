@@ -82,120 +82,15 @@ export async function createTournament(formData: FormData): Promise<void> {
   // If ESPN event ID is provided, fetch and cache the golfer field
   if (espnEventId) {
     try {
-      const { getPgaProvider } = await import('@/lib/data-providers/pga/provider')
-      const provider = getPgaProvider()
-      const golfers = await provider.getEventGolfers(espnEventId)
-
-      if (golfers.length > 0) {
-        const rows = golfers.map((g) => ({
-          id: g.id,
-          tournament_id: tournament.id,
-          name: g.name,
-          amateur: g.amateur,
-          country: g.country,
-          image_url: g.imageUrl,
-          status: g.status,
-          position: g.position,
-          total_score: g.totalScore,
-          total_strokes: g.totalStrokes,
-          r1_score: g.roundScores[0] ?? null,
-          r2_score: g.roundScores[1] ?? null,
-          r3_score: g.roundScores[2] ?? null,
-          r4_score: g.roundScores[3] ?? null,
-          r1_strokes: g.roundStrokes[0] ?? null,
-          r2_strokes: g.roundStrokes[1] ?? null,
-          r3_strokes: g.roundStrokes[2] ?? null,
-          r4_strokes: g.roundStrokes[3] ?? null,
-          tee_time: g.teeTime,
-          thru: g.thru,
-          fetched_at: new Date().toISOString(),
-        }))
-
-        await admin.from('pga_golfers').upsert(rows, { onConflict: 'id,tournament_id' })
-      }
+      const { fetchAndCacheGolfers } = await import('@/lib/data-refresh')
+      await fetchAndCacheGolfers(admin, tournament.id, espnEventId)
     } catch {
-      // Non-fatal: golfers can be fetched later
+      // Non-fatal: golfers are fetched on next page view via ensureFreshGolfers
     }
   }
 
   revalidatePath(`/pools/${poolId}/tournaments`)
   redirect(`/pools/${poolId}/tournaments/${tournament.id}`)
-}
-
-export async function refreshTournamentGolfers(
-  tournamentId: string
-): Promise<{ error?: string; count?: number }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
-
-  const admin = createAdminClient()
-
-  const { data: tournament } = await admin
-    .from('pga_tournaments')
-    .select('*, pools!inner(admin_id, id)')
-    .eq('id', tournamentId)
-    .single()
-
-  if (!tournament) return { error: 'Tournament not found' }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((tournament as any).pools.admin_id !== user.id) return { error: 'Only the league admin can refresh' }
-  if (!tournament.espn_event_id) return { error: 'No ESPN event linked' }
-
-  try {
-    const { getPgaProvider } = await import('@/lib/data-providers/pga/provider')
-    const provider = getPgaProvider()
-    const golfers = await provider.getEventGolfers(tournament.espn_event_id)
-
-    if (golfers.length > 0) {
-      const rows = golfers.map((g) => ({
-        id: g.id,
-        tournament_id: tournamentId,
-        name: g.name,
-        amateur: g.amateur,
-        country: g.country,
-        image_url: g.imageUrl,
-        status: g.status,
-        position: g.position,
-        total_score: g.totalScore,
-        total_strokes: g.totalStrokes,
-        r1_score: g.roundScores[0] ?? null,
-        r2_score: g.roundScores[1] ?? null,
-        r3_score: g.roundScores[2] ?? null,
-        r4_score: g.roundScores[3] ?? null,
-        r1_strokes: g.roundStrokes[0] ?? null,
-        r2_strokes: g.roundStrokes[1] ?? null,
-        r3_strokes: g.roundStrokes[2] ?? null,
-        r4_strokes: g.roundStrokes[3] ?? null,
-        tee_time: g.teeTime,
-        thru: g.thru,
-        fetched_at: new Date().toISOString(),
-      }))
-
-      const { error } = await admin
-        .from('pga_golfers')
-        .upsert(rows, { onConflict: 'id,tournament_id' })
-      if (error) return { error: error.message }
-    }
-
-    // Also update course par if we can extract it from ESPN
-    try {
-      const par = await provider.getEventCoursePar(tournament.espn_event_id)
-      if (par !== null) {
-        await admin.from('pga_tournaments').update({ course_par: par }).eq('id', tournamentId)
-      }
-    } catch {
-      // Non-fatal
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const poolId = (tournament as any).pools.id
-    revalidatePath(`/pools/${poolId}/tournaments/${tournamentId}`)
-
-    return { count: golfers.length }
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Failed to refresh' }
-  }
 }
 
 export async function deleteTournament(

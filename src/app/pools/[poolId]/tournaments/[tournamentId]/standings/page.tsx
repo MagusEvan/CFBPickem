@@ -1,13 +1,13 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getPool, getCurrentUserId } from '@/lib/pools/queries'
+import { getPool } from '@/lib/pools/queries'
 import { getTournament, getTournamentMembers, getTournamentGolfers, getTournamentPicks } from '@/lib/pga/queries'
 import { calculatePgaStandings } from '@/lib/pga/scoring'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ArrowLeft } from 'lucide-react'
 import { PgaLeaderboard } from '@/components/pga/pga-leaderboard'
-import { RefreshGolfersButton } from '@/components/pga/refresh-golfers-button'
+import { ensureFreshGolfers } from '@/lib/data-refresh'
 
 export const revalidate = 60
 
@@ -17,18 +17,18 @@ export default async function PgaStandingsPage({
   params: Promise<{ poolId: string; tournamentId: string }>
 }) {
   const { poolId, tournamentId } = await params
-  const [pool, tournament, members, golfers, picks, userId] = await Promise.all([
+  const [pool, tournament, members, picks] = await Promise.all([
     getPool(poolId),
     getTournament(tournamentId),
     getTournamentMembers(tournamentId),
-    getTournamentGolfers(tournamentId),
     getTournamentPicks(tournamentId),
-    getCurrentUserId(),
   ])
 
   if (!pool || !tournament) notFound()
 
-  const isAdmin = pool.admin_id === userId
+  // Staleness-gated, deduplicated score refresh
+  await ensureFreshGolfers(tournamentId, tournament.espn_event_id)
+  const golfers = await getTournamentGolfers(tournamentId)
   const standings = calculatePgaStandings(
     members, picks, golfers, tournament.top_n_scoring,
     tournament.course_par, tournament.missed_cut_score
@@ -57,9 +57,6 @@ export default async function PgaStandingsPage({
             Leaderboard · Top {tournament.top_n_scoring} of {tournament.golfers_per_manager} scores per round
           </p>
         </div>
-        {isAdmin && tournament.espn_event_id && (
-          <RefreshGolfersButton tournamentId={tournamentId} />
-        )}
       </div>
 
       {lastFetched && (

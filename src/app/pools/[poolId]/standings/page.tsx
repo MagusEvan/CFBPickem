@@ -2,12 +2,14 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
+import { ensureFreshGames } from '@/lib/data-refresh'
 import { calculateStandings, calculateWorldCupStandings } from '@/lib/scoring/engine'
 import { calculateTeamPoints, type GamePointBreakdown } from '@/lib/scoring/strategies/world-cup'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Image from 'next/image'
 import { Badge } from '@/components/ui/badge'
+import { TeamBreakdownGrid } from '@/components/standings/team-breakdown-grid'
 import type { DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 
 export const revalidate = 60
@@ -120,6 +122,9 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   ])
 
   if (!pool) notFound()
+
+  // Staleness-gated, deduplicated score refresh (at most one ESPN fetch per window)
+  await ensureFreshGames(pool.game_type, pool.season_year)
 
   if (pool.draft_status === 'pre_draft') {
     return (
@@ -459,54 +464,15 @@ async function WorldCupStandings({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {s.teamBreakdowns
+              <TeamBreakdownGrid
+                teams={[...s.teamBreakdowns]
                   .sort((a, b) => b.points - a.points)
-                  .map((tb) => (
-                    <details
-                      key={tb.teamId}
-                      className={`rounded-md border ${eliminatedTeams.has(tb.teamId) ? 'bg-red-100/60 dark:bg-red-950/40' : ''}`}
-                    >
-                      <summary className="flex cursor-pointer list-none items-center justify-between p-2">
-                        <span className="text-sm font-medium">
-                          {tb.teamName}
-                          {teamToRound.has(tb.teamId) && (
-                            <span className="ml-1 font-normal text-muted-foreground">(r{teamToRound.get(tb.teamId)})</span>
-                          )}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">
-                            {tb.gamesPlayed} GP
-                          </Badge>
-                          <span className="text-sm font-bold">{tb.points} pts</span>
-                        </div>
-                      </summary>
-                      {tb.gameBreakdowns.length > 0 ? (
-                        <div className="space-y-1 border-t px-2 py-2">
-                          {tb.gameBreakdowns.map((gb) => (
-                            <div key={gb.gameId} className="flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[10px] px-1">{gb.result}</Badge>
-                                <span>vs {gb.opponent}</span>
-                                <span className="text-muted-foreground">{gb.myGoals}–{gb.oppGoals}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                {gb.itemized.map((item, i) => (
-                                  <span key={i}>{item.label}: +{item.value}</span>
-                                ))}
-                                <span className="font-bold text-foreground">{gb.points} pts</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="border-t px-2 py-2 text-xs text-muted-foreground">
-                          No completed games yet
-                        </div>
-                      )}
-                    </details>
-                  ))}
-              </div>
+                  .map((tb) => ({
+                    ...tb,
+                    round: teamToRound.get(tb.teamId) ?? null,
+                    eliminated: eliminatedTeams.has(tb.teamId),
+                  }))}
+              />
             </CardContent>
           </Card>
         )

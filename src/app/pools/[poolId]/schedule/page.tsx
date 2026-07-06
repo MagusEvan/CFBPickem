@@ -12,7 +12,7 @@ import { getBroadcastForLocale } from '@/lib/broadcasts'
 import { GameTime } from '@/components/schedule/game-time'
 import { ScheduleHeader } from '@/components/schedule/refresh-schedule'
 import { MyTeamsToggle } from '@/components/schedule/my-teams-toggle'
-import { refreshSchedule } from '@/lib/schedule/actions'
+import { ensureFreshGames } from '@/lib/data-refresh'
 
 export const revalidate = 60
 
@@ -68,7 +68,9 @@ export default async function SchedulePage({
 
   if (!pool) notFound()
 
-  const isAdmin = userId === pool.admin_id
+  // Staleness-gated, deduplicated score refresh (at most one ESPN fetch per window)
+  await ensureFreshGames(pool.game_type, pool.season_year)
+
   const cookieStore = await cookies()
   const userTz = cookieStore.get('tz')?.value || 'America/Chicago'
 
@@ -175,7 +177,6 @@ export default async function SchedulePage({
         draftedTeamIds={draftedTeamIds}
         selectedStage={stageParam || defaultStage}
         scoringConfig={pool.scoring_config ?? DEFAULT_WC_SCORING}
-        isAdmin={isAdmin}
         userTz={userTz}
         myTeamIds={myTeamIds}
       />
@@ -212,12 +213,7 @@ export default async function SchedulePage({
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Schedule</h1>
-        <ScheduleHeader
-          lastFetchedAt={cfbLastFetched}
-          isAdmin={isAdmin}
-          poolId={poolId}
-          refreshAction={refreshSchedule}
-        />
+        <ScheduleHeader lastFetchedAt={cfbLastFetched} />
       </div>
       <div className="flex items-center gap-3">
         <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
@@ -331,7 +327,6 @@ async function WorldCupSchedule({
   teamToManager,
   teamToRound,
   draftedTeamIds,
-  isAdmin,
   selectedStage,
   scoringConfig,
   userTz,
@@ -345,7 +340,6 @@ async function WorldCupSchedule({
   draftedTeamIds: Set<string>
   selectedStage: string
   scoringConfig: WorldCupScoringConfig
-  isAdmin: boolean
   userTz: string
   myTeamIds: Set<string>
 }) {
@@ -389,12 +383,7 @@ async function WorldCupSchedule({
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Schedule</h1>
-        <ScheduleHeader
-          lastFetchedAt={wcLastFetched}
-          isAdmin={isAdmin}
-          poolId={poolId}
-          refreshAction={refreshSchedule}
-        />
+        <ScheduleHeader lastFetchedAt={wcLastFetched} />
       </div>
       <div className="flex items-center gap-3">
         <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
