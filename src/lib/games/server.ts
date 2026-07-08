@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { GameType } from '@/lib/types'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { GAMES, TOTAL_WC_TEAMS } from './registry'
+import { ffLeagueSettingsSchema, ffScoringSettingsSchema } from '@/lib/ff/settings'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -22,6 +23,11 @@ export interface GameServerDefinition {
    * null = game has no pool-level game feed (PGA refreshes per tournament).
    */
   refreshGames: ((admin: Admin, seasonYear: number) => Promise<void>) | null
+  /**
+   * Optional hook run after a pool is inserted (and the admin has joined),
+   * for seeding game-specific child rows (e.g. FF draft state).
+   */
+  afterPoolCreate?: (admin: Admin, pool: { id: string }) => Promise<void>
 }
 
 // --- Shared creation-form parsing ---
@@ -186,5 +192,35 @@ export const GAME_SERVERS: Record<GameType, GameServerDefinition> = {
       }
     },
     refreshGames: null,
+  },
+  ff: {
+    key: 'ff',
+    parsePoolInsert: (formData) => {
+      const input = baseSchema('ff').extend({
+        ff_league_settings: ffLeagueSettingsSchema,
+        ff_scoring_settings: ffScoringSettingsSchema,
+      }).parse({
+        ...baseFormValues(formData),
+        ff_league_settings: JSON.parse(formData.get('ff_league_settings') as string),
+        ff_scoring_settings: JSON.parse(formData.get('ff_scoring_settings') as string),
+      })
+      return {
+        ...input,
+        game_type: 'ff',
+        scoring_strategy: 'ff',
+        conferences: null,
+        num_rounds: 0,
+        teams_per_manager: null,
+        scoring_config: null,
+      }
+    },
+    // Wired to the NFL data provider in src/lib/ff/refresh.ts (Phase 2)
+    refreshGames: null,
+    afterPoolCreate: async (admin, pool) => {
+      const { error } = await admin
+        .from('ff_draft_state')
+        .insert({ pool_id: pool.id })
+      if (error) throw new Error(`Failed to seed FF draft state: ${error.message}`)
+    },
   },
 }

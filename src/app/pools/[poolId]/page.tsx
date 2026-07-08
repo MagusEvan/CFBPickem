@@ -42,7 +42,90 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
 
       {/* Quick nav cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {pool.game_type === 'pga' ? (
+        {pool.game_type === 'ff' ? (
+          <>
+            <Link href={`/pools/${pool.id}/draft`}>
+              <Card className="py-0 transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center gap-3 px-4 py-4">
+                  <Users className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Draft</p>
+                    <p className="text-sm text-muted-foreground">
+                      {pool.draft_status === 'pre_draft' ? 'Not started' :
+                       pool.draft_status === 'in_progress' ? 'In progress' : 'View results'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+
+            {pool.draft_status === 'completed' && (
+              <>
+                <Link href={`/pools/${pool.id}/team`}>
+                  <Card className="py-0 transition-colors hover:bg-muted/50">
+                    <CardContent className="flex items-center gap-3 px-4 py-4">
+                      <Shield className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">My Team</p>
+                        <p className="text-sm text-muted-foreground">Set your lineup</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+
+                <Link href={`/pools/${pool.id}/matchups`}>
+                  <Card className="py-0 transition-colors hover:bg-muted/50">
+                    <CardContent className="flex items-center gap-3 px-4 py-4">
+                      <Calendar className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">Matchups</p>
+                        <p className="text-sm text-muted-foreground">Weekly head-to-head</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+
+                <Link href={`/pools/${pool.id}/standings`}>
+                  <Card className="py-0 transition-colors hover:bg-muted/50">
+                    <CardContent className="flex items-center gap-3 px-4 py-4">
+                      <Trophy className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">Standings</p>
+                        <p className="text-sm text-muted-foreground">Records & playoff race</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </>
+            )}
+
+            <Link href={`/pools/${pool.id}/players`}>
+              <Card className="py-0 transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center gap-3 px-4 py-4">
+                  <Users className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Players</p>
+                    <p className="text-sm text-muted-foreground">NFL player pool</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+
+            <Link href={`/pools/${pool.id}/settings`}>
+              <Card className="py-0 transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center gap-3 px-4 py-4">
+                  <Settings className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Settings</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isAdmin ? 'Manage league' : 'View settings'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </>
+        ) : pool.game_type === 'pga' ? (
           <>
             <Link href={`/pools/${pool.id}/tournaments`}>
               <Card className="py-0 transition-colors hover:bg-muted/50">

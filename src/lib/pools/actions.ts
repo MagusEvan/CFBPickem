@@ -36,6 +36,12 @@ export async function createPool(formData: FormData) {
     draft_position: 1,
   })
 
+  // Seed game-specific child rows (e.g. FF draft state)
+  const afterPoolCreate = GAME_SERVERS[gameType].afterPoolCreate
+  if (afterPoolCreate) {
+    await afterPoolCreate(createAdminClient(), pool)
+  }
+
   redirect(`/pools/${pool.id}`)
 }
 

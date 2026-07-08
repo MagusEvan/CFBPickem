@@ -10,7 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Image from 'next/image'
 import { Badge } from '@/components/ui/badge'
 import { TeamBreakdownGrid } from '@/components/standings/team-breakdown-grid'
-import type { DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
+import { FfStandingsTable } from '@/components/ff/ff-standings-table'
+import { getFfCurrentWeek, getFfLineups, getFfMatchups, getFfWeekScores } from '@/lib/ff/queries'
+import { resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
+import { computeStandings, type FFMatchupResult } from '@/lib/ff/standings'
+import type { Pool, DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 
 export const revalidate = 60
 
@@ -122,6 +126,10 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   ])
 
   if (!pool) notFound()
+
+  if (pool.game_type === 'ff') {
+    return <FfStandings poolId={poolId} pool={pool} members={members} />
+  }
 
   // Staleness-gated, deduplicated score refresh (at most one ESPN fetch per window)
   await ensureFreshGames(pool.game_type, pool.season_year)
@@ -246,6 +254,90 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
           </CardContent>
         </Card>
       )}
+    </div>
+  )
+}
+
+async function FfStandings({
+  poolId,
+  pool,
+  members,
+}: {
+  poolId: string
+  pool: Pool
+  members: Awaited<ReturnType<typeof getPoolMembers>>
+}) {
+  if (pool.draft_status !== 'completed') {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Standings</h1>
+        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+          &lt; Return to Pool
+        </Link>
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            Standings will be available after the draft is complete.
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const settings = resolveLeagueSettings(pool)
+  const scoring = resolveScoringSettings(pool)
+  const currentWeek = await getFfCurrentWeek(pool.season_year)
+  const throughWeek = Math.min(currentWeek, settings.season.regularSeasonWeeks)
+
+  // Materialize any missing lineup weeks so completed weeks never score 0-0
+  // just because nobody opened a page that week (cheap no-op when rows exist)
+  for (let w = 1; w <= throughWeek; w++) await getFfLineups(poolId, w)
+
+  const [matchups, weekScores] = await Promise.all([
+    getFfMatchups(poolId),
+    getFfWeekScores(poolId, pool.season_year, scoring, throughWeek),
+  ])
+  const scoresByWeek = new Map(weekScores.map((ws) => [ws.week, ws]))
+
+  const results: FFMatchupResult[] = matchups
+    .filter((m) => !m.is_playoff && m.week <= throughWeek)
+    .map((m) => {
+      const ws = scoresByWeek.get(m.week)
+      return {
+        week: m.week,
+        homeMemberId: m.home_member_id,
+        awayMemberId: m.away_member_id,
+        homeScore: ws?.scoreByMember.get(m.home_member_id) ?? 0,
+        awayScore: m.away_member_id ? ws?.scoreByMember.get(m.away_member_id) ?? 0 : 0,
+        final: ws?.final ?? false,
+      }
+    })
+
+  const standings = computeStandings(members.map((m) => m.id), results)
+  const nameByMember = new Map(members.map((m) => [m.id, m.profiles.display_name]))
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Standings</h1>
+      <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        &lt; Return to Pool
+      </Link>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Leaderboard</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <FfStandingsTable
+            poolId={poolId}
+            standings={standings}
+            nameByMember={nameByMember}
+            playoffTeams={settings.season.playoffTeams}
+          />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Top {settings.season.playoffTeams} make the playoffs (dashed line). Ties broken by points for.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   )
 }

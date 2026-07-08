@@ -9,6 +9,9 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { DeletePoolButton } from '@/components/pool/delete-pool'
 import { deletePool } from '@/lib/pools/actions'
+import { getGame } from '@/lib/games/registry'
+import { FfLeagueSettingsCard } from '@/components/ff/ff-league-settings-card'
+import { resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import type { WorldCupScoringConfig } from '@/lib/types'
 
 export const revalidate = 300
@@ -25,6 +28,19 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
 
   const isAdmin = pool.admin_id === userId
   const isWorldCup = pool.game_type === 'world_cup'
+  const isFf = pool.game_type === 'ff'
+
+  // FF: roster/draft settings lock once the FF draft starts
+  let ffDraftStarted = false
+  if (isFf) {
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    const { data: ffDraftState } = await createAdminClient()
+      .from('ff_draft_state')
+      .select('status')
+      .eq('pool_id', poolId)
+      .single()
+    ffDraftStarted = !!ffDraftState && ffDraftState.status !== 'pre_draft'
+  }
 
   async function updatePool(formData: FormData) {
     'use server'
@@ -132,7 +148,7 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
                   type="number"
                   defaultValue={pool.max_managers}
                   min={Math.max(2, members.length)}
-                  max={isWorldCup ? 48 : 16}
+                  max={getGame(pool.game_type).maxManagers.max}
                 />
               </div>
               <div className="space-y-2">
@@ -218,6 +234,27 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
           </CardContent>
         )}
       </Card>
+
+      {/* Fantasy Football League Settings */}
+      {isFf && isAdmin && (
+        <FfLeagueSettingsCard
+          poolId={poolId}
+          initialLeague={resolveLeagueSettings(pool)}
+          initialScoring={resolveScoringSettings(pool)}
+          rosterLocked={ffDraftStarted}
+        />
+      )}
+      {isFf && !isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>League Settings</CardTitle>
+            <CardDescription>Set by the commissioner</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FfSettingsSummary pool={pool} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* World Cup Scoring Config */}
       {isWorldCup && (
@@ -306,7 +343,7 @@ function PoolInfoFields({
     <>
       <div className="space-y-2">
         <Label>Game Type</Label>
-        <Badge variant="secondary">{isWorldCup ? 'World Cup' : 'College Football'}</Badge>
+        <Badge variant="secondary">{getGame(pool.game_type as Parameters<typeof getGame>[0]).name}</Badge>
       </div>
       {isWorldCup && (
         <div className="space-y-2">
@@ -314,7 +351,7 @@ function PoolInfoFields({
           <p className="text-sm text-muted-foreground">{pool.teams_per_manager}</p>
         </div>
       )}
-      {!isWorldCup && (
+      {pool.game_type === 'cfb' && (
         <div className="space-y-2">
           <Label>Conferences</Label>
           <div className="flex flex-wrap gap-1">
@@ -325,6 +362,40 @@ function PoolInfoFields({
         </div>
       )}
     </>
+  )
+}
+
+function FfSettingsSummary({ pool }: { pool: { ff_league_settings: unknown | null; ff_scoring_settings: unknown | null } }) {
+  const league = resolveLeagueSettings(pool)
+  const scoring = resolveScoringSettings(pool)
+  const r = league.roster
+  const rosterLine = [
+    `${r.QB} QB`, `${r.RB} RB`, `${r.WR} WR`, `${r.TE} TE`,
+    r.FLEX > 0 ? `${r.FLEX} FLEX` : null,
+    r.K > 0 ? `${r.K} K` : null,
+    r.DST > 0 ? `${r.DST} D/ST` : null,
+    `${r.BENCH} Bench`,
+    r.IR > 0 ? `${r.IR} IR` : null,
+  ].filter(Boolean).join(', ')
+
+  const rows: Array<[string, string]> = [
+    ['Draft', `${league.draft.type === 'auction' ? `Auction ($${league.draft.auctionBudget})` : 'Snake'}${league.draft.timerSeconds ? `, ${league.draft.timerSeconds}s timer` : ', untimed'}`],
+    ['Roster', rosterLine],
+    ['Scoring', `${scoring.reception === 1 ? 'PPR' : scoring.reception === 0.5 ? 'Half PPR' : scoring.reception === 0 ? 'Standard' : `${scoring.reception} per reception`}`],
+    ['Season', `${league.season.regularSeasonWeeks} weeks, ${league.season.playoffTeams}-team playoffs from week ${league.season.playoffStartWeek}`],
+    ['Waivers', league.waivers.type === 'faab' ? `FAAB ($${league.waivers.faabBudget})` : league.waivers.type === 'priority' ? 'Priority order' : 'None'],
+    ['Trades', league.trades.enabled ? `Enabled${league.trades.deadlineWeek ? `, deadline week ${league.trades.deadlineWeek}` : ''}${league.trades.review === 'commissioner' ? ', commissioner review' : ''}` : 'Disabled'],
+  ]
+
+  return (
+    <div className="space-y-3">
+      {rows.map(([label, value]) => (
+        <div key={label} className="space-y-1">
+          <Label>{label}</Label>
+          <p className="text-sm text-muted-foreground">{value}</p>
+        </div>
+      ))}
+    </div>
   )
 }
 

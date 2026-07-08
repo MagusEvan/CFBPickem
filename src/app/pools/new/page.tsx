@@ -8,7 +8,10 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import type { GameType, WorldCupScoringConfig } from '@/lib/types'
+import type { FFLeagueSettings, FFScoringSettings } from '@/lib/ff/types'
 import { GAMES, GAME_LIST, CFB_CONFERENCES, TOTAL_WC_TEAMS, DEFAULT_WC_SCORING } from '@/lib/games/registry'
+import { DEFAULT_FF_LEAGUE_SETTINGS, DEFAULT_FF_SCORING_SETTINGS } from '@/lib/ff/settings'
+import { FfPoolOptions } from '@/components/ff/ff-pool-options'
 
 const DEFAULT_SELECTED = CFB_CONFERENCES.map((c) => c.key)
 
@@ -19,6 +22,8 @@ export default function CreatePoolPage() {
   const [teamsPerManager, setTeamsPerManager] = useState(4)
   const [scoringConfig, setScoringConfig] = useState<WorldCupScoringConfig>(DEFAULT_WC_SCORING)
   const [showScoring, setShowScoring] = useState(false)
+  const [ffLeague, setFfLeague] = useState<FFLeagueSettings>(DEFAULT_FF_LEAGUE_SETTINGS)
+  const [ffScoring, setFfScoring] = useState<FFScoringSettings>(DEFAULT_FF_SCORING_SETTINGS)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -46,9 +51,12 @@ export default function CreatePoolPage() {
       formData.set('game_type', gameType)
       if (gameType === 'cfb') {
         selectedConferences.forEach((key) => formData.append('conferences', key))
-      } else {
+      } else if (gameType === 'world_cup') {
         formData.set('teams_per_manager', String(teamsPerManager))
         formData.set('scoring_config', JSON.stringify(scoringConfig))
+      } else if (gameType === 'ff') {
+        formData.set('ff_league_settings', JSON.stringify(ffLeague))
+        formData.set('ff_scoring_settings', JSON.stringify(ffScoring))
       }
       await createPool(formData)
     } catch (err) {
@@ -61,7 +69,7 @@ export default function CreatePoolPage() {
     ? selectedConferences.length > 0
     : gameType === 'world_cup'
       ? !wcTeamOverflow && teamsPerManager >= 1
-      : true // PGA — no extra validation needed
+      : true // PGA/FF — no extra validation needed
 
   // Step 1: game selection only
   if (gameType === null) {
@@ -217,6 +225,16 @@ export default function CreatePoolPage() {
                   ))}
                 </div>
               </div>
+            )}
+
+            {/* Fantasy Football: league options */}
+            {gameType === 'ff' && (
+              <FfPoolOptions
+                league={ffLeague}
+                scoring={ffScoring}
+                onLeagueChange={setFfLeague}
+                onScoringChange={setFfScoring}
+              />
             )}
 
             {/* World Cup: Scoring Settings */}

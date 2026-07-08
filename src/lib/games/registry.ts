@@ -61,17 +61,28 @@ export const GAMES: Record<GameType, GameDefinition> = {
     poolLabel: (year) => `PGA Tour ${year}`,
     numRounds: () => 0, // PGA drafts happen per tournament, not per pool
   },
+  ff: {
+    key: 'ff',
+    name: 'Fantasy Football',
+    description: 'Draft NFL players and battle head-to-head every week',
+    namePlaceholder: 'e.g. The League of Champions',
+    seasonYearLabel: 'Season Year',
+    scheduleDescription: 'Weekly matchups',
+    maxManagers: { min: 4, max: 20 },
+    poolLabel: (year) => `${year} Fantasy Season`,
+    numRounds: () => 0, // FF drafts use ff_draft_state, not the shared pool draft
+  },
 }
 
 /** Ordered list for the pool-creation game picker */
-export const GAME_LIST: GameDefinition[] = [GAMES.cfb, GAMES.world_cup, GAMES.pga]
+export const GAME_LIST: GameDefinition[] = [GAMES.cfb, GAMES.world_cup, GAMES.pga, GAMES.ff]
 
 export function getGame(gameType: GameType): GameDefinition {
   return GAMES[gameType]
 }
 
 export function isGameType(value: unknown): value is GameType {
-  return value === 'cfb' || value === 'world_cup' || value === 'pga'
+  return value === 'cfb' || value === 'world_cup' || value === 'pga' || value === 'ff'
 }
 
 // --- Game-specific pool-creation constants (client-safe) ---

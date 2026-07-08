@@ -1,6 +1,6 @@
 // Domain types — framework-agnostic, portable to React Native
 
-export type GameType = 'cfb' | 'world_cup' | 'pga'
+export type GameType = 'cfb' | 'world_cup' | 'pga' | 'ff'
 
 export interface Profile {
   id: string
@@ -24,6 +24,8 @@ export interface Pool {
   game_type: GameType
   teams_per_manager: number | null
   scoring_config: WorldCupScoringConfig | null
+  ff_league_settings: unknown | null
+  ff_scoring_settings: unknown | null
   bg_color: string | null
   font_color: string | null
   subfont_color: string | null

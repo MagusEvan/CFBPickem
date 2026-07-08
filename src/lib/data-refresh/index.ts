@@ -17,14 +17,18 @@ const STALE_MS = 5 * 60 * 1000
 
 type Admin = ReturnType<typeof createAdminClient>
 
-async function claimRefresh(admin: Admin, resource: string): Promise<boolean> {
+export async function claimRefresh(
+  admin: Admin,
+  resource: string,
+  staleMs: number = STALE_MS
+): Promise<boolean> {
   // Ensure the row exists (epoch default makes a new row immediately claimable)
   await admin
     .from('data_refresh')
     .upsert({ resource }, { onConflict: 'resource', ignoreDuplicates: true })
 
   // Atomically claim: only one concurrent caller's update matches the filter
-  const staleBefore = new Date(Date.now() - STALE_MS).toISOString()
+  const staleBefore = new Date(Date.now() - staleMs).toISOString()
   const { data } = await admin
     .from('data_refresh')
     .update({ last_refreshed_at: new Date().toISOString() })
