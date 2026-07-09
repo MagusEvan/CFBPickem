@@ -20,11 +20,18 @@ export function compositeRank(
   return Math.round((present.reduce((s, r) => s + r, 0) / present.length) * 100) / 100
 }
 
+/** The composite that actually drives draft order: manual override wins. */
+export function effectiveComposite(
+  p: Pick<FFPlayer, 'rank_composite' | 'rank_composite_override'>
+): number | null {
+  return p.rank_composite_override ?? p.rank_composite
+}
+
 /**
  * Reassign default_rank (the effective draft order used by the draft board
- * sort and timer autopick) from rank_composite: composite-ranked players
- * first in composite order, everyone else keeps their relative order behind
- * them. Writes only rows whose default_rank changed.
+ * sort and timer autopick) from the effective composite: composite-ranked
+ * players first in composite order, everyone else keeps their relative order
+ * behind them. Writes only rows whose default_rank changed.
  */
 export async function recomputeEffectiveRanks(admin: Admin): Promise<void> {
   const { data } = await admin.from('ff_players').select('*')
@@ -34,7 +41,7 @@ export async function recomputeEffectiveRanks(admin: Admin): Promise<void> {
   const inf = Number.POSITIVE_INFINITY
   const sorted = [...players].sort(
     (a, b) =>
-      (a.rank_composite ?? inf) - (b.rank_composite ?? inf) ||
+      (effectiveComposite(a) ?? inf) - (effectiveComposite(b) ?? inf) ||
       (a.default_rank ?? inf) - (b.default_rank ?? inf) ||
       a.name.localeCompare(b.name)
   )

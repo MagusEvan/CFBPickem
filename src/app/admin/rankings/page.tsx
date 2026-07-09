@@ -21,7 +21,6 @@ export default async function AdminRankingsPage() {
     .from('ff_players')
     .select('*')
     .eq('active', true)
-    .order('rank_composite', { ascending: true, nullsFirst: false })
     .order('default_rank', { ascending: true, nullsFirst: false })
   const players = (data ?? []) as FFPlayer[]
 
@@ -35,6 +34,7 @@ export default async function AdminRankingsPage() {
     sleeper: p.rank_sleeper,
     fantasypros: p.rank_fantasypros,
     composite: p.rank_composite,
+    compositeOverride: p.rank_composite_override,
   }))
 
   // NFL season year (Jan/Feb pages still belong to the prior season)

@@ -95,6 +95,8 @@ export interface FFPlayer {
   rank_fantasypros: number | null
   /** Mean of available source ranks; drives default_rank (draft order) */
   rank_composite: number | null
+  /** Manual admin override; wins over rank_composite when set */
+  rank_composite_override: number | null
   active: boolean
   fetched_at: string
 }

@@ -18,6 +18,7 @@ export interface AdminRankRow {
   sleeper: number | null
   fantasypros: number | null
   composite: number | null
+  compositeOverride: number | null
 }
 
 type SourceKey = 'espn' | 'yahoo' | 'sleeper' | 'fantasypros'
@@ -30,7 +31,7 @@ const SOURCES: Array<{ key: SourceKey; label: string }> = [
 const POSITIONS: Array<FFPosition | 'ALL'> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DST']
 const PAGE_SIZE = 200
 
-type Edits = Partial<Record<SourceKey, string>>
+type Edits = Partial<Record<SourceKey | 'composite', string>>
 
 function mean(values: Array<number | null>): number | null {
   const present = values.filter((v): v is number => v !== null)
@@ -43,6 +44,15 @@ function parseRank(raw: string): number | null {
   const n = Number(raw)
   return Number.isFinite(n) && n >= 1 ? Math.round(n) : null
 }
+
+function parseComposite(raw: string): number | null {
+  if (raw.trim() === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 1 ? Math.round(n * 100) / 100 : null
+}
+
+const compositeEquals = (a: number | null, b: number | null) =>
+  (a === null) === (b === null) && Math.abs((a ?? 0) - (b ?? 0)) <= 0.005
 
 export function RankingsTable({
   players,
@@ -78,17 +88,44 @@ export function RankingsTable({
     return v === null ? '' : String(v)
   }
 
+  /** Composite calculated from the source values currently in the inputs. */
+  const calculatedComposite = (p: AdminRankRow) =>
+    mean(SOURCES.map(({ key }) => parseRank(currentValue(p, key))))
+
+  const currentComposite = (p: AdminRankRow): string => {
+    const edit = edits[p.id]?.composite
+    if (edit !== undefined) return edit
+    if (p.compositeOverride !== null) return String(p.compositeOverride)
+    const calc = calculatedComposite(p)
+    return calc === null ? '' : String(calc)
+  }
+
+  /**
+   * Override to persist on save: the box value when it differs from the
+   * calculated composite, otherwise null (empty box also clears it).
+   */
+  const overrideToSave = (p: AdminRankRow): number | null => {
+    const boxVal = parseComposite(currentComposite(p))
+    if (boxVal === null || compositeEquals(boxVal, calculatedComposite(p))) return null
+    return boxVal
+  }
+
   const isDirty = (p: AdminRankRow) => {
     const e = edits[p.id]
     if (!e) return false
-    return SOURCES.some(({ key }) => key in e && parseRank(e[key] ?? '') !== p[key])
+    const sourceDirty = SOURCES.some(
+      ({ key }) => key in e && parseRank(e[key] ?? '') !== p[key]
+    )
+    const compositeDirty =
+      'composite' in e && !compositeEquals(overrideToSave(p), p.compositeOverride)
+    return sourceDirty || compositeDirty
   }
 
-  const setEdit = (id: string, key: SourceKey, value: string) => {
+  const setEdit = (id: string, key: SourceKey | 'composite', value: string) => {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [key]: value } }))
   }
 
-  const save = (p: AdminRankRow) => {
+  const save = (p: AdminRankRow, opts?: { clearOverride?: boolean }) => {
     setSavingId(p.id)
     setError(null)
     startTransition(async () => {
@@ -97,6 +134,7 @@ export function RankingsTable({
         yahoo: parseRank(currentValue(p, 'yahoo')),
         sleeper: parseRank(currentValue(p, 'sleeper')),
         fantasypros: parseRank(currentValue(p, 'fantasypros')),
+        compositeOverride: opts?.clearOverride ? null : overrideToSave(p),
       })
       setSavingId(null)
       if (result.error) setError(result.error)
@@ -185,9 +223,7 @@ export function RankingsTable({
           <tbody>
             {filtered.slice(0, limit).map((p, i) => {
               const dirty = isDirty(p)
-              const liveComposite = mean(
-                SOURCES.map(({ key }) => parseRank(currentValue(p, key)))
-              )
+              const overridden = p.compositeOverride !== null
               return (
                 <tr key={p.id} className="border-b">
                   <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
@@ -211,18 +247,40 @@ export function RankingsTable({
                       />
                     </td>
                   ))}
-                  <td className="px-2 py-1.5 text-center font-mono tabular-nums">
-                    {liveComposite === null ? '—' : liveComposite.toFixed(2)}
+                  <td className="px-2 py-1.5 text-center">
+                    <Input
+                      type="number"
+                      min={1}
+                      step="0.01"
+                      value={currentComposite(p)}
+                      onChange={(e) => setEdit(p.id, 'composite', e.target.value)}
+                      className={`mx-auto h-7 w-20 text-center text-xs font-mono tabular-nums ${
+                        overridden ? 'border-primary' : ''
+                      }`}
+                    />
                   </td>
                   <td className="px-2 py-1.5 text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={!dirty || savingId === p.id}
-                      onClick={() => save(p)}
-                    >
-                      {savingId === p.id ? 'Saving…' : 'Save'}
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      {overridden && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={savingId === p.id}
+                          onClick={() => save(p, { clearOverride: true })}
+                          title="Clear the manual composite and go back to the calculated value"
+                        >
+                          Reset
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!dirty || savingId === p.id}
+                        onClick={() => save(p)}
+                      >
+                        {savingId === p.id ? 'Saving…' : 'Save'}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               )

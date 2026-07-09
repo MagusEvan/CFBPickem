@@ -25,7 +25,7 @@ async function requireSiteAdmin() {
   return { admin }
 }
 
-/** Pull fresh ranks from ESPN, Sleeper, and FantasyPros (Yahoo is manual). */
+/** Pull fresh ranks from ESPN, Yahoo, Sleeper, and FantasyPros. */
 export async function refreshFfRankings(
   seasonYear: number
 ): Promise<{ error?: string; summary?: RankingRefreshSummary }> {
@@ -46,6 +46,8 @@ export interface PlayerRankInput {
   yahoo: number | null
   sleeper: number | null
   fantasypros: number | null
+  /** Manual composite override; null clears it (fall back to calculated) */
+  compositeOverride: number | null
 }
 
 /** Manually set a player's per-source ranks; recomputes composite + draft order. */
@@ -64,14 +66,24 @@ export async function updateFfPlayerRanks(
   const rank_sleeper = clean(ranks.sleeper)
   const rank_fantasypros = clean(ranks.fantasypros)
   const rank_composite = compositeRank([rank_espn, rank_yahoo, rank_sleeper, rank_fantasypros])
+  const o = ranks.compositeOverride
+  const rank_composite_override =
+    typeof o === 'number' && Number.isFinite(o) && o >= 1 ? Math.round(o * 100) / 100 : null
 
   const { error } = await admin
     .from('ff_players')
-    .update({ rank_espn, rank_yahoo, rank_sleeper, rank_fantasypros, rank_composite })
+    .update({
+      rank_espn,
+      rank_yahoo,
+      rank_sleeper,
+      rank_fantasypros,
+      rank_composite,
+      rank_composite_override,
+    })
     .eq('id', playerId)
   if (error) return { error: error.message }
 
   await recomputeEffectiveRanks(admin)
   revalidatePath('/admin/rankings')
-  return { composite: rank_composite }
+  return { composite: rank_composite_override ?? rank_composite }
 }
