@@ -11,9 +11,13 @@ import Image from 'next/image'
 import { Badge } from '@/components/ui/badge'
 import { TeamBreakdownGrid } from '@/components/standings/team-breakdown-grid'
 import { FfStandingsTable } from '@/components/ff/ff-standings-table'
+import { PlayoffBracket, type BracketRound } from '@/components/ff/playoff-bracket'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getFfCurrentWeek, getFfLineups, getFfMatchups, getFfWeekScores } from '@/lib/ff/queries'
 import { resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import { computeStandings, type FFMatchupResult } from '@/lib/ff/standings'
+import { ensurePlayoffs, playoffChampion } from '@/lib/ff/playoff-processing'
+import { pairingWinner, playoffRoundName, playoffRoundsCount } from '@/lib/ff/playoffs'
 import type { Pool, DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 
 export const revalidate = 60
@@ -288,13 +292,20 @@ async function FfStandings({
   const currentWeek = await getFfCurrentWeek(pool.season_year)
   const throughWeek = Math.min(currentWeek, settings.season.regularSeasonWeeks)
 
+  // Lazily generate/advance the playoff bracket once the regular season ends
+  await ensurePlayoffs(createAdminClient(), pool, settings, currentWeek)
+
+  const playoffRounds = playoffRoundsCount(settings.season.playoffTeams)
+  const playoffFinalWeek = settings.season.playoffStartWeek + playoffRounds - 1
+  const scoreThrough = Math.max(throughWeek, Math.min(currentWeek, playoffFinalWeek))
+
   // Materialize any missing lineup weeks so completed weeks never score 0-0
   // just because nobody opened a page that week (cheap no-op when rows exist)
-  for (let w = 1; w <= throughWeek; w++) await getFfLineups(poolId, w)
+  for (let w = 1; w <= scoreThrough; w++) await getFfLineups(poolId, w)
 
   const [matchups, weekScores] = await Promise.all([
     getFfMatchups(poolId),
-    getFfWeekScores(poolId, pool.season_year, scoring, throughWeek),
+    getFfWeekScores(poolId, pool.season_year, scoring, scoreThrough),
   ])
   const scoresByWeek = new Map(weekScores.map((ws) => [ws.week, ws]))
 
@@ -315,12 +326,65 @@ async function FfStandings({
   const standings = computeStandings(members.map((m) => m.id), results)
   const nameByMember = new Map(members.map((m) => [m.id, m.profiles.display_name]))
 
+  // Playoff bracket (only rendered once round 1 exists)
+  const playoffMatchups = matchups.filter((m) => m.is_playoff)
+  const bracketRounds: BracketRound[] = []
+  if (playoffMatchups.length > 0) {
+    for (let r = 1; r <= playoffRounds; r++) {
+      const week = settings.season.playoffStartWeek + r - 1
+      const ws = scoresByWeek.get(week)
+      const games = playoffMatchups
+        .filter((m) => m.playoff_round === r)
+        .sort((a, b) => (a.playoff_seed_home ?? 0) - (b.playoff_seed_home ?? 0))
+        .map((m) => {
+          const homeScore = ws?.scoreByMember.get(m.home_member_id) ?? 0
+          const awayScore = m.away_member_id
+            ? ws?.scoreByMember.get(m.away_member_id) ?? 0
+            : 0
+          const final = ws?.final ?? false
+          let winner: 'home' | 'away' | null = null
+          if (m.away_member_id === null) winner = 'home'
+          else if (final) {
+            const winnerSeed = pairingWinner(
+              { homeSeed: m.playoff_seed_home ?? 0, awaySeed: m.playoff_seed_away ?? 0 },
+              homeScore,
+              awayScore
+            )
+            winner = winnerSeed === m.playoff_seed_home ? 'home' : 'away'
+          }
+          return {
+            homeName: nameByMember.get(m.home_member_id) ?? '—',
+            awayName: m.away_member_id ? nameByMember.get(m.away_member_id) ?? '—' : null,
+            homeSeed: m.playoff_seed_home,
+            awaySeed: m.playoff_seed_away,
+            homeScore,
+            awayScore,
+            final,
+            winner,
+          }
+        })
+      bracketRounds.push({ round: r, name: playoffRoundName(r, playoffRounds), week, games })
+    }
+  }
+  const finalWs = scoresByWeek.get(playoffFinalWeek)
+  const championId = playoffChampion(
+    playoffMatchups,
+    settings,
+    finalWs?.final ?? false,
+    finalWs?.scoreByMember ?? new Map()
+  )
+  const championName = championId ? nameByMember.get(championId) ?? null : null
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
       <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
         &lt; Return to Pool
       </Link>
+
+      {bracketRounds.length > 0 && (
+        <PlayoffBracket poolId={poolId} rounds={bracketRounds} championName={championName} />
+      )}
 
       <Card>
         <CardHeader>

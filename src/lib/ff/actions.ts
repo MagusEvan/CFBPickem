@@ -142,6 +142,9 @@ export async function swapFfLineupSlots(
     if (!eligiblePositionsForSlot(dest, settings).includes(player.position)) {
       return `${player.name} is not eligible for the ${dest} slot`
     }
+    if (dest === 'IR' && !player.injury_status) {
+      return `${player.name} is not injured — IR is for injured players only`
+    }
     if (isPlayerLocked(player, startByTeam)) {
       return `${player.name}'s game has already started`
     }

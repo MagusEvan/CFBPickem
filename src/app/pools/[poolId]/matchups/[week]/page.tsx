@@ -12,6 +12,9 @@ import {
 import { resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import { computeFantasyPoints, isStarterSlot, round2 } from '@/lib/ff/scoring'
 import { sortSlots } from '@/lib/ff/roster'
+import { playoffRoundName, playoffRoundsCount } from '@/lib/ff/playoffs'
+import { ensurePlayoffs } from '@/lib/ff/playoff-processing'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { MatchupLive } from '@/components/ff/matchup-live'
 import { buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,9 +37,22 @@ export default async function MatchupWeekPage({
   if (!pool || pool.game_type !== 'ff') notFound()
 
   const settings = resolveLeagueSettings(pool)
-  if (week > settings.season.regularSeasonWeeks) notFound()
+  const playoffRounds = playoffRoundsCount(settings.season.playoffTeams)
+  const maxWeek = Math.max(
+    settings.season.regularSeasonWeeks,
+    settings.season.playoffStartWeek + playoffRounds - 1
+  )
+  if (week > maxWeek) notFound()
 
   const currentWeek = await getFfCurrentWeek(pool.season_year)
+  // Lazily generate/advance the playoff bracket (no-op during regular season)
+  await ensurePlayoffs(createAdminClient(), pool, settings, currentWeek)
+
+  const playoffRound =
+    week >= settings.season.playoffStartWeek && playoffRounds > 0
+      ? week - settings.season.playoffStartWeek + 1
+      : null
+
   const [games, statsByPlayer, lineups, matchups] = await Promise.all([
     getFfWeekGames(pool.season_year, week),
     getFfWeekStats(pool.season_year, week),
@@ -80,6 +96,9 @@ export default async function MatchupWeekPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">Week {week} Matchups</h1>
+          {playoffRound !== null && playoffRound <= playoffRounds && (
+            <Badge variant="outline">{playoffRoundName(playoffRound, playoffRounds)}</Badge>
+          )}
           {anyGameLive && <Badge variant="destructive">Live</Badge>}
           {weekFinal && <Badge variant="secondary">Final</Badge>}
         </div>
@@ -100,7 +119,7 @@ export default async function MatchupWeekPage({
               Current Week
             </Link>
           )}
-          {week < settings.season.regularSeasonWeeks && (
+          {week < maxWeek && (
             <Link
               href={`/pools/${poolId}/matchups/${week + 1}`}
               className={buttonVariants({ variant: 'outline', size: 'sm' })}
@@ -114,7 +133,9 @@ export default async function MatchupWeekPage({
       {matchups.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No matchups scheduled for this week.
+            {playoffRound !== null
+              ? 'This playoff round has not been decided yet.'
+              : 'No matchups scheduled for this week.'}
           </CardContent>
         </Card>
       )}
