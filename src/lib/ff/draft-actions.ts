@@ -6,7 +6,15 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { Pool, PoolMember } from '@/lib/types'
 import type { FFDraftState, FFLeagueSettings, FFPlayer, FFDraftPick, FFPosition } from './types'
 import { resolveLeagueSettings } from './settings'
-import { generateSnakeOrder, getPickInfo, draftRounds, validateFfPick, autopickPlayer } from './draft-engine'
+import {
+  generateSnakeOrder,
+  getPickInfo,
+  draftRounds,
+  validateFfPick,
+  autopickPlayer,
+  maxBid,
+  nextNominatorId,
+} from './draft-engine'
 import { autoFillLineup } from './roster'
 import { generateRoundRobin } from './schedule'
 
@@ -71,8 +79,9 @@ export async function startFfDraft(poolId: string): Promise<{ error?: string }> 
   if (members.length < 2) return { error: 'Need at least 2 managers' }
 
   const settings = resolveLeagueSettings(pool)
-  if (settings.draft.type === 'auction') {
-    return { error: 'Auction drafts are coming soon — switch to a snake draft in league settings.' }
+  const isAuction = settings.draft.type === 'auction'
+  if (isAuction && settings.draft.auctionBudget < draftRounds(settings)) {
+    return { error: 'Auction budget must cover at least $1 per roster spot' }
   }
 
   // Assign draft positions (random mode, or any member missing a position)
@@ -93,7 +102,10 @@ export async function startFfDraft(poolId: string): Promise<{ error?: string }> 
       draft_type: settings.draft.type,
       current_round: 1,
       current_pick_number: 1,
-      current_member_id: first?.id ?? null,
+      // Snake: first picker on the clock. Auction: first nominator instead.
+      current_member_id: isAuction ? null : first?.id ?? null,
+      nominating_member_id: isAuction ? first?.id ?? null : null,
+      nomination_number: 1,
       timer_seconds: settings.draft.timerSeconds,
       pick_deadline: deadlineFrom(settings),
       updated_at: new Date().toISOString(),
@@ -116,7 +128,12 @@ export async function pauseFfDraft(poolId: string): Promise<{ error?: string }> 
 
   const { error } = await admin
     .from('ff_draft_state')
-    .update({ status: 'paused', pick_deadline: null, updated_at: new Date().toISOString() })
+    .update({
+      status: 'paused',
+      pick_deadline: null,
+      lot_deadline: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('pool_id', poolId)
     .eq('status', 'in_progress')
   if (error) return { error: error.message }
@@ -132,11 +149,18 @@ export async function resumeFfDraft(poolId: string): Promise<{ error?: string }>
   if (pool.admin_id !== userId) return { error: 'Only the commissioner can resume the draft' }
 
   const settings = resolveLeagueSettings(pool)
+  const state = ctx.state
+  const lotOpen = state.draft_type === 'auction' && state.lot_player_id !== null
   const { error } = await admin
     .from('ff_draft_state')
     .update({
       status: 'in_progress',
-      pick_deadline: deadlineFrom(settings),
+      // An open lot resumes with a fresh bid clock; otherwise the pick/
+      // nomination timer restarts (if the draft is timed at all)
+      pick_deadline: lotOpen ? null : deadlineFrom(settings),
+      lot_deadline: lotOpen
+        ? new Date(Date.now() + settings.draft.auctionBidSeconds * 1000).toISOString()
+        : null,
       updated_at: new Date().toISOString(),
     })
     .eq('pool_id', poolId)
@@ -331,6 +355,323 @@ async function executePick(
   return {}
 }
 
+// --- Auction ---
+//
+// Lot state on ff_draft_state is authoritative; ff_auction_bids is an
+// advisory log for the live bid feed. Budgets are derived from pick prices
+// (single source of truth — undo just deletes the pick). Concurrency:
+// bids are conditional UPDATEs (must beat lot_high_bid), and the award
+// insert claims unique(pool_id, pick_number) exactly like snake picks.
+
+interface AuctionMemberState {
+  rosterCount: number
+  spent: number
+}
+
+function auctionMemberStates(
+  members: PoolMember[],
+  picks: Pick<FFDraftPick, 'member_id' | 'price'>[]
+): Map<string, AuctionMemberState> {
+  const byId = new Map<string, AuctionMemberState>(
+    members.map((m) => [m.id, { rosterCount: 0, spent: 0 }])
+  )
+  for (const p of picks) {
+    const s = byId.get(p.member_id)
+    if (!s) continue
+    s.rosterCount++
+    s.spent += p.price ?? 0
+  }
+  return byId
+}
+
+function memberMaxBid(
+  memberId: string,
+  states: Map<string, AuctionMemberState>,
+  settings: FFLeagueSettings
+): number {
+  const s = states.get(memberId) ?? { rosterCount: 0, spent: 0 }
+  const openSpots = draftRounds(settings) - s.rosterCount
+  return maxBid(settings.draft.auctionBudget - s.spent, openSpots)
+}
+
+async function loadAuctionPicks(admin: Admin, poolId: string) {
+  const { data } = await admin
+    .from('ff_draft_picks')
+    .select('member_id, player_id, player_position, price')
+    .eq('pool_id', poolId)
+  return (data ?? []) as Pick<FFDraftPick, 'member_id' | 'player_id' | 'player_position' | 'price'>[]
+}
+
+/** Open a lot: nominator (or commissioner) puts a player up at $1. */
+export async function nominateFfPlayer(poolId: string, playerId: string): Promise<{ error?: string }> {
+  const ctx = await loadDraft(poolId)
+  if ('error' in ctx) return { error: ctx.error }
+  const { admin, pool, state, members, userId, callerMember } = ctx
+
+  if (state.status !== 'in_progress' || state.draft_type !== 'auction') {
+    return { error: 'Auction is not in progress' }
+  }
+  if (state.lot_player_id) return { error: 'A player is already up for bid' }
+  if (!state.nominating_member_id) return { error: 'No nominator set' }
+  if (callerMember.id !== state.nominating_member_id && pool.admin_id !== userId) {
+    return { error: 'It is not your turn to nominate' }
+  }
+
+  const settings = resolveLeagueSettings(pool)
+  const [{ data: player }, picks] = await Promise.all([
+    admin.from('ff_players').select('*').eq('id', playerId).single(),
+    loadAuctionPicks(admin, poolId),
+  ])
+  if (!player) return { error: 'Player not found' }
+  if (picks.some((p) => p.player_id === playerId)) {
+    return { error: 'This player has already been drafted' }
+  }
+
+  const states = auctionMemberStates(members, picks)
+  if (memberMaxBid(state.nominating_member_id, states, settings) < 1) {
+    return { error: 'The nominating manager has no roster spots left' }
+  }
+
+  return openLot(admin, pool, state, settings, player as FFPlayer, state.nominating_member_id)
+}
+
+/** Conditional lot open — loses cleanly if another nomination landed first. */
+async function openLot(
+  admin: Admin,
+  pool: Pool,
+  state: FFDraftState,
+  settings: FFLeagueSettings,
+  player: FFPlayer,
+  nominatorId: string
+): Promise<{ error?: string }> {
+  const { data: updated } = await admin
+    .from('ff_draft_state')
+    .update({
+      lot_player_id: player.id,
+      lot_high_bid: 1,
+      lot_high_bidder_id: nominatorId,
+      lot_deadline: new Date(Date.now() + settings.draft.auctionBidSeconds * 1000).toISOString(),
+      pick_deadline: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('pool_id', pool.id)
+    .eq('nomination_number', state.nomination_number)
+    .is('lot_player_id', null)
+    .select('pool_id')
+  if (!updated || updated.length === 0) {
+    return { error: 'Another nomination just came in — refresh and try again.' }
+  }
+
+  await admin.from('ff_auction_bids').insert({
+    pool_id: pool.id,
+    nomination_number: state.nomination_number,
+    member_id: nominatorId,
+    player_id: player.id,
+    amount: 1,
+  })
+
+  revalidateDraft(pool.id)
+  return {}
+}
+
+export async function placeFfBid(poolId: string, amount: number): Promise<{ error?: string }> {
+  const ctx = await loadDraft(poolId)
+  if ('error' in ctx) return { error: ctx.error }
+  const { admin, pool, state, members, callerMember } = ctx
+
+  if (state.status !== 'in_progress' || state.draft_type !== 'auction' || !state.lot_player_id) {
+    return { error: 'No player is up for bid' }
+  }
+  if (state.lot_deadline && new Date(state.lot_deadline).getTime() <= Date.now()) {
+    return { error: 'Bidding on this player has closed' }
+  }
+  if (!Number.isInteger(amount) || amount < 1) return { error: 'Bids must be whole dollars' }
+  if (state.lot_high_bidder_id === callerMember.id) {
+    return { error: 'You are already the high bidder' }
+  }
+
+  const settings = resolveLeagueSettings(pool)
+  const picks = await loadAuctionPicks(admin, poolId)
+  const states = auctionMemberStates(members, picks)
+  const myMax = memberMaxBid(callerMember.id, states, settings)
+  if (myMax < 1) return { error: 'Your roster is full' }
+  if (amount > myMax) return { error: `Your max bid is $${myMax}` }
+
+  // Must beat the current high bid; the .lt guard resolves concurrent bids
+  const { data: updated } = await admin
+    .from('ff_draft_state')
+    .update({
+      lot_high_bid: amount,
+      lot_high_bidder_id: callerMember.id,
+      // Every bid resets the clock (soft close)
+      lot_deadline: new Date(Date.now() + settings.draft.auctionBidSeconds * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('pool_id', poolId)
+    .eq('nomination_number', state.nomination_number)
+    .eq('lot_player_id', state.lot_player_id)
+    .lt('lot_high_bid', amount)
+    .select('pool_id')
+  if (!updated || updated.length === 0) {
+    return { error: 'Someone bid higher first — raise again.' }
+  }
+
+  await admin.from('ff_auction_bids').insert({
+    pool_id: poolId,
+    nomination_number: state.nomination_number,
+    member_id: callerMember.id,
+    player_id: state.lot_player_id,
+    amount,
+  })
+
+  revalidateDraft(poolId)
+  return {}
+}
+
+/**
+ * Idempotent lazy lot close: any member whose client observes an expired
+ * lot deadline calls this. The pick insert (unique pick_number) picks
+ * exactly one winner among concurrent calls.
+ */
+export async function closeFfLot(poolId: string): Promise<{ error?: string }> {
+  const ctx = await loadDraft(poolId)
+  if ('error' in ctx) return { error: ctx.error }
+  const { admin, pool, state, members } = ctx
+
+  if (
+    state.status !== 'in_progress' ||
+    state.draft_type !== 'auction' ||
+    !state.lot_player_id ||
+    !state.lot_high_bidder_id ||
+    !state.lot_deadline ||
+    new Date(state.lot_deadline).getTime() > Date.now()
+  ) {
+    return {} // nothing to close (or another client already advanced)
+  }
+
+  const { data: player } = await admin
+    .from('ff_players')
+    .select('*')
+    .eq('id', state.lot_player_id)
+    .single()
+  if (!player) return { error: 'Player not found' }
+
+  const { error: pickError } = await admin.from('ff_draft_picks').insert({
+    pool_id: poolId,
+    member_id: state.lot_high_bidder_id,
+    round: null,
+    pick_number: state.nomination_number,
+    player_id: player.id,
+    player_name: (player as FFPlayer).name,
+    player_position: (player as FFPlayer).position,
+    price: state.lot_high_bid,
+    auto: false,
+  })
+  // Lost the close race (or player somehow taken) — treat as already done
+  if (pickError) {
+    if (pickError.code === '23505') return {}
+    return { error: pickError.message }
+  }
+
+  const settings = resolveLeagueSettings(pool)
+  const rounds = draftRounds(settings)
+  const totalPicks = members.length * rounds
+
+  if (state.nomination_number >= totalPicks) {
+    await admin
+      .from('ff_draft_state')
+      .update({
+        status: 'completed',
+        nominating_member_id: null,
+        lot_player_id: null,
+        lot_high_bid: null,
+        lot_high_bidder_id: null,
+        lot_deadline: null,
+        pick_deadline: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('pool_id', poolId)
+      .eq('nomination_number', state.nomination_number)
+    await admin.from('pools').update({ draft_status: 'completed' }).eq('id', poolId)
+    await buildSeasonArtifacts(admin, pool, members, settings)
+  } else {
+    const picks = await loadAuctionPicks(admin, poolId)
+    const states = auctionMemberStates(members, picks)
+    const counts = new Map([...states].map(([id, s]) => [id, s.rosterCount]))
+    const nextNom = nextNominatorId(
+      members.map((m) => m.id),
+      counts,
+      state.nomination_number + 1,
+      rounds
+    )
+    await admin
+      .from('ff_draft_state')
+      .update({
+        nomination_number: state.nomination_number + 1,
+        nominating_member_id: nextNom,
+        lot_player_id: null,
+        lot_high_bid: null,
+        lot_high_bidder_id: null,
+        lot_deadline: null,
+        pick_deadline: deadlineFrom(settings),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('pool_id', poolId)
+      .eq('nomination_number', state.nomination_number) // idempotent advance
+  }
+
+  revalidateDraft(poolId)
+  return {}
+}
+
+/**
+ * Idempotent nomination-timer enforcement: auto-nominates the best available
+ * player (by the same constrained autopick logic) for the manager on the
+ * clock when their nomination deadline expires.
+ */
+export async function enforceFfNominationDeadline(poolId: string): Promise<{ error?: string }> {
+  const ctx = await loadDraft(poolId)
+  if ('error' in ctx) return { error: ctx.error }
+  const { admin, pool, state } = ctx
+
+  if (
+    state.status !== 'in_progress' ||
+    state.draft_type !== 'auction' ||
+    state.lot_player_id !== null ||
+    !state.timer_seconds ||
+    !state.pick_deadline ||
+    new Date(state.pick_deadline).getTime() > Date.now() ||
+    !state.nominating_member_id
+  ) {
+    return {} // nothing to enforce
+  }
+
+  const settings = resolveLeagueSettings(pool)
+  const [picks, { data: available }] = await Promise.all([
+    loadAuctionPicks(admin, poolId),
+    admin
+      .from('ff_players')
+      .select('*')
+      .eq('active', true)
+      .order('default_rank', { ascending: true, nullsFirst: false }),
+  ])
+
+  const draftedIds = new Set(picks.map((p) => p.player_id))
+  const undrafted = ((available ?? []) as FFPlayer[]).filter((p) => !draftedIds.has(p.id))
+  const nominatorPositions = picks
+    .filter((p) => p.member_id === state.nominating_member_id)
+    .map((p) => p.player_position as FFPosition)
+  const remaining = draftRounds(settings) - nominatorPositions.length
+
+  const player = autopickPlayer(undrafted, nominatorPositions, remaining, settings)
+  if (!player) return { error: 'No players available to nominate' }
+
+  const result = await openLot(admin, pool, state, settings, player, state.nominating_member_id)
+  // A concurrent nomination already opened the lot — that's success
+  if (result.error?.includes('nomination just came in')) return {}
+  return result
+}
+
 // --- Completion: rosters, initial lineups, season schedule ---
 
 async function completeDraft(
@@ -354,12 +695,25 @@ async function completeDraft(
 
   await admin.from('pools').update({ draft_status: 'completed' }).eq('id', pool.id)
 
+  await buildSeasonArtifacts(admin, pool, members, settings)
+}
+
+/** Rosters, auto-filled week-1 lineups, and the season schedule. */
+async function buildSeasonArtifacts(
+  admin: Admin,
+  pool: Pool,
+  members: PoolMember[],
+  settings: FFLeagueSettings
+) {
   const { data: picks } = await admin
     .from('ff_draft_picks')
     .select('*')
     .eq('pool_id', pool.id)
     .order('pick_number')
-  const allPicks = (picks ?? []) as FFDraftPick[]
+  // Best-first per member: price desc for auction, pick order for snake
+  const allPicks = ((picks ?? []) as FFDraftPick[]).sort(
+    (a, b) => (b.price ?? 0) - (a.price ?? 0) || a.pick_number - b.pick_number
+  )
 
   // Rosters
   const rosterRows = allPicks.map((p) => ({
@@ -434,6 +788,43 @@ export async function undoFfPick(poolId: string): Promise<{ error?: string }> {
   }
 
   const settings = resolveLeagueSettings(pool)
+  const resumedStatus = state.status === 'paused' ? 'paused' : 'in_progress'
+  const timedDeadline =
+    resumedStatus !== 'paused' && state.timer_seconds
+      ? new Date(Date.now() + state.timer_seconds * 1000).toISOString()
+      : null
+
+  if (state.draft_type === 'auction') {
+    // Rewind to re-nominate the undone lot (nominator is recomputed from the
+    // remaining picks — same deterministic skip logic closeFfLot uses)
+    const picks = await loadAuctionPicks(admin, poolId)
+    const states = auctionMemberStates(members, picks)
+    const counts = new Map([...states].map(([id, s]) => [id, s.rosterCount]))
+    const nominator = nextNominatorId(
+      members.map((m) => m.id),
+      counts,
+      lastPick.pick_number,
+      draftRounds(settings)
+    )
+    await admin
+      .from('ff_draft_state')
+      .update({
+        status: resumedStatus,
+        nomination_number: lastPick.pick_number,
+        nominating_member_id: nominator,
+        lot_player_id: null,
+        lot_high_bid: null,
+        lot_high_bidder_id: null,
+        lot_deadline: null,
+        pick_deadline: timedDeadline,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('pool_id', poolId)
+
+    revalidateDraft(poolId)
+    return {}
+  }
+
   const order = generateSnakeOrder({ managerCount: members.length, numRounds: draftRounds(settings) })
   const pickInfo = getPickInfo(order, lastPick.pick_number)
   if (!pickInfo) return { error: 'Invalid pick number' }
@@ -442,14 +833,11 @@ export async function undoFfPick(poolId: string): Promise<{ error?: string }> {
   await admin
     .from('ff_draft_state')
     .update({
-      status: state.status === 'paused' ? 'paused' : 'in_progress',
+      status: resumedStatus,
       current_round: pickInfo.round,
       current_pick_number: lastPick.pick_number,
       current_member_id: memberForPick?.id ?? null,
-      pick_deadline:
-        state.status !== 'paused' && state.timer_seconds
-          ? new Date(Date.now() + state.timer_seconds * 1000).toISOString()
-          : null,
+      pick_deadline: timedDeadline,
       updated_at: new Date().toISOString(),
     })
     .eq('pool_id', poolId)

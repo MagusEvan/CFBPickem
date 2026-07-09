@@ -16,12 +16,16 @@ export function PlayerPoolTable({
   canPick,
   pendingPlayerId,
   onPick,
+  actionLabel = 'Draft',
+  pendingLabel = 'Drafting…',
 }: {
   players: FFPlayer[]
   draftedIds: Set<string>
   canPick: boolean
   pendingPlayerId: string | null
   onPick: (player: FFPlayer) => void
+  actionLabel?: string
+  pendingLabel?: string
 }) {
   const [search, setSearch] = useState('')
   const [position, setPosition] = useState<FFPosition | 'ALL'>('ALL')
@@ -119,7 +123,7 @@ export function PlayerPoolTable({
                         disabled={!canPick || pendingPlayerId !== null}
                         onClick={() => onPick(p)}
                       >
-                        {pendingPlayerId === p.id ? 'Drafting…' : 'Draft'}
+                        {pendingPlayerId === p.id ? pendingLabel : actionLabel}
                       </Button>
                     )}
                   </td>

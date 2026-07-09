@@ -11,11 +11,18 @@ import {
   resumeFfDraft,
   undoFfPick,
   resetFfDraft,
+  nominateFfPlayer,
+  placeFfBid,
+  closeFfLot,
+  enforceFfNominationDeadline,
 } from '@/lib/ff/draft-actions'
-import { draftRounds } from '@/lib/ff/draft-engine'
+import { draftRounds, maxBid } from '@/lib/ff/draft-engine'
 import { PickTimer } from './pick-timer'
 import { PlayerPoolTable } from './player-pool-table'
 import { DraftBoard } from './draft-board'
+import { AuctionLot } from './auction-lot'
+import { AuctionResults } from './auction-results'
+import { BudgetTracker, type BudgetRow } from './budget-tracker'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -37,15 +44,21 @@ export function FfDraftRoom({
   settings: FFLeagueSettings
   currentUserId: string
 }) {
-  const { draftState, picks, loading, refetch } = useFfDraftRealtime(pool.id)
+  const { draftState, picks, bids, loading, refetch } = useFfDraftRealtime(pool.id)
   const [pendingPlayerId, setPendingPlayerId] = useState<string | null>(null)
   const [actionPending, setActionPending] = useState(false)
 
   const isAdmin = pool.admin_id === currentUserId
   const myMember = members.find((m) => m.user_id === currentUserId)
   const rounds = draftRounds(settings)
+  const isAuction = settings.draft.type === 'auction'
   const draftedIds = useMemo(() => new Set(picks.map((p) => p.player_id)), [picks])
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members])
+  const nameByMember = useMemo(
+    () => new Map(members.map((m) => [m.id, m.profiles.display_name])),
+    [members]
+  )
+  const playerById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players])
 
   const onClockMember = draftState?.current_member_id
     ? memberById.get(draftState.current_member_id)
@@ -53,6 +66,33 @@ export function FfDraftRoom({
   const isMyTurn =
     draftState?.status === 'in_progress' && onClockMember?.user_id === currentUserId
   const canPick = isMyTurn || (isAdmin && draftState?.status === 'in_progress')
+
+  // Auction budget math is derived from pick prices (server does the same)
+  const budgetRows = useMemo<BudgetRow[]>(() => {
+    if (!isAuction) return []
+    return members.map((m) => {
+      const mine = picks.filter((p) => p.member_id === m.id)
+      const spent = mine.reduce((sum, p) => sum + (p.price ?? 0), 0)
+      const openSpots = rounds - mine.length
+      return {
+        memberId: m.id,
+        name: m.profiles.display_name,
+        spent,
+        budget: settings.draft.auctionBudget,
+        openSpots,
+        maxBid: maxBid(settings.draft.auctionBudget - spent, openSpots),
+        isNominating: draftState?.nominating_member_id === m.id,
+        isMe: m.user_id === currentUserId,
+      }
+    })
+  }, [isAuction, members, picks, rounds, settings.draft.auctionBudget, draftState?.nominating_member_id, currentUserId])
+
+  const nominator = draftState?.nominating_member_id
+    ? memberById.get(draftState.nominating_member_id)
+    : null
+  const isMyNomination =
+    draftState?.status === 'in_progress' && nominator?.user_id === currentUserId
+  const lotOpen = Boolean(draftState?.lot_player_id)
 
   const runAction = useCallback(
     async (action: () => Promise<{ error?: string }>) => {
@@ -82,6 +122,34 @@ export function FfDraftRoom({
     enforceFfPickDeadline(pool.id).then(() => refetch())
   }
 
+  const handleNominate = async (player: FFPlayer) => {
+    setPendingPlayerId(player.id)
+    const result = await nominateFfPlayer(pool.id, player.id)
+    setPendingPlayerId(null)
+    if (result.error) {
+      toast.error(result.error)
+      refetch()
+    }
+  }
+
+  const handleBid = async (amount: number) => {
+    setActionPending(true)
+    const result = await placeFfBid(pool.id, amount)
+    setActionPending(false)
+    if (result.error) {
+      toast.error(result.error)
+      refetch()
+    }
+  }
+
+  const handleLotExpire = () => {
+    closeFfLot(pool.id).then(() => refetch())
+  }
+
+  const handleNominationExpire = () => {
+    enforceFfNominationDeadline(pool.id).then(() => refetch())
+  }
+
   if (loading || !draftState) {
     return (
       <div className="flex justify-center py-16">
@@ -96,8 +164,14 @@ export function FfDraftRoom({
       <div className="mx-auto max-w-lg space-y-4 py-12 text-center">
         <h1 className="text-2xl font-bold">Fantasy Football Draft</h1>
         <p className="text-sm text-muted-foreground">
-          {members.length} managers · {rounds} rounds ·{' '}
-          {settings.draft.timerSeconds ? `${settings.draft.timerSeconds}s pick clock` : 'untimed'}
+          {members.length} managers ·{' '}
+          {isAuction
+            ? `auction · $${settings.draft.auctionBudget} budget · ${settings.draft.auctionBidSeconds}s bid clock`
+            : `snake · ${rounds} rounds`}{' '}
+          ·{' '}
+          {settings.draft.timerSeconds
+            ? `${settings.draft.timerSeconds}s ${isAuction ? 'nomination' : 'pick'} clock`
+            : isAuction ? 'untimed nominations' : 'untimed'}
         </p>
         {isAdmin ? (
           <Button
@@ -138,13 +212,129 @@ export function FfDraftRoom({
             </Link>
           </div>
         </div>
-        <DraftBoard members={members} picks={picks} rounds={rounds} currentPickNumber={null} />
+        {draftState.draft_type === 'auction' ? (
+          <AuctionResults members={members} picks={picks} budget={settings.draft.auctionBudget} />
+        ) : (
+          <DraftBoard members={members} picks={picks} rounds={rounds} currentPickNumber={null} />
+        )}
       </div>
     )
   }
 
   // --- In progress / paused ---
   const paused = draftState.status === 'paused'
+  const lotPlayer = draftState.lot_player_id ? playerById.get(draftState.lot_player_id) : null
+  const myBudget = budgetRows.find((r) => r.isMe)
+  const totalPicks = members.length * rounds
+
+  const adminControls = isAdmin && (
+    <div className="flex gap-2">
+      {paused ? (
+        <Button size="sm" disabled={actionPending} onClick={() => runAction(() => resumeFfDraft(pool.id))}>
+          Resume
+        </Button>
+      ) : (
+        <Button size="sm" variant="outline" disabled={actionPending} onClick={() => runAction(() => pauseFfDraft(pool.id))}>
+          Pause
+        </Button>
+      )}
+      <Button size="sm" variant="outline" disabled={actionPending || picks.length === 0} onClick={() => runAction(() => undoFfPick(pool.id))}>
+        Undo
+      </Button>
+      <Button
+        size="sm"
+        variant="destructive"
+        disabled={actionPending}
+        onClick={() => {
+          if (confirm('Reset the draft? All picks will be deleted.')) {
+            runAction(() => resetFfDraft(pool.id))
+          }
+        }}
+      >
+        Reset
+      </Button>
+    </div>
+  )
+
+  if (draftState.draft_type === 'auction') {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div className="flex items-center gap-3">
+              <Badge variant="outline">
+                Nomination {Math.min(draftState.nomination_number, totalPicks)} / {totalPicks}
+              </Badge>
+              {paused ? (
+                <Badge variant="secondary">Paused</Badge>
+              ) : lotOpen ? (
+                <span className="text-sm">Bidding is live</span>
+              ) : (
+                <span className="text-sm">
+                  Nominating:{' '}
+                  <span className={isMyNomination ? 'font-bold text-primary' : 'font-medium'}>
+                    {isMyNomination ? 'You' : nominator?.profiles.display_name ?? '—'}
+                  </span>
+                </span>
+              )}
+              {!paused && !lotOpen && draftState.timer_seconds && (
+                <PickTimer deadline={draftState.pick_deadline} onExpire={handleNominationExpire} />
+              )}
+            </div>
+            {adminControls}
+          </CardContent>
+        </Card>
+
+        {!paused && lotOpen && lotPlayer && (
+          <AuctionLot
+            player={lotPlayer}
+            highBid={draftState.lot_high_bid ?? 1}
+            highBidderName={
+              draftState.lot_high_bidder_id
+                ? nameByMember.get(draftState.lot_high_bidder_id) ?? '—'
+                : '—'
+            }
+            iAmHighBidder={draftState.lot_high_bidder_id === myMember?.id}
+            deadline={draftState.lot_deadline}
+            myMaxBid={myBudget?.maxBid ?? 0}
+            bids={bids.filter((b) => b.nomination_number === draftState.nomination_number)}
+            nameByMember={nameByMember}
+            pending={actionPending}
+            onBid={handleBid}
+            onExpire={handleLotExpire}
+          />
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-[24rem_1fr]">
+          <div className="space-y-4">
+            <div>
+              <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Budgets</h2>
+              <BudgetTracker rows={budgetRows} />
+            </div>
+            <div>
+              <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
+                Available Players
+                {isAdmin && !isMyNomination && !paused && !lotOpen && ' (nominating for the manager on the clock)'}
+              </h2>
+              <PlayerPoolTable
+                players={players}
+                draftedIds={draftedIds}
+                canPick={(isMyNomination || (isAdmin && !paused)) && !lotOpen && !paused}
+                pendingPlayerId={pendingPlayerId}
+                onPick={handleNominate}
+                actionLabel="Nominate"
+                pendingLabel="Nominating…"
+              />
+            </div>
+          </div>
+          <div>
+            <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Rosters</h2>
+            <AuctionResults members={members} picks={picks} budget={settings.draft.auctionBudget} />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -168,35 +358,7 @@ export function FfDraftRoom({
               <PickTimer deadline={draftState.pick_deadline} onExpire={handleExpire} />
             )}
           </div>
-
-          {isAdmin && (
-            <div className="flex gap-2">
-              {paused ? (
-                <Button size="sm" disabled={actionPending} onClick={() => runAction(() => resumeFfDraft(pool.id))}>
-                  Resume
-                </Button>
-              ) : (
-                <Button size="sm" variant="outline" disabled={actionPending} onClick={() => runAction(() => pauseFfDraft(pool.id))}>
-                  Pause
-                </Button>
-              )}
-              <Button size="sm" variant="outline" disabled={actionPending || picks.length === 0} onClick={() => runAction(() => undoFfPick(pool.id))}>
-                Undo
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={actionPending}
-                onClick={() => {
-                  if (confirm('Reset the draft? All picks will be deleted.')) {
-                    runAction(() => resetFfDraft(pool.id))
-                  }
-                }}
-              >
-                Reset
-              </Button>
-            </div>
-          )}
+          {adminControls}
         </CardContent>
       </Card>
 

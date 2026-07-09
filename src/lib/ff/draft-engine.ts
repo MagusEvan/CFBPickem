@@ -26,6 +26,38 @@ export function validateFfPick(params: {
   return { valid: true }
 }
 
+// --- Auction ---
+
+/**
+ * Max legal bid: must keep $1 for every OTHER open roster spot.
+ * A member with no open spots can't bid at all.
+ */
+export function maxBid(budgetRemaining: number, openSpots: number): number {
+  if (openSpots <= 0) return 0
+  return budgetRemaining - (openSpots - 1)
+}
+
+/**
+ * Nominator for a given nomination number: rotate through members in
+ * draft-position order, skipping anyone whose roster is already full.
+ * Deterministic given roster counts, so undo can recompute it.
+ */
+export function nextNominatorId(
+  orderedMemberIds: string[],
+  rosterCountById: Map<string, number>,
+  nominationNumber: number,
+  totalSpots: number
+): string | null {
+  const n = orderedMemberIds.length
+  if (n === 0) return null
+  const start = (nominationNumber - 1) % n
+  for (let i = 0; i < n; i++) {
+    const id = orderedMemberIds[(start + i) % n]
+    if ((rosterCountById.get(id) ?? 0) < totalSpots) return id
+  }
+  return null // everyone is full
+}
+
 const STARTER_POSITIONS: FFPosition[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
 
 /**
