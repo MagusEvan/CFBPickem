@@ -268,6 +268,28 @@ export interface FFPlayerWaiver {
   clears_at: string
 }
 
+export type FFTradeStatus =
+  | 'proposed'
+  | 'accepted' // awaiting commissioner review
+  | 'rejected'
+  | 'cancelled'
+  | 'vetoed'
+  | 'executed'
+
+export interface FFTrade {
+  id: string
+  pool_id: string
+  proposer_member_id: string
+  recipient_member_id: string
+  proposer_player_ids: string[]
+  recipient_player_ids: string[]
+  status: FFTradeStatus
+  resolution: string | null
+  created_at: string
+  responded_at: string | null
+  executed_at: string | null
+}
+
 export type FFTransactionType =
   | 'free_agent_add'
   | 'drop'

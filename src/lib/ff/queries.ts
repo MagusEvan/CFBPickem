@@ -10,6 +10,7 @@ import type {
   FFLineupSlot,
   FFMatchup,
   FFScoringSettings,
+  FFTrade,
   FFTransaction,
   FFWaiverClaim,
   FFWaiverPriority,
@@ -203,6 +204,17 @@ export async function getFfPlayerWaivers(poolId: string): Promise<Map<string, st
     .eq('pool_id', poolId)
     .gt('clears_at', new Date().toISOString())
   return new Map((data ?? []).map((r) => [r.player_id, r.clears_at]))
+}
+
+/** All trades in a pool, newest first. */
+export async function getFfTrades(poolId: string): Promise<FFTrade[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_trades')
+    .select('*')
+    .eq('pool_id', poolId)
+    .order('created_at', { ascending: false })
+  return (data ?? []) as FFTrade[]
 }
 
 /** Transaction log, newest first. */
