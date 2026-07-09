@@ -10,6 +10,10 @@ import type {
   FFLineupSlot,
   FFMatchup,
   FFScoringSettings,
+  FFTransaction,
+  FFWaiverClaim,
+  FFWaiverPriority,
+  FFWaiverState,
 } from './types'
 
 /** Full active player catalog (refreshes from ESPN if stale). */
@@ -152,6 +156,65 @@ export async function getFfLineups(poolId: string, week: number): Promise<FFLine
     .eq('week', week)
     .order('member_id')
   return (created ?? []) as FFLineupSlot[]
+}
+
+/** Waiver state row (null until the first transaction/page creates it). */
+export async function getFfWaiverState(poolId: string): Promise<FFWaiverState | null> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_waiver_state')
+    .select('*')
+    .eq('pool_id', poolId)
+    .maybeSingle()
+  return data as FFWaiverState | null
+}
+
+/** Waiver priority/FAAB rows (may be missing members until first processing). */
+export async function getFfWaiverPriority(poolId: string): Promise<FFWaiverPriority[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_waiver_priority')
+    .select('*')
+    .eq('pool_id', poolId)
+    .order('priority')
+  return (data ?? []) as FFWaiverPriority[]
+}
+
+/**
+ * Waiver claims visible to the caller. RLS hides other members' pending
+ * claims (resolved claims are pool-visible).
+ */
+export async function getFfWaiverClaims(poolId: string): Promise<FFWaiverClaim[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_waiver_claims')
+    .select('*')
+    .eq('pool_id', poolId)
+    .order('claim_order')
+  return (data ?? []) as FFWaiverClaim[]
+}
+
+/** player_id -> clears_at for players still on waivers. */
+export async function getFfPlayerWaivers(poolId: string): Promise<Map<string, string>> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_player_waivers')
+    .select('player_id, clears_at')
+    .eq('pool_id', poolId)
+    .gt('clears_at', new Date().toISOString())
+  return new Map((data ?? []).map((r) => [r.player_id, r.clears_at]))
+}
+
+/** Transaction log, newest first. */
+export async function getFfTransactions(poolId: string, limit = 100): Promise<FFTransaction[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_transactions')
+    .select('*')
+    .eq('pool_id', poolId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  return (data ?? []) as FFTransaction[]
 }
 
 export interface FFWeekScores {

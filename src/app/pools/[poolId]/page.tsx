@@ -5,7 +5,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Users, Trophy, Calendar, Settings, Shield, Share2, Flag } from 'lucide-react'
+import { Users, Trophy, Calendar, Settings, Shield, Share2, Flag, ArrowLeftRight } from 'lucide-react'
 import { InviteLinkButton } from '@/components/pool/invite-link'
 import { getGame } from '@/lib/games/registry'
 
@@ -92,6 +92,18 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
                       <div>
                         <p className="font-medium">Standings</p>
                         <p className="text-sm text-muted-foreground">Records & playoff race</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+
+                <Link href={`/pools/${pool.id}/transactions`}>
+                  <Card className="py-0 transition-colors hover:bg-muted/50">
+                    <CardContent className="flex items-center gap-3 px-4 py-4">
+                      <ArrowLeftRight className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">Transactions</p>
+                        <p className="text-sm text-muted-foreground">Adds, drops & waivers</p>
                       </div>
                     </CardContent>
                   </Card>

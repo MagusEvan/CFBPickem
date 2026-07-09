@@ -230,3 +230,61 @@ export interface FFAuctionBudget {
   budget: number
   spent: number
 }
+
+export interface FFWaiverState {
+  pool_id: string
+  next_process_at: string | null
+  processing: boolean
+  processing_claimed_at: string | null
+  updated_at: string
+}
+
+export interface FFWaiverPriority {
+  pool_id: string
+  member_id: string
+  priority: number
+  faab_spent: number
+}
+
+export type FFWaiverClaimStatus = 'pending' | 'won' | 'lost' | 'cancelled' | 'invalid'
+
+export interface FFWaiverClaim {
+  id: string
+  pool_id: string
+  member_id: string
+  add_player_id: string
+  drop_player_id: string | null
+  bid: number
+  claim_order: number
+  status: FFWaiverClaimStatus
+  resolution: string | null
+  created_at: string
+  processed_at: string | null
+}
+
+export interface FFPlayerWaiver {
+  pool_id: string
+  player_id: string
+  clears_at: string
+}
+
+export type FFTransactionType =
+  | 'free_agent_add'
+  | 'drop'
+  | 'waiver_claim'
+  | 'trade'
+  | 'commissioner'
+
+export interface FFTransaction {
+  id: string
+  pool_id: string
+  member_id: string | null
+  type: FFTransactionType
+  detail: {
+    add?: { id: string; name: string; position: string }
+    drop?: { id: string; name: string; position: string }
+    bid?: number
+    note?: string
+  }
+  created_at: string
+}
