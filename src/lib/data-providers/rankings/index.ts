@@ -2,15 +2,18 @@
 //
 //   ESPN        fantasy API kona_player_info (PPR draft rank), keyed by the
 //               same ESPN athlete ids as ff_players
-//   Sleeper     public players API search_rank, mapped via each player's
-//               espn_id (DSTs keyed by team abbreviation)
+//   Yahoo       pub-api-ro draft_analysis (no auth required) sorted by
+//               average draft pick; rank = ordinal ADP position, matched by
+//               normalized name + position (DSTs by team abbreviation)
+//   Sleeper     public players API search_rank, mapped via espn_id with a
+//               name+position fallback (espn_id is null on most players
+//               drafted since ~2021; DSTs keyed by team abbreviation)
 //   FantasyPros expert-consensus rank scraped from the ecrData JSON embedded
 //               in the PPR cheatsheet page, matched by normalized name +
 //               position (DSTs by team abbreviation)
 //
-// Yahoo has no public (non-OAuth) endpoint — its column is manual-entry only
-// on the admin rankings page. Every fetcher returns Map<sourceKey, rank>;
-// mapping to ff_players rows happens in src/lib/ff/rankings.ts.
+// Every fetcher returns Map<sourceKey, rank>; mapping to ff_players rows
+// happens in src/lib/ff/rankings.ts.
 
 const TIMEOUT_MS = 15_000
 
@@ -71,11 +74,60 @@ export async function fetchEspnRanks(seasonYear: number, limit = 500): Promise<E
 }
 
 // ============================================================
+// Yahoo
+// ============================================================
+
+interface YahooPlayerWrapper {
+  player?: {
+    name?: { full?: string }
+    display_position?: string
+    editorial_team_abbr?: string
+  }
+}
+
+export interface YahooRanks {
+  /** normalized "name|position" -> ADP-order rank */
+  byNamePosition: Map<string, number>
+  /** DEF entries: ESPN-style team abbreviation -> rank */
+  dstByTeamAbbrev: Map<string, number>
+}
+
+/** Yahoo team abbrevs that differ from ESPN's once uppercased. */
+const YAHOO_TO_ESPN_ABBREV: Record<string, string> = { WAS: 'WSH' }
+
+export async function fetchYahooRanks(limit = 300): Promise<YahooRanks> {
+  const url = `https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/game/nfl/players;start=0;count=${limit};sort=DA_AP/draft_analysis?format=json_f`
+  const data = await fetchJson<{
+    fantasy_content?: { game?: { players?: YahooPlayerWrapper[] } }
+  }>(url, { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })
+
+  const byNamePosition = new Map<string, number>()
+  const dstByTeamAbbrev = new Map<string, number>()
+  const players = data.fantasy_content?.game?.players ?? []
+  players.forEach((entry, i) => {
+    const p = entry.player
+    const rank = i + 1 // list is ADP-sorted; rank = ordinal position
+    // multi-eligible players read like "WR,RB" — first listed is primary
+    const position = p?.display_position?.split(',')[0]?.trim()
+    if (!p || !position) return
+    if (position === 'DEF') {
+      const abbrev = p.editorial_team_abbr?.toUpperCase()
+      if (abbrev) dstByTeamAbbrev.set(YAHOO_TO_ESPN_ABBREV[abbrev] ?? abbrev, rank)
+    } else if (p.name?.full) {
+      byNamePosition.set(namePositionKey(p.name.full, position), rank)
+    }
+  })
+  if (byNamePosition.size === 0) throw new Error('Yahoo: no ranked players returned')
+  return { byNamePosition, dstByTeamAbbrev }
+}
+
+// ============================================================
 // Sleeper
 // ============================================================
 
 interface SleeperPlayer {
   player_id: string
+  full_name?: string | null
   position?: string | null
   espn_id?: number | null
   search_rank?: number | null
@@ -87,6 +139,12 @@ const SLEEPER_UNRANKED = 9_999_999
 export interface SleeperRanks {
   /** ESPN athlete id -> Sleeper search_rank */
   byEspnId: Map<string, number>
+  /**
+   * normalized "name|position" -> search_rank, fallback for the many Sleeper
+   * entries (most players drafted since ~2021) whose espn_id is null.
+   * On a name+position collision the better (lower) rank wins.
+   */
+  byNamePosition: Map<string, number>
   /** DEF entries: team abbreviation -> search_rank */
   dstByTeamAbbrev: Map<string, number>
 }
@@ -97,17 +155,23 @@ export async function fetchSleeperRanks(): Promise<SleeperRanks> {
   )
 
   const byEspnId = new Map<string, number>()
+  const byNamePosition = new Map<string, number>()
   const dstByTeamAbbrev = new Map<string, number>()
   for (const p of Object.values(data)) {
     const rank = p.search_rank
     if (typeof rank !== 'number' || rank >= SLEEPER_UNRANKED || !p.active) continue
     if (p.position === 'DEF') {
       dstByTeamAbbrev.set(p.player_id, rank) // Sleeper DEF ids are team abbrevs
-    } else if (p.espn_id) {
-      byEspnId.set(String(p.espn_id), rank)
+      continue
+    }
+    if (p.espn_id) byEspnId.set(String(p.espn_id), rank)
+    if (p.full_name && p.position) {
+      const key = namePositionKey(p.full_name, p.position)
+      const existing = byNamePosition.get(key)
+      if (existing === undefined || rank < existing) byNamePosition.set(key, rank)
     }
   }
-  return { byEspnId, dstByTeamAbbrev }
+  return { byEspnId, byNamePosition, dstByTeamAbbrev }
 }
 
 // ============================================================

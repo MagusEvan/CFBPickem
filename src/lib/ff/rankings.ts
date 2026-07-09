@@ -3,6 +3,7 @@
 
 import {
   fetchEspnRanks,
+  fetchYahooRanks,
   fetchSleeperRanks,
   fetchFantasyProsRanks,
   namePositionKey,
@@ -51,6 +52,7 @@ export async function recomputeEffectiveRanks(admin: Admin): Promise<void> {
 
 export interface RankingRefreshSummary {
   espn: number | null
+  yahoo: number | null
   sleeper: number | null
   fantasypros: number | null
 }
@@ -58,21 +60,23 @@ export interface RankingRefreshSummary {
 /**
  * Pull ranks from every public source (partial failures tolerated — a failed
  * source leaves its column untouched and reports null), recompute composites,
- * and reassign the effective draft order. Yahoo is manual-entry only.
+ * and reassign the effective draft order.
  */
 export async function refreshRankingsFromSources(
   admin: Admin,
   seasonYear: number
 ): Promise<RankingRefreshSummary> {
-  const [espnRes, sleeperRes, fpRes] = await Promise.allSettled([
+  const [espnRes, yahooRes, sleeperRes, fpRes] = await Promise.allSettled([
     fetchEspnRanks(seasonYear),
+    fetchYahooRanks(),
     fetchSleeperRanks(),
     fetchFantasyProsRanks(),
   ])
   const espn = espnRes.status === 'fulfilled' ? espnRes.value : null
+  const yahoo = yahooRes.status === 'fulfilled' ? yahooRes.value : null
   const sleeper = sleeperRes.status === 'fulfilled' ? sleeperRes.value : null
   const fp = fpRes.status === 'fulfilled' ? fpRes.value : null
-  if (!espn && !sleeper && !fp) {
+  if (!espn && !yahoo && !sleeper && !fp) {
     const reason = espnRes.status === 'rejected' ? espnRes.reason : 'unknown'
     throw new Error(`All ranking sources failed (${reason})`)
   }
@@ -82,6 +86,7 @@ export async function refreshRankingsFromSources(
 
   const summary: RankingRefreshSummary = {
     espn: espn ? 0 : null,
+    yahoo: yahoo ? 0 : null,
     sleeper: sleeper ? 0 : null,
     fantasypros: fp ? 0 : null,
   }
@@ -99,13 +104,23 @@ export async function refreshRankingsFromSources(
           : espn.byAthleteId.get(p.id)) ?? null
       if (next.rank_espn !== null) summary.espn!++
     }
+    if (yahoo) {
+      next.rank_yahoo =
+        (p.position === 'DST'
+          ? p.nfl_team_abbrev
+            ? yahoo.dstByTeamAbbrev.get(p.nfl_team_abbrev)
+            : undefined
+          : yahoo.byNamePosition.get(namePositionKey(p.name, p.position))) ?? null
+      if (next.rank_yahoo !== null) summary.yahoo!++
+    }
     if (sleeper) {
       next.rank_sleeper =
         (p.position === 'DST'
           ? p.nfl_team_abbrev
             ? sleeper.dstByTeamAbbrev.get(p.nfl_team_abbrev)
             : undefined
-          : sleeper.byEspnId.get(p.id)) ?? null
+          : sleeper.byEspnId.get(p.id) ??
+            sleeper.byNamePosition.get(namePositionKey(p.name, p.position))) ?? null
       if (next.rank_sleeper !== null) summary.sleeper!++
     }
     if (fp) {
@@ -132,6 +147,7 @@ export async function refreshRankingsFromSources(
       Math.abs((next.rank_composite ?? 0) - (p.rank_composite ?? 0)) > 0.005
     if (
       next.rank_espn !== p.rank_espn ||
+      next.rank_yahoo !== p.rank_yahoo ||
       next.rank_sleeper !== p.rank_sleeper ||
       next.rank_fantasypros !== p.rank_fantasypros ||
       compositeChanged

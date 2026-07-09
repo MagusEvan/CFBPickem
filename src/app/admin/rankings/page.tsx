@@ -47,8 +47,8 @@ export default async function AdminRankingsPage() {
         <h1 className="text-2xl font-bold">Player Rankings</h1>
         <p className="text-muted-foreground">
           Composite index (mean of available source ranks) drives draft board order and
-          autopick. ESPN, Sleeper, and FantasyPros refresh automatically; Yahoo is
-          manual entry.
+          autopick. ESPN, Yahoo, Sleeper, and FantasyPros refresh automatically; any
+          rank can also be edited by hand.
         </p>
       </div>
       <RankingsTable players={rows} seasonYear={seasonYear} />

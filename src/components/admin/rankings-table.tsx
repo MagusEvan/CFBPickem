@@ -124,7 +124,7 @@ export function RankingsTable({
         const part = (label: string, n: number | null) =>
           n === null ? `${label} failed` : `${label} ${n}`
         setMessage(
-          `Ranked players — ${part('ESPN', s.espn)}, ${part('Sleeper', s.sleeper)}, ${part('FantasyPros', s.fantasypros)}`
+          `Ranked players — ${part('ESPN', s.espn)}, ${part('Yahoo', s.yahoo)}, ${part('Sleeper', s.sleeper)}, ${part('FantasyPros', s.fantasypros)}`
         )
         router.refresh()
       }
