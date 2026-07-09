@@ -15,7 +15,7 @@ export interface FFLeagueSettings {
     BENCH: number
     IR: number
   }
-  flexEligible: Array<'RB' | 'WR' | 'TE'>
+  flexEligible: Array<'QB' | 'RB' | 'WR' | 'TE'>
   draft: {
     type: 'snake' | 'auction'
     /** null = no pick timer (untimed draft) */
@@ -89,6 +89,12 @@ export interface FFPlayer {
   status: string | null
   injury_status: string | null
   default_rank: number | null
+  rank_espn: number | null
+  rank_yahoo: number | null
+  rank_sleeper: number | null
+  rank_fantasypros: number | null
+  /** Mean of available source ranks; drives default_rank (draft order) */
+  rank_composite: number | null
   active: boolean
   fetched_at: string
 }

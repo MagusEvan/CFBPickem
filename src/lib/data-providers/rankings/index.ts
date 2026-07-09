@@ -1,0 +1,192 @@
+// Public player-ranking sources for fantasy football draft prep.
+//
+//   ESPN        fantasy API kona_player_info (PPR draft rank), keyed by the
+//               same ESPN athlete ids as ff_players
+//   Sleeper     public players API search_rank, mapped via each player's
+//               espn_id (DSTs keyed by team abbreviation)
+//   FantasyPros expert-consensus rank scraped from the ecrData JSON embedded
+//               in the PPR cheatsheet page, matched by normalized name +
+//               position (DSTs by team abbreviation)
+//
+// Yahoo has no public (non-OAuth) endpoint — its column is manual-entry only
+// on the admin rankings page. Every fetcher returns Map<sourceKey, rank>;
+// mapping to ff_players rows happens in src/lib/ff/rankings.ts.
+
+const TIMEOUT_MS = 15_000
+
+async function fetchJson<T>(url: string, headers?: Record<string, string>): Promise<T> {
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json', ...headers },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  })
+  if (!res.ok) throw new Error(`${new URL(url).hostname} error: ${res.status} ${res.statusText}`)
+  return res.json()
+}
+
+// ============================================================
+// ESPN
+// ============================================================
+
+interface EspnRankedPlayer {
+  player?: {
+    id: number
+    defaultPositionId?: number
+    proTeamId?: number
+    draftRanksByRankType?: { PPR?: { rank?: number } }
+  }
+}
+
+export interface EspnRanks {
+  /** ESPN athlete id (= ff_players.id) -> PPR draft rank */
+  byAthleteId: Map<string, number>
+  /** D/ST entries: ESPN pro-team id (= ff_players.nfl_team_id) -> rank */
+  dstByTeamId: Map<string, number>
+}
+
+const ESPN_DST_POSITION_ID = 16
+
+export async function fetchEspnRanks(seasonYear: number, limit = 500): Promise<EspnRanks> {
+  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${seasonYear}/segments/0/leaguedefaults/3?view=kona_player_info`
+  const filter = {
+    players: { limit, sortDraftRanks: { sortPriority: 100, sortAsc: true, value: 'PPR' } },
+  }
+  const data = await fetchJson<{ players?: EspnRankedPlayer[] }>(url, {
+    'X-Fantasy-Filter': JSON.stringify(filter),
+  })
+
+  const byAthleteId = new Map<string, number>()
+  const dstByTeamId = new Map<string, number>()
+  for (const entry of data.players ?? []) {
+    const p = entry.player
+    const rank = p?.draftRanksByRankType?.PPR?.rank
+    if (!p || typeof rank !== 'number') continue
+    if (p.defaultPositionId === ESPN_DST_POSITION_ID) {
+      if (p.proTeamId) dstByTeamId.set(String(p.proTeamId), rank)
+    } else {
+      byAthleteId.set(String(p.id), rank)
+    }
+  }
+  return { byAthleteId, dstByTeamId }
+}
+
+// ============================================================
+// Sleeper
+// ============================================================
+
+interface SleeperPlayer {
+  player_id: string
+  position?: string | null
+  espn_id?: number | null
+  search_rank?: number | null
+  active?: boolean
+}
+
+const SLEEPER_UNRANKED = 9_999_999
+
+export interface SleeperRanks {
+  /** ESPN athlete id -> Sleeper search_rank */
+  byEspnId: Map<string, number>
+  /** DEF entries: team abbreviation -> search_rank */
+  dstByTeamAbbrev: Map<string, number>
+}
+
+export async function fetchSleeperRanks(): Promise<SleeperRanks> {
+  const data = await fetchJson<Record<string, SleeperPlayer>>(
+    'https://api.sleeper.app/v1/players/nfl'
+  )
+
+  const byEspnId = new Map<string, number>()
+  const dstByTeamAbbrev = new Map<string, number>()
+  for (const p of Object.values(data)) {
+    const rank = p.search_rank
+    if (typeof rank !== 'number' || rank >= SLEEPER_UNRANKED || !p.active) continue
+    if (p.position === 'DEF') {
+      dstByTeamAbbrev.set(p.player_id, rank) // Sleeper DEF ids are team abbrevs
+    } else if (p.espn_id) {
+      byEspnId.set(String(p.espn_id), rank)
+    }
+  }
+  return { byEspnId, dstByTeamAbbrev }
+}
+
+// ============================================================
+// FantasyPros
+// ============================================================
+
+interface FpPlayer {
+  player_name: string
+  player_team_id: string
+  player_position_id: string
+  rank_ecr: number
+}
+
+export interface FantasyProsRanks {
+  /** normalized "name|position" -> expert consensus rank */
+  byNamePosition: Map<string, number>
+  /** DST entries: team abbreviation -> rank */
+  dstByTeamAbbrev: Map<string, number>
+}
+
+/** Normalize a player name for cross-site matching. */
+export function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // strip accents
+    .replace(/[^a-z\s]/g, '') // strip punctuation (D'Andre, A.J., St. Brown)
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '') // strip suffixes
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export const namePositionKey = (name: string, position: string) =>
+  `${normalizeName(name)}|${position}`
+
+export async function fetchFantasyProsRanks(): Promise<FantasyProsRanks> {
+  const res = await fetch('https://www.fantasypros.com/nfl/rankings/ppr-cheatsheets.php', {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  })
+  if (!res.ok) throw new Error(`FantasyPros error: ${res.status} ${res.statusText}`)
+  const html = await res.text()
+
+  const start = html.indexOf('ecrData = {')
+  if (start < 0) throw new Error('FantasyPros: ecrData not found in page')
+  const json = extractJsonObject(html, start + 'ecrData = '.length)
+  const data = JSON.parse(json) as { players?: FpPlayer[] }
+
+  const byNamePosition = new Map<string, number>()
+  const dstByTeamAbbrev = new Map<string, number>()
+  for (const p of data.players ?? []) {
+    if (typeof p.rank_ecr !== 'number') continue
+    if (p.player_position_id === 'DST') {
+      dstByTeamAbbrev.set(p.player_team_id, p.rank_ecr)
+    } else {
+      byNamePosition.set(namePositionKey(p.player_name, p.player_position_id), p.rank_ecr)
+    }
+  }
+  return { byNamePosition, dstByTeamAbbrev }
+}
+
+/** Extract a balanced JSON object literal starting at `start` (a '{'). */
+function extractJsonObject(text: string, start: number): string {
+  let depth = 0
+  let inString = false
+  for (let i = start; i < text.length; i++) {
+    const c = text[i]
+    if (inString) {
+      if (c === '\\') i++
+      else if (c === '"') inString = false
+    } else if (c === '"') {
+      inString = true
+    } else if (c === '{') {
+      depth++
+    } else if (c === '}') {
+      depth--
+      if (depth === 0) return text.slice(start, i + 1)
+    }
+  }
+  throw new Error('Unbalanced JSON object')
+}

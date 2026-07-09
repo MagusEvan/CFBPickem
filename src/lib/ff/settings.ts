@@ -17,7 +17,7 @@ export const ffLeagueSettingsSchema = z.object({
     BENCH: z.number().int().min(0).max(12),
     IR: z.number().int().min(0).max(4),
   }),
-  flexEligible: z.array(z.enum(['RB', 'WR', 'TE'])).min(1),
+  flexEligible: z.array(z.enum(['QB', 'RB', 'WR', 'TE'])).min(1),
   draft: z.object({
     type: z.enum(['snake', 'auction']),
     timerSeconds: z.number().int().min(15).max(600).nullable(),

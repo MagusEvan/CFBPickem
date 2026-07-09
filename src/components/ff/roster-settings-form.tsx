@@ -16,7 +16,7 @@ const SLOT_LABELS: Array<{ key: keyof FFLeagueSettings['roster']; label: string 
   { key: 'IR', label: 'IR' },
 ]
 
-const FLEX_OPTIONS = ['RB', 'WR', 'TE'] as const
+const FLEX_OPTIONS = ['QB', 'RB', 'WR', 'TE'] as const
 
 export function RosterSettingsForm({
   value,
@@ -31,7 +31,7 @@ export function RosterSettingsForm({
     onChange({ ...value, roster: { ...value.roster, [key]: count } })
   }
 
-  function toggleFlex(pos: 'RB' | 'WR' | 'TE') {
+  function toggleFlex(pos: 'QB' | 'RB' | 'WR' | 'TE') {
     const has = value.flexEligible.includes(pos)
     const next = has
       ? value.flexEligible.filter((p) => p !== pos)

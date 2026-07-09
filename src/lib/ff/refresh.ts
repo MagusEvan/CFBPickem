@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { claimRefresh } from '@/lib/data-refresh'
 import { getNflProvider } from '@/lib/data-providers/nfl/provider'
+import { recomputeEffectiveRanks } from './rankings'
 import type { NflGameData } from '@/lib/data-providers/nfl/types'
 
 /**
@@ -148,6 +149,10 @@ export async function refreshPlayerCatalog(admin: Admin): Promise<void> {
   if (rosterFetchesComplete) {
     await admin.from('ff_players').update({ active: false }).lt('fetched_at', fetchedAt)
   }
+
+  // The heuristic upsert above overwrote default_rank; restore composite-based
+  // draft order (draft board sort + timer autopick both read default_rank)
+  await recomputeEffectiveRanks(admin)
 }
 
 // ============================================================
