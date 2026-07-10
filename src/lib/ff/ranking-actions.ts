@@ -34,7 +34,7 @@ export async function refreshFfRankings(
 
   try {
     const summary = await refreshRankingsFromSources(auth.admin, seasonYear)
-    revalidatePath('/admin/rankings')
+    revalidatePath('/admin/nflplayerrankings')
     return { summary }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Ranking refresh failed' }
@@ -84,6 +84,6 @@ export async function updateFfPlayerRanks(
   if (error) return { error: error.message }
 
   await recomputeEffectiveRanks(admin)
-  revalidatePath('/admin/rankings')
+  revalidatePath('/admin/nflplayerrankings')
   return { composite: rank_composite_override ?? rank_composite }
 }
