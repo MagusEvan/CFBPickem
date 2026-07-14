@@ -132,9 +132,7 @@ export default async function TournamentDetailPage({
                   <thead>
                     <tr className="border-b">
                       <th className="px-2 py-2 text-left text-xs text-muted-foreground">Golfer</th>
-                      <th className="px-2 py-2 text-center text-xs text-muted-foreground">DraftKings</th>
-                      <th className="px-2 py-2 text-center text-xs text-muted-foreground">MGM</th>
-                      <th className="px-2 py-2 text-center text-xs text-muted-foreground">BetOnline</th>
+                      <th className="px-2 py-2 text-center text-xs text-muted-foreground">DraftKings Odds</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -153,8 +151,6 @@ export default async function TournamentDetailPage({
                             )}
                           </td>
                           <td className="px-2 py-2 text-center text-xs">{g.odds_draftkings || '—'}</td>
-                          <td className="px-2 py-2 text-center text-xs">{g.odds_mgm || '—'}</td>
-                          <td className="px-2 py-2 text-center text-xs">{g.odds_betonline || '—'}</td>
                         </tr>
                       ))}
                   </tbody>

@@ -1,12 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePgaDraftRealtime } from '@/hooks/use-pga-draft-realtime'
 import { startPgaDraft, makePgaPick, resetPgaDraft, undoPgaPick } from '@/lib/pga/actions'
-import { generateSnakeOrder } from '@/lib/draft/engine'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -48,11 +47,13 @@ export function PgaDraftRoom({
 
   const draftedGolferIds = useMemo(() => new Set(picks.map((p) => p.golfer_id)), [picks])
 
-  // Reset selection when turn changes
-  useEffect(() => {
+  // Reset selection when the turn changes (render-time state adjustment)
+  const [lastPickNumber, setLastPickNumber] = useState(draftState?.current_pick_number)
+  if (draftState?.current_pick_number !== lastPickNumber) {
+    setLastPickNumber(draftState?.current_pick_number)
     setPendingPick(null)
     setAdminPickMode(false)
-  }, [draftState?.current_pick_number])
+  }
 
   const availableGolfers = useMemo(() => {
     return golfers
@@ -71,6 +72,7 @@ export function PgaDraftRoom({
     try {
       await startPgaDraft(tournament.id, poolId)
       await refetch()
+      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start draft')
     }
@@ -280,8 +282,6 @@ export function PgaDraftRoom({
                 )}
                 <div className="flex gap-3 text-xs text-muted-foreground">
                   {pendingPick.odds_draftkings && <span>DK: {pendingPick.odds_draftkings}</span>}
-                  {pendingPick.odds_mgm && <span>MGM: {pendingPick.odds_mgm}</span>}
-                  {pendingPick.odds_betonline && <span>BOL: {pendingPick.odds_betonline}</span>}
                 </div>
               </div>
             </div>
@@ -303,11 +303,15 @@ export function PgaDraftRoom({
 
       <Separator />
 
-      {/* Golfer selection */}
-      {canPick && !pendingPick && (
+      {/* Golfer pool — always visible; selectable only when picking */}
+      {!pendingPick && (
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Select a Golfer ({availableGolfers.length} available)</h2>
+            <h2 className="text-lg font-semibold">
+              {canPick
+                ? `Select a Golfer (${availableGolfers.length} available)`
+                : `Available Golfers (${availableGolfers.length})`}
+            </h2>
           </div>
           <input
             type="text"
@@ -321,16 +325,14 @@ export function PgaDraftRoom({
               <thead>
                 <tr className="border-b">
                   <th className="px-2 py-2 text-left">Golfer</th>
-                  <th className="px-2 py-2 text-center">DK</th>
-                  <th className="px-2 py-2 text-center">MGM</th>
-                  <th className="px-2 py-2 text-center">BOL</th>
+                  <th className="px-2 py-2 text-center">DK Odds</th>
                 </tr>
               </thead>
               <tbody>
                 {availableGolfers.map((golfer) => (
                   <tr
                     key={golfer.id}
-                    className={`cursor-pointer border-b transition-colors hover:bg-muted/50 ${submitting ? 'pointer-events-none opacity-50' : ''}`}
+                    className={`border-b transition-colors ${canPick ? 'cursor-pointer hover:bg-muted/50' : ''} ${submitting ? 'pointer-events-none opacity-50' : ''}`}
                     onClick={() => handleSelectGolfer(golfer)}
                   >
                     <td className="px-2 py-2">
@@ -348,8 +350,6 @@ export function PgaDraftRoom({
                       </div>
                     </td>
                     <td className="px-2 py-2 text-center text-xs">{golfer.odds_draftkings || '—'}</td>
-                    <td className="px-2 py-2 text-center text-xs">{golfer.odds_mgm || '—'}</td>
-                    <td className="px-2 py-2 text-center text-xs">{golfer.odds_betonline || '—'}</td>
                   </tr>
                 ))}
               </tbody>
