@@ -44,6 +44,32 @@ export interface FFLeagueSettings {
   }
 }
 
+/**
+ * Best ball league settings — stored in pools.ff_league_settings for
+ * game_type 'ff_bestball'. Shape is deliberately disjoint from
+ * FFLeagueSettings (no waivers/trades/BENCH) so resolveLeagueSettings can
+ * sniff which schema a pool uses.
+ */
+export interface FFBestBallSettings {
+  /** Starting lineup template only — bench is implied by totalRosterSize */
+  roster: {
+    QB: number
+    RB: number
+    WR: number
+    TE: number
+    FLEX: number
+    K: number
+    DST: number
+  }
+  flexEligible: Array<'QB' | 'RB' | 'WR' | 'TE'>
+  /** Total players drafted per manager (= snake draft rounds) */
+  totalRosterSize: number
+  draft: FFLeagueSettings['draft']
+  /** 'total' = season-long points leaderboard; 'h2h' = weekly matchups + playoffs */
+  format: 'total' | 'h2h'
+  season: FFLeagueSettings['season']
+}
+
 export interface FFScoringSettings {
   passYdsPerPoint: number
   passTd: number

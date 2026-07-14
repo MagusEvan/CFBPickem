@@ -11,6 +11,7 @@ import {
   getFfWaiverState,
 } from '@/lib/ff/queries'
 import { resolveLeagueSettings, totalRosterSpots } from '@/lib/ff/settings'
+import { isFfFamily } from '@/lib/games/registry'
 import { maybeProcessWaivers } from '@/lib/ff/waiver-processing'
 import { PlayersBrowser, type PlayersTransactionContext } from '@/components/ff/players-browser'
 import { WaiverClaimsPanel } from '@/components/ff/waiver-claims-panel'
@@ -18,7 +19,7 @@ import { WaiverClaimsPanel } from '@/components/ff/waiver-claims-panel'
 export default async function PlayersPage({ params }: { params: Promise<{ poolId: string }> }) {
   const { poolId } = await params
   const [pool, userId] = await Promise.all([getPool(poolId), getCurrentUserId()])
-  if (!pool || pool.game_type !== 'ff') notFound()
+  if (!pool || !isFfFamily(pool.game_type)) notFound()
 
   const players = await getFfPlayers(pool.season_year)
 
@@ -33,7 +34,9 @@ export default async function PlayersPage({ params }: { params: Promise<{ poolId
     </div>
   )
 
-  if (pool.draft_status !== 'completed') {
+  // Best ball rosters never change after the draft — read-only browse, no
+  // waivers or transactions
+  if (pool.draft_status !== 'completed' || pool.game_type === 'ff_bestball') {
     return (
       <div className="space-y-4">
         {header}

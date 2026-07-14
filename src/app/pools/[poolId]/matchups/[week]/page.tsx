@@ -2,25 +2,29 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import {
+  getBestBallWeekScores,
   getFfCurrentWeek,
+  getFfRosters,
   getFfWeekGames,
   getFfWeekStats,
   getFfLineups,
   getFfMatchups,
   getFfPlayersByIds,
 } from '@/lib/ff/queries'
-import { resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
+import { resolveBestBallSettings, resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import { computeFantasyPoints, isStarterSlot, round2 } from '@/lib/ff/scoring'
+import { optimalLineup } from '@/lib/ff/bestball'
 import { sortSlots } from '@/lib/ff/roster'
 import { playoffRoundName, playoffRoundsCount } from '@/lib/ff/playoffs'
-import { ensurePlayoffs } from '@/lib/ff/playoff-processing'
+import { ensurePlayoffs, type PlayoffScoreProvider } from '@/lib/ff/playoff-processing'
+import { isFfFamily } from '@/lib/games/registry'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { MatchupLive } from '@/components/ff/matchup-live'
 import { buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import type { FFLineupSlot } from '@/lib/ff/types'
+import type { FFLineupSlot, FFPosition } from '@/lib/ff/types'
 
 export const revalidate = 30
 
@@ -34,7 +38,10 @@ export default async function MatchupWeekPage({
   if (!Number.isInteger(week) || week < 1) notFound()
 
   const [pool, members] = await Promise.all([getPool(poolId), getPoolMembers(poolId)])
-  if (!pool || pool.game_type !== 'ff') notFound()
+  if (!pool || !isFfFamily(pool.game_type)) notFound()
+
+  const bb = pool.game_type === 'ff_bestball' ? resolveBestBallSettings(pool) : null
+  if (bb && bb.format !== 'h2h') notFound() // total-points pools have no matchups
 
   const settings = resolveLeagueSettings(pool)
   const playoffRounds = playoffRoundsCount(settings.season.playoffTeams)
@@ -44,23 +51,58 @@ export default async function MatchupWeekPage({
   )
   if (week > maxWeek) notFound()
 
+  const scoring = resolveScoringSettings(pool)
   const currentWeek = await getFfCurrentWeek(pool.season_year)
+  // Best ball scores come from optimal lineups — never materialize lineup rows
+  const bestBallProvider: PlayoffScoreProvider | undefined = bb
+    ? (p, through) => getBestBallWeekScores(p.id, p.season_year, scoring, bb, through)
+    : undefined
   // Lazily generate/advance the playoff bracket (no-op during regular season)
-  await ensurePlayoffs(createAdminClient(), pool, settings, currentWeek)
+  await ensurePlayoffs(createAdminClient(), pool, settings, currentWeek, bestBallProvider)
 
   const playoffRound =
     week >= settings.season.playoffStartWeek && playoffRounds > 0
       ? week - settings.season.playoffStartWeek + 1
       : null
 
-  const [games, statsByPlayer, lineups, matchups] = await Promise.all([
+  const [games, statsByPlayer, matchups] = await Promise.all([
     getFfWeekGames(pool.season_year, week),
     getFfWeekStats(pool.season_year, week),
-    getFfLineups(poolId, week),
     getFfMatchups(poolId, week),
   ])
 
-  const scoring = resolveScoringSettings(pool)
+  // Lineup rows: stored (ff) or synthesized from each member's optimal lineup
+  // (best ball — read-only, derived from rosters)
+  type LineupRow = { id: string; member_id: string; slot: FFLineupSlot['slot']; slot_index: number; player_id: string | null }
+  let lineups: LineupRow[]
+  if (bb) {
+    const rosters = await getFfRosters(poolId)
+    const rosterPlayers = await getFfPlayersByIds(rosters.map((r) => r.player_id))
+    const byMember = new Map<string, Array<{ id: string; position: FFPosition }>>()
+    for (const r of rosters) {
+      const p = rosterPlayers.get(r.player_id)
+      if (!p) continue
+      const list = byMember.get(r.member_id) ?? []
+      list.push({ id: p.id, position: p.position })
+      byMember.set(r.member_id, list)
+    }
+    lineups = []
+    for (const [memberId, plist] of byMember) {
+      const lu = optimalLineup(plist, statsByPlayer, scoring, bb)
+      for (const s of lu.slots) {
+        lineups.push({
+          id: `${memberId}-${s.slot}-${s.slot_index}`,
+          member_id: memberId,
+          slot: s.slot,
+          slot_index: s.slot_index,
+          player_id: s.player_id,
+        })
+      }
+    }
+  } else {
+    lineups = await getFfLineups(poolId, week)
+  }
+
   const nameByMember = new Map(members.map((m) => [m.id, m.profiles.display_name]))
 
   const starterIds = lineups
@@ -68,7 +110,7 @@ export default async function MatchupWeekPage({
     .map((s) => s.player_id!)
   const players = await getFfPlayersByIds(starterIds)
 
-  const slotsByMember = new Map<string, FFLineupSlot[]>()
+  const slotsByMember = new Map<string, LineupRow[]>()
   for (const s of lineups) {
     const list = slotsByMember.get(s.member_id) ?? []
     list.push(s)

@@ -72,17 +72,38 @@ export const GAMES: Record<GameType, GameDefinition> = {
     poolLabel: (year) => `${year} Fantasy Season`,
     numRounds: () => 0, // FF drafts use ff_draft_state, not the shared pool draft
   },
+  ff_bestball: {
+    key: 'ff_bestball',
+    name: 'Fantasy Football Best Ball',
+    description: 'Draft NFL players once — your best lineup is scored automatically every week',
+    namePlaceholder: 'e.g. Best Ball Bonanza',
+    seasonYearLabel: 'Season Year',
+    scheduleDescription: 'Weekly matchups',
+    maxManagers: { min: 2, max: 20 },
+    poolLabel: (year) => `${year} Best Ball`,
+    numRounds: () => 0, // Uses ff_draft_state, not the shared pool draft
+  },
 }
 
 /** Ordered list for the pool-creation game picker */
-export const GAME_LIST: GameDefinition[] = [GAMES.cfb, GAMES.world_cup, GAMES.pga, GAMES.ff]
+export const GAME_LIST: GameDefinition[] = [
+  GAMES.cfb, GAMES.world_cup, GAMES.pga, GAMES.ff, GAMES.ff_bestball,
+]
 
 export function getGame(gameType: GameType): GameDefinition {
   return GAMES[gameType]
 }
 
 export function isGameType(value: unknown): value is GameType {
-  return value === 'cfb' || value === 'world_cup' || value === 'pga' || value === 'ff'
+  return (
+    value === 'cfb' || value === 'world_cup' || value === 'pga' ||
+    value === 'ff' || value === 'ff_bestball'
+  )
+}
+
+/** Game types that share the FF player catalog, draft room, and scoring. */
+export function isFfFamily(gameType: GameType): boolean {
+  return gameType === 'ff' || gameType === 'ff_bestball'
 }
 
 // --- Game-specific pool-creation constants (client-safe) ---

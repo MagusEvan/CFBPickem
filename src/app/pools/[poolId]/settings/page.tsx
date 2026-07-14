@@ -9,9 +9,10 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { DeletePoolButton } from '@/components/pool/delete-pool'
 import { deletePool } from '@/lib/pools/actions'
-import { getGame } from '@/lib/games/registry'
+import { getGame, isFfFamily } from '@/lib/games/registry'
 import { FfLeagueSettingsCard } from '@/components/ff/ff-league-settings-card'
-import { resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
+import { BestBallSettingsCard } from '@/components/ff/bestball-settings-card'
+import { resolveBestBallSettings, resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import type { WorldCupScoringConfig } from '@/lib/types'
 
 export const revalidate = 300
@@ -29,10 +30,11 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
   const isAdmin = pool.admin_id === userId
   const isWorldCup = pool.game_type === 'world_cup'
   const isFf = pool.game_type === 'ff'
+  const isBestBall = pool.game_type === 'ff_bestball'
 
-  // FF: roster/draft settings lock once the FF draft starts
+  // FF family: roster/draft settings lock once the draft starts
   let ffDraftStarted = false
-  if (isFf) {
+  if (isFfFamily(pool.game_type)) {
     const { createAdminClient } = await import('@/lib/supabase/admin')
     const { data: ffDraftState } = await createAdminClient()
       .from('ff_draft_state')
@@ -256,6 +258,27 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
         </Card>
       )}
 
+      {/* Best Ball League Settings */}
+      {isBestBall && isAdmin && (
+        <BestBallSettingsCard
+          poolId={poolId}
+          initialSettings={resolveBestBallSettings(pool)}
+          initialScoring={resolveScoringSettings(pool)}
+          structureLocked={ffDraftStarted}
+        />
+      )}
+      {isBestBall && !isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>League Settings</CardTitle>
+            <CardDescription>Set by the commissioner</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BestBallSettingsSummary pool={pool} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* World Cup Scoring Config */}
       {isWorldCup && (
         <Card>
@@ -385,6 +408,40 @@ function FfSettingsSummary({ pool }: { pool: { ff_league_settings: unknown | nul
     ['Season', `${league.season.regularSeasonWeeks} weeks, ${league.season.playoffTeams}-team playoffs from week ${league.season.playoffStartWeek}`],
     ['Waivers', league.waivers.type === 'faab' ? `FAAB ($${league.waivers.faabBudget})` : league.waivers.type === 'priority' ? 'Priority order' : 'None'],
     ['Trades', league.trades.enabled ? `Enabled${league.trades.deadlineWeek ? `, deadline week ${league.trades.deadlineWeek}` : ''}${league.trades.review === 'commissioner' ? ', commissioner review' : ''}` : 'Disabled'],
+  ]
+
+  return (
+    <div className="space-y-3">
+      {rows.map(([label, value]) => (
+        <div key={label} className="space-y-1">
+          <Label>{label}</Label>
+          <p className="text-sm text-muted-foreground">{value}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function BestBallSettingsSummary({ pool }: { pool: { ff_league_settings: unknown | null; ff_scoring_settings: unknown | null } }) {
+  const bb = resolveBestBallSettings(pool)
+  const scoring = resolveScoringSettings(pool)
+  const r = bb.roster
+  const lineupLine = [
+    `${r.QB} QB`, `${r.RB} RB`, `${r.WR} WR`, `${r.TE} TE`,
+    r.FLEX > 0 ? `${r.FLEX} FLEX` : null,
+    r.K > 0 ? `${r.K} K` : null,
+    r.DST > 0 ? `${r.DST} D/ST` : null,
+  ].filter(Boolean).join(', ')
+
+  const rows: Array<[string, string]> = [
+    ['Format', bb.format === 'h2h' ? 'Head-to-head matchups with playoffs' : 'Total points leaderboard'],
+    ['Draft', `${bb.draft.type === 'auction' ? `Auction ($${bb.draft.auctionBudget})` : 'Snake'}${bb.draft.timerSeconds ? `, ${bb.draft.timerSeconds}s timer` : ', untimed'}`],
+    ['Starting Lineup', lineupLine],
+    ['Roster Size', `${bb.totalRosterSize} players`],
+    ['Scoring', `${scoring.reception === 1 ? 'PPR' : scoring.reception === 0.5 ? 'Half PPR' : scoring.reception === 0 ? 'Standard' : `${scoring.reception} per reception`}`],
+    ['Season', bb.format === 'h2h'
+      ? `${bb.season.regularSeasonWeeks} weeks, ${bb.season.playoffTeams}-team playoffs from week ${bb.season.playoffStartWeek}`
+      : `${bb.season.regularSeasonWeeks} scoring weeks`],
   ]
 
   return (

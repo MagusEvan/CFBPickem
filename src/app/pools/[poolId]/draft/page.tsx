@@ -4,6 +4,7 @@ import { DraftRoom } from '@/components/draft/draft-room'
 import { FfDraftRoom } from '@/components/ff/ff-draft-room'
 import { getFfPlayers } from '@/lib/ff/queries'
 import { resolveLeagueSettings } from '@/lib/ff/settings'
+import { isFfFamily } from '@/lib/games/registry'
 
 export const revalidate = 60
 
@@ -17,7 +18,7 @@ export default async function DraftPage({ params }: { params: Promise<{ poolId: 
 
   if (!pool) notFound()
 
-  if (pool.game_type === 'ff') {
+  if (isFfFamily(pool.game_type)) {
     const players = await getFfPlayers(pool.season_year)
     return (
       <FfDraftRoom

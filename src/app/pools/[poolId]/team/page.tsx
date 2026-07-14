@@ -3,16 +3,20 @@ import Link from 'next/link'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import {
   getFfCurrentWeek,
+  getFfRosters,
   getFfWeekGames,
   getFfWeekStats,
   getFfLineups,
   getFfPlayersByIds,
   weekGameStartByTeamId,
 } from '@/lib/ff/queries'
-import { resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
+import { resolveBestBallSettings, resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import { computeFantasyPoints, scoreLineup } from '@/lib/ff/scoring'
+import { optimalLineup } from '@/lib/ff/bestball'
 import { isPlayerLocked, sortSlots } from '@/lib/ff/roster'
+import { isFfFamily } from '@/lib/games/registry'
 import { LineupEditor } from '@/components/ff/lineup-editor'
+import { BestBallTeam } from '@/components/ff/bestball-team'
 import { MatchupLive } from '@/components/ff/matchup-live'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -20,7 +24,13 @@ import type { FFStatLine } from '@/lib/ff/types'
 
 export const revalidate = 30
 
-export default async function TeamPage({ params }: { params: Promise<{ poolId: string }> }) {
+export default async function TeamPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ poolId: string }>
+  searchParams: Promise<{ week?: string; member?: string }>
+}) {
   const { poolId } = await params
   const [pool, members, userId] = await Promise.all([
     getPool(poolId),
@@ -28,7 +38,7 @@ export default async function TeamPage({ params }: { params: Promise<{ poolId: s
     getCurrentUserId(),
   ])
 
-  if (!pool || pool.game_type !== 'ff') notFound()
+  if (!pool || !isFfFamily(pool.game_type)) notFound()
   const myMember = members.find((m) => m.user_id === userId)
   if (!myMember) notFound()
 
@@ -42,6 +52,51 @@ export default async function TeamPage({ params }: { params: Promise<{ poolId: s
           </CardContent>
         </Card>
       </div>
+    )
+  }
+
+  // Best ball: read-only optimal-lineup view — no lineup rows ever written
+  if (pool.game_type === 'ff_bestball') {
+    const bb = resolveBestBallSettings(pool)
+    const scoring = resolveScoringSettings(pool)
+    const currentWeek = await getFfCurrentWeek(pool.season_year)
+    const sp = await searchParams
+
+    const viewMember =
+      (sp.member && members.find((m) => m.id === sp.member)) || myMember
+    const requestedWeek = Number(sp.week)
+    const week = Number.isInteger(requestedWeek)
+      ? Math.min(Math.max(requestedWeek, 1), currentWeek)
+      : currentWeek
+
+    const rosters = await getFfRosters(poolId)
+    const memberRoster = rosters.filter((r) => r.member_id === viewMember.id)
+    const [players, statsByPlayer] = await Promise.all([
+      getFfPlayersByIds(memberRoster.map((r) => r.player_id)),
+      getFfWeekStats(pool.season_year, week),
+    ])
+
+    const lineup = optimalLineup(
+      memberRoster
+        .map((r) => players.get(r.player_id))
+        .filter((p): p is NonNullable<typeof p> => p != null)
+        .map((p) => ({ id: p.id, position: p.position })),
+      statsByPlayer,
+      scoring,
+      bb
+    )
+
+    return (
+      <BestBallTeam
+        poolId={poolId}
+        week={week}
+        currentWeek={currentWeek}
+        memberName={viewMember.profiles.display_name}
+        memberId={viewMember.id}
+        isMyTeam={viewMember.id === myMember.id}
+        lineup={lineup}
+        playersById={Object.fromEntries(players)}
+      />
     )
   }
 

@@ -8,10 +8,16 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import type { GameType, WorldCupScoringConfig } from '@/lib/types'
-import type { FFLeagueSettings, FFScoringSettings } from '@/lib/ff/types'
+import type { FFBestBallSettings, FFLeagueSettings, FFScoringSettings } from '@/lib/ff/types'
 import { GAMES, GAME_LIST, CFB_CONFERENCES, TOTAL_WC_TEAMS, DEFAULT_WC_SCORING } from '@/lib/games/registry'
-import { DEFAULT_FF_LEAGUE_SETTINGS, DEFAULT_FF_SCORING_SETTINGS } from '@/lib/ff/settings'
+import {
+  DEFAULT_FF_BESTBALL_SETTINGS,
+  DEFAULT_FF_LEAGUE_SETTINGS,
+  DEFAULT_FF_SCORING_SETTINGS,
+  bestBallStarters,
+} from '@/lib/ff/settings'
 import { FfPoolOptions } from '@/components/ff/ff-pool-options'
+import { BestBallPoolOptions } from '@/components/ff/bestball-pool-options'
 
 const DEFAULT_SELECTED = CFB_CONFERENCES.map((c) => c.key)
 
@@ -23,6 +29,7 @@ export default function CreatePoolPage() {
   const [scoringConfig, setScoringConfig] = useState<WorldCupScoringConfig>(DEFAULT_WC_SCORING)
   const [showScoring, setShowScoring] = useState(false)
   const [ffLeague, setFfLeague] = useState<FFLeagueSettings>(DEFAULT_FF_LEAGUE_SETTINGS)
+  const [ffBestBall, setFfBestBall] = useState<FFBestBallSettings>(DEFAULT_FF_BESTBALL_SETTINGS)
   const [ffScoring, setFfScoring] = useState<FFScoringSettings>(DEFAULT_FF_SCORING_SETTINGS)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -57,6 +64,9 @@ export default function CreatePoolPage() {
       } else if (gameType === 'ff') {
         formData.set('ff_league_settings', JSON.stringify(ffLeague))
         formData.set('ff_scoring_settings', JSON.stringify(ffScoring))
+      } else if (gameType === 'ff_bestball') {
+        formData.set('ff_league_settings', JSON.stringify(ffBestBall))
+        formData.set('ff_scoring_settings', JSON.stringify(ffScoring))
       }
       await createPool(formData)
     } catch (err) {
@@ -69,7 +79,9 @@ export default function CreatePoolPage() {
     ? selectedConferences.length > 0
     : gameType === 'world_cup'
       ? !wcTeamOverflow && teamsPerManager >= 1
-      : true // PGA/FF — no extra validation needed
+      : gameType === 'ff_bestball'
+        ? ffBestBall.totalRosterSize >= bestBallStarters(ffBestBall.roster)
+        : true // PGA/FF — no extra validation needed
 
   // Step 1: game selection only
   if (gameType === null) {
@@ -233,6 +245,16 @@ export default function CreatePoolPage() {
                 league={ffLeague}
                 scoring={ffScoring}
                 onLeagueChange={setFfLeague}
+                onScoringChange={setFfScoring}
+              />
+            )}
+
+            {/* Best Ball: league options */}
+            {gameType === 'ff_bestball' && (
+              <BestBallPoolOptions
+                settings={ffBestBall}
+                scoring={ffScoring}
+                onSettingsChange={setFfBestBall}
                 onScoringChange={setFfScoring}
               />
             )}

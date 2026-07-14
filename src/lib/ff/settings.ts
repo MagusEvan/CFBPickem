@@ -3,7 +3,7 @@
 
 import { z } from 'zod'
 import type { Pool } from '@/lib/types'
-import type { FFLeagueSettings, FFScoringSettings } from './types'
+import type { FFBestBallSettings, FFLeagueSettings, FFScoringSettings } from './types'
 
 export const ffLeagueSettingsSchema = z.object({
   roster: z.object({
@@ -41,6 +41,45 @@ export const ffLeagueSettingsSchema = z.object({
     review: z.enum(['none', 'commissioner']),
   }),
 }) satisfies z.ZodType<FFLeagueSettings>
+
+/** Sum of best ball starting-lineup slots */
+export function bestBallStarters(roster: FFBestBallSettings['roster']): number {
+  return roster.QB + roster.RB + roster.WR + roster.TE + roster.FLEX + roster.K + roster.DST
+}
+
+// Deliberately disjoint from ffLeagueSettingsSchema: best ball has
+// totalRosterSize/format and no waivers/trades/BENCH/IR, so resolveLeagueSettings
+// can sniff which shape a pool's ff_league_settings JSONB holds. z.object is
+// non-strict, so require the discriminating fields and let the ff schema's
+// required waivers/trades keep an ff payload from parsing here (and vice versa).
+export const ffBestBallSettingsSchema = z.object({
+  roster: z.object({
+    QB: z.number().int().min(0).max(4),
+    RB: z.number().int().min(0).max(8),
+    WR: z.number().int().min(0).max(8),
+    TE: z.number().int().min(0).max(4),
+    FLEX: z.number().int().min(0).max(4),
+    K: z.number().int().min(0).max(2),
+    DST: z.number().int().min(0).max(2),
+  }),
+  flexEligible: z.array(z.enum(['QB', 'RB', 'WR', 'TE'])).min(1),
+  totalRosterSize: z.number().int().min(1).max(30),
+  draft: z.object({
+    type: z.enum(['snake', 'auction']),
+    timerSeconds: z.number().int().min(15).max(600).nullable(),
+    auctionBudget: z.number().int().min(1).max(1000),
+    auctionBidSeconds: z.number().int().min(5).max(120),
+  }),
+  format: z.enum(['total', 'h2h']),
+  season: z.object({
+    regularSeasonWeeks: z.number().int().min(1).max(17),
+    playoffTeams: z.union([z.literal(2), z.literal(4), z.literal(6), z.literal(8)]),
+    playoffStartWeek: z.number().int().min(2).max(18),
+  }),
+}).refine(
+  (s) => s.totalRosterSize >= bestBallStarters(s.roster),
+  { message: 'Total roster size must be at least the number of starting slots' }
+) satisfies z.ZodType<FFBestBallSettings>
 
 export const ffScoringSettingsSchema = z.object({
   passYdsPerPoint: z.number().min(0),
@@ -83,6 +122,15 @@ export const DEFAULT_FF_LEAGUE_SETTINGS: FFLeagueSettings = {
   trades: { enabled: true, deadlineWeek: 11, review: 'none' },
 }
 
+export const DEFAULT_FF_BESTBALL_SETTINGS: FFBestBallSettings = {
+  roster: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1 },
+  flexEligible: ['RB', 'WR', 'TE'],
+  totalRosterSize: 15,
+  draft: { type: 'snake', timerSeconds: 90, auctionBudget: 200, auctionBidSeconds: 15 },
+  format: 'total',
+  season: { regularSeasonWeeks: 17, playoffTeams: 4, playoffStartWeek: 15 },
+}
+
 export const DEFAULT_FF_SCORING_SETTINGS: FFScoringSettings = {
   // Standard PPR
   passYdsPerPoint: 25,
@@ -122,12 +170,47 @@ export const DEFAULT_FF_SCORING_SETTINGS: FFScoringSettings = {
   },
 }
 
-/** Parse a pool's JSONB settings, falling back to defaults for missing config. */
+/**
+ * Adapt best ball settings to the FFLeagueSettings shape all draft code
+ * consumes: the undrafted remainder becomes BENCH, no IR, waivers/trades off.
+ * In-memory only — never persisted or re-validated against
+ * ffLeagueSettingsSchema (whose BENCH max would not apply).
+ */
+export function bestBallToLeagueSettings(bb: FFBestBallSettings): FFLeagueSettings {
+  return {
+    roster: {
+      ...bb.roster,
+      BENCH: Math.max(0, bb.totalRosterSize - bestBallStarters(bb.roster)),
+      IR: 0,
+    },
+    flexEligible: bb.flexEligible,
+    draft: bb.draft,
+    season: bb.season,
+    waivers: { type: 'none', faabBudget: 0, processDay: 3, processHourUTC: 8 },
+    trades: { enabled: false, deadlineWeek: null, review: 'none' },
+  }
+}
+
+/**
+ * Parse a pool's JSONB settings, falling back to defaults for missing config.
+ * Shape-sniffing: a best ball payload (disjoint schema) is adapted to the
+ * league-settings shape so draft code works unchanged for both game types.
+ */
 export function resolveLeagueSettings(
   pool: Pick<Pool, 'ff_league_settings'>
 ): FFLeagueSettings {
+  const bb = ffBestBallSettingsSchema.safeParse(pool.ff_league_settings)
+  if (bb.success) return bestBallToLeagueSettings(bb.data)
   const parsed = ffLeagueSettingsSchema.safeParse(pool.ff_league_settings)
   return parsed.success ? parsed.data : DEFAULT_FF_LEAGUE_SETTINGS
+}
+
+/** Parse a best ball pool's settings (call only for game_type 'ff_bestball'). */
+export function resolveBestBallSettings(
+  pool: Pick<Pool, 'ff_league_settings'>
+): FFBestBallSettings {
+  const parsed = ffBestBallSettingsSchema.safeParse(pool.ff_league_settings)
+  return parsed.success ? parsed.data : DEFAULT_FF_BESTBALL_SETTINGS
 }
 
 export function resolveScoringSettings(

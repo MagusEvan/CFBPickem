@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Pool, PoolMember } from '@/lib/types'
 import type { FFDraftState, FFLeagueSettings, FFPlayer, FFDraftPick, FFPosition } from './types'
-import { resolveLeagueSettings } from './settings'
+import { resolveLeagueSettings, resolveBestBallSettings } from './settings'
+import { isFfFamily } from '@/lib/games/registry'
 import {
   generateSnakeOrder,
   getPickInfo,
@@ -48,7 +49,7 @@ async function loadDraft(poolId: string) {
   const state = stateRes.data as FFDraftState | null
   const members = (membersRes.data ?? []) as PoolMember[]
 
-  if (!pool || pool.game_type !== 'ff' || !state) return { error: 'Draft not found' as const }
+  if (!pool || !isFfFamily(pool.game_type) || !state) return { error: 'Draft not found' as const }
 
   const callerMember = members.find((m) => m.user_id === user.id)
   if (!callerMember) return { error: 'You are not a member of this pool' as const }
@@ -698,13 +699,18 @@ async function completeDraft(
   await buildSeasonArtifacts(admin, pool, members, settings)
 }
 
-/** Rosters, auto-filled week-1 lineups, and the season schedule. */
+/**
+ * Rosters, auto-filled week-1 lineups, and the season schedule.
+ * Best ball: rosters only — no lineups ever (scores are computed on-read),
+ * and matchups only in h2h format.
+ */
 async function buildSeasonArtifacts(
   admin: Admin,
   pool: Pool,
   members: PoolMember[],
   settings: FFLeagueSettings
 ) {
+  const isBestBall = pool.game_type === 'ff_bestball'
   const { data: picks } = await admin
     .from('ff_draft_picks')
     .select('*')
@@ -728,7 +734,7 @@ async function buildSeasonArtifacts(
   }
 
   // Initial week-1 lineups (players in draft order ≈ best first)
-  const lineupRows = members.flatMap((m) => {
+  const lineupRows = isBestBall ? [] : members.flatMap((m) => {
     const players = allPicks
       .filter((p) => p.member_id === m.id)
       .map((p) => ({ id: p.player_id, position: p.player_position }))
@@ -747,7 +753,9 @@ async function buildSeasonArtifacts(
       .upsert(lineupRows, { onConflict: 'pool_id,member_id,week,slot,slot_index' })
   }
 
-  // Regular-season schedule (ordered by draft position for determinism)
+  // Regular-season schedule (ordered by draft position for determinism).
+  // Best ball only schedules matchups in h2h format.
+  if (isBestBall && resolveBestBallSettings(pool).format !== 'h2h') return
   const memberIds = [...members]
     .sort((a, b) => (a.draft_position ?? 0) - (b.draft_position ?? 0))
     .map((m) => m.id)

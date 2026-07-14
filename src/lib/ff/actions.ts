@@ -3,13 +3,19 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { ffLeagueSettingsSchema, ffScoringSettingsSchema, resolveLeagueSettings } from './settings'
+import {
+  ffBestBallSettingsSchema,
+  ffLeagueSettingsSchema,
+  ffScoringSettingsSchema,
+  resolveBestBallSettings,
+  resolveLeagueSettings,
+} from './settings'
 import { eligiblePositionsForSlot, isPlayerLocked } from './roster'
 import { currentWeek } from './refresh'
 import type { FFDraftState, FFLineupSlot, FFPlayer, FFSlot } from './types'
 
 /** Verify the caller is the pool's commissioner; returns the pool row or an error. */
-async function requireCommissioner(poolId: string) {
+async function requireCommissioner(poolId: string, gameType: 'ff' | 'ff_bestball' = 'ff') {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' as const }
@@ -21,7 +27,7 @@ async function requireCommissioner(poolId: string) {
     .eq('id', poolId)
     .single()
 
-  if (!pool || pool.game_type !== 'ff') return { error: 'Pool not found' as const }
+  if (!pool || pool.game_type !== gameType) return { error: 'Pool not found' as const }
   if (pool.admin_id !== user.id) return { error: 'Only the commissioner can do this' as const }
   return { pool, admin, userId: user.id }
 }
@@ -63,6 +69,58 @@ export async function updateFfSettings(
   const { error } = await admin
     .from('pools')
     .update({ ff_league_settings: league, ff_scoring_settings: scoring })
+    .eq('id', poolId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/pools/${poolId}`)
+  revalidatePath(`/pools/${poolId}/settings`)
+  return {}
+}
+
+export async function updateBestBallSettings(
+  poolId: string,
+  settingsJson: string,
+  scoringSettingsJson: string
+): Promise<{ error?: string }> {
+  const auth = await requireCommissioner(poolId, 'ff_bestball')
+  if ('error' in auth) return { error: auth.error }
+  const { pool, admin } = auth
+
+  let settings, scoring
+  try {
+    settings = ffBestBallSettingsSchema.parse(JSON.parse(settingsJson))
+    scoring = ffScoringSettingsSchema.parse(JSON.parse(scoringSettingsJson))
+  } catch {
+    return { error: 'Invalid settings' }
+  }
+
+  // Format, roster shape, roster size, and draft structure are locked once
+  // the draft starts (they define what was drafted). Scoring stays editable —
+  // best ball scores are computed on-read.
+  const { data: draftState } = await admin
+    .from('ff_draft_state')
+    .select('status')
+    .eq('pool_id', poolId)
+    .single<Pick<FFDraftState, 'status'>>()
+
+  if (draftState && draftState.status !== 'pre_draft') {
+    const current = resolveBestBallSettings(pool)
+    const locked =
+      current.format !== settings.format ||
+      JSON.stringify(current.roster) !== JSON.stringify(settings.roster) ||
+      current.flexEligible.join() !== settings.flexEligible.join() ||
+      current.totalRosterSize !== settings.totalRosterSize ||
+      current.draft.type !== settings.draft.type ||
+      current.draft.auctionBudget !== settings.draft.auctionBudget
+    if (locked) {
+      return { error: 'Format, roster, and draft settings are locked once the draft has started' }
+    }
+  }
+
+  const { error } = await admin
+    .from('pools')
+    .update({ ff_league_settings: settings, ff_scoring_settings: scoring })
     .eq('id', poolId)
 
   if (error) return { error: error.message }

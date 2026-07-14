@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Users, Trophy, Calendar, Settings, Shield, Share2, Flag, ArrowLeftRight, Handshake } from 'lucide-react'
 import { InviteLinkButton } from '@/components/pool/invite-link'
-import { getGame } from '@/lib/games/registry'
+import { getGame, isFfFamily } from '@/lib/games/registry'
+import { resolveBestBallSettings } from '@/lib/ff/settings'
 
 export const revalidate = 60
 
@@ -23,6 +24,8 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
 
   const isAdmin = pool.admin_id === userId
   const myMember = members.find((m) => m.user_id === userId)
+  const isBestBall = pool.game_type === 'ff_bestball'
+  const showMatchups = !isBestBall || resolveBestBallSettings(pool).format === 'h2h'
 
   return (
     <div className="space-y-6">
@@ -42,7 +45,7 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
 
       {/* Quick nav cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {pool.game_type === 'ff' ? (
+        {isFfFamily(pool.game_type) ? (
           <>
             <Link href={`/pools/${pool.id}/draft`}>
               <Card className="py-0 transition-colors hover:bg-muted/50">
@@ -67,23 +70,27 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
                       <Shield className="h-5 w-5 text-muted-foreground" />
                       <div>
                         <p className="font-medium">My Team</p>
-                        <p className="text-sm text-muted-foreground">Set your lineup</p>
+                        <p className="text-sm text-muted-foreground">
+                          {isBestBall ? 'Weekly optimal lineup' : 'Set your lineup'}
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
                 </Link>
 
-                <Link href={`/pools/${pool.id}/matchups`}>
-                  <Card className="py-0 transition-colors hover:bg-muted/50">
-                    <CardContent className="flex items-center gap-3 px-4 py-4">
-                      <Calendar className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Matchups</p>
-                        <p className="text-sm text-muted-foreground">Weekly head-to-head</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                {showMatchups && (
+                  <Link href={`/pools/${pool.id}/matchups`}>
+                    <Card className="py-0 transition-colors hover:bg-muted/50">
+                      <CardContent className="flex items-center gap-3 px-4 py-4">
+                        <Calendar className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">Matchups</p>
+                          <p className="text-sm text-muted-foreground">Weekly head-to-head</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                )}
 
                 <Link href={`/pools/${pool.id}/standings`}>
                   <Card className="py-0 transition-colors hover:bg-muted/50">
@@ -91,35 +98,41 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
                       <Trophy className="h-5 w-5 text-muted-foreground" />
                       <div>
                         <p className="font-medium">Standings</p>
-                        <p className="text-sm text-muted-foreground">Records & playoff race</p>
+                        <p className="text-sm text-muted-foreground">
+                          {showMatchups ? 'Records & playoff race' : 'Points leaderboard'}
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
                 </Link>
 
-                <Link href={`/pools/${pool.id}/transactions`}>
-                  <Card className="py-0 transition-colors hover:bg-muted/50">
-                    <CardContent className="flex items-center gap-3 px-4 py-4">
-                      <ArrowLeftRight className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Transactions</p>
-                        <p className="text-sm text-muted-foreground">Adds, drops & waivers</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                {!isBestBall && (
+                  <>
+                    <Link href={`/pools/${pool.id}/transactions`}>
+                      <Card className="py-0 transition-colors hover:bg-muted/50">
+                        <CardContent className="flex items-center gap-3 px-4 py-4">
+                          <ArrowLeftRight className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Transactions</p>
+                            <p className="text-sm text-muted-foreground">Adds, drops & waivers</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
 
-                <Link href={`/pools/${pool.id}/trades`}>
-                  <Card className="py-0 transition-colors hover:bg-muted/50">
-                    <CardContent className="flex items-center gap-3 px-4 py-4">
-                      <Handshake className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Trades</p>
-                        <p className="text-sm text-muted-foreground">Propose & review deals</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                    <Link href={`/pools/${pool.id}/trades`}>
+                      <Card className="py-0 transition-colors hover:bg-muted/50">
+                        <CardContent className="flex items-center gap-3 px-4 py-4">
+                          <Handshake className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Trades</p>
+                            <p className="text-sm text-muted-foreground">Propose & review deals</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </>
+                )}
               </>
             )}
 

@@ -13,11 +13,13 @@ import { TeamBreakdownGrid } from '@/components/standings/team-breakdown-grid'
 import { FfStandingsTable } from '@/components/ff/ff-standings-table'
 import { PlayoffBracket, type BracketRound } from '@/components/ff/playoff-bracket'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getFfCurrentWeek, getFfLineups, getFfMatchups, getFfWeekScores } from '@/lib/ff/queries'
-import { resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
+import { getBestBallWeekScores, getFfCurrentWeek, getFfLineups, getFfMatchups, getFfWeekScores } from '@/lib/ff/queries'
+import { resolveBestBallSettings, resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import { computeStandings, type FFMatchupResult } from '@/lib/ff/standings'
-import { ensurePlayoffs, playoffChampion } from '@/lib/ff/playoff-processing'
+import { ensurePlayoffs, playoffChampion, type PlayoffScoreProvider } from '@/lib/ff/playoff-processing'
 import { pairingWinner, playoffRoundName, playoffRoundsCount } from '@/lib/ff/playoffs'
+import { isFfFamily } from '@/lib/games/registry'
+import { BestBallLeaderboard } from '@/components/ff/bestball-leaderboard'
 import type { Pool, DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 
 export const revalidate = 60
@@ -131,7 +133,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
 
   if (!pool) notFound()
 
-  if (pool.game_type === 'ff') {
+  if (isFfFamily(pool.game_type)) {
     return <FfStandings poolId={poolId} pool={pool} members={members} />
   }
 
@@ -292,20 +294,64 @@ async function FfStandings({
   const currentWeek = await getFfCurrentWeek(pool.season_year)
   const throughWeek = Math.min(currentWeek, settings.season.regularSeasonWeeks)
 
+  const bb = pool.game_type === 'ff_bestball' ? resolveBestBallSettings(pool) : null
+
+  // Best ball total-points mode: no matchups or playoffs — just a leaderboard
+  if (bb && bb.format === 'total') {
+    const weekScores = await getBestBallWeekScores(
+      poolId, pool.season_year, scoring, bb, Math.min(currentWeek, bb.season.regularSeasonWeeks)
+    )
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Standings</h1>
+        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+          &lt; Return to Pool
+        </Link>
+        <Card>
+          <CardHeader>
+            <CardTitle>Leaderboard</CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <BestBallLeaderboard
+              poolId={poolId}
+              members={members.map((m) => ({ id: m.id, name: m.profiles.display_name }))}
+              weekScores={weekScores.map((ws) => ({
+                week: ws.week,
+                final: ws.final,
+                scores: Object.fromEntries(ws.scoreByMember),
+              }))}
+            />
+            <p className="mt-3 text-xs text-muted-foreground">
+              Optimal lineups are scored automatically each week — no lineups to set.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Best ball h2h scores come from optimal lineups; ff scores from set lineups
+  const bestBallProvider: PlayoffScoreProvider | undefined = bb
+    ? (p, through) => getBestBallWeekScores(p.id, p.season_year, scoring, bb, through)
+    : undefined
+
   // Lazily generate/advance the playoff bracket once the regular season ends
-  await ensurePlayoffs(createAdminClient(), pool, settings, currentWeek)
+  await ensurePlayoffs(createAdminClient(), pool, settings, currentWeek, bestBallProvider)
 
   const playoffRounds = playoffRoundsCount(settings.season.playoffTeams)
   const playoffFinalWeek = settings.season.playoffStartWeek + playoffRounds - 1
   const scoreThrough = Math.max(throughWeek, Math.min(currentWeek, playoffFinalWeek))
 
   // Materialize any missing lineup weeks so completed weeks never score 0-0
-  // just because nobody opened a page that week (cheap no-op when rows exist)
-  for (let w = 1; w <= scoreThrough; w++) await getFfLineups(poolId, w)
+  // just because nobody opened a page that week (cheap no-op when rows exist).
+  // Best ball never materializes lineups — scores derive from rosters.
+  if (!bb) for (let w = 1; w <= scoreThrough; w++) await getFfLineups(poolId, w)
 
   const [matchups, weekScores] = await Promise.all([
     getFfMatchups(poolId),
-    getFfWeekScores(poolId, pool.season_year, scoring, scoreThrough),
+    bb
+      ? getBestBallWeekScores(poolId, pool.season_year, scoring, bb, scoreThrough)
+      : getFfWeekScores(poolId, pool.season_year, scoring, scoreThrough),
   ])
   const scoresByWeek = new Map(weekScores.map((ws) => [ws.week, ws]))
 

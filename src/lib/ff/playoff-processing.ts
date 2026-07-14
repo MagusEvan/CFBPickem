@@ -4,7 +4,7 @@
 // unique(pool_id, week, home_member_id) + ignoreDuplicates upsert, so
 // concurrent page loads can't double-create a round.
 
-import { getFfLineups, getFfMatchups, getFfWeekScores } from './queries'
+import { getFfLineups, getFfMatchups, getFfWeekScores, type FFWeekScores } from './queries'
 import { resolveScoringSettings } from './settings'
 import { computeStandings, playoffSeeds, type FFMatchupResult } from './standings'
 import { playoffRoundsCount, roundPairings, pairingWinner, type PlayoffPairing } from './playoffs'
@@ -13,6 +13,20 @@ import type { FFLeagueSettings, FFMatchup } from './types'
 import type { Pool } from '@/lib/types'
 
 type PlayoffPool = Pick<Pool, 'id' | 'season_year' | 'ff_scoring_settings'>
+
+/** Week scores through a given week. The default materializes lineup rows
+ * (getFfLineups) — best ball pools must pass their own provider so that
+ * ff_lineup_slots is never written. */
+export type PlayoffScoreProvider = (
+  pool: PlayoffPool,
+  throughWeek: number
+) => Promise<FFWeekScores[]>
+
+const defaultScoreProvider: PlayoffScoreProvider = async (pool, throughWeek) => {
+  for (let w = 1; w <= throughWeek; w++) await getFfLineups(pool.id, w)
+  const scoring = resolveScoringSettings(pool)
+  return getFfWeekScores(pool.id, pool.season_year, scoring, throughWeek)
+}
 
 /**
  * Generate the round-1 bracket once the regular season is final, and advance
@@ -25,7 +39,8 @@ export async function ensurePlayoffs(
   admin: Admin,
   pool: PlayoffPool,
   settings: FFLeagueSettings,
-  currentWk: number
+  currentWk: number,
+  getScores: PlayoffScoreProvider = defaultScoreProvider
 ): Promise<void> {
   const rounds = playoffRoundsCount(settings.season.playoffTeams)
   const regWeeks = settings.season.regularSeasonWeeks
@@ -52,9 +67,7 @@ export async function ensurePlayoffs(
   // Materialize lineups + score every week we might need (regular season for
   // seeding, completed playoff weeks for advancement)
   const scoreThrough = Math.min(currentWk, finalWeek)
-  for (let w = 1; w <= scoreThrough; w++) await getFfLineups(pool.id, w)
-  const scoring = resolveScoringSettings(pool)
-  const weekScores = await getFfWeekScores(pool.id, pool.season_year, scoring, scoreThrough)
+  const weekScores = await getScores(pool, scoreThrough)
   const byWeek = new Map(weekScores.map((ws) => [ws.week, ws]))
 
   // Round 1: seed from final regular-season standings

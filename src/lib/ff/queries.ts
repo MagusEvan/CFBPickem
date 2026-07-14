@@ -2,8 +2,11 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureFreshPlayerCatalog, ensureFreshFfData, currentWeek } from './refresh'
 import { scoreLineup } from './scoring'
+import { optimalLineup } from './bestball'
 import type {
+  FFBestBallSettings,
   FFPlayer,
+  FFPosition,
   FFNflGame,
   FFStatLine,
   FFRosterEntry,
@@ -299,6 +302,77 @@ export async function getFfWeekScores(
       for (const [memberId, slots] of byMember) {
         scoreByMember.set(memberId, scoreLineup(slots, stats, scoring))
       }
+    }
+    results.push({
+      week,
+      final: weekHasGames.has(week) && !weekHasNonFinal.has(week),
+      scoreByMember,
+    })
+  }
+  return results
+}
+
+/**
+ * Best ball week scores: each member's retroactive optimal lineup for weeks
+ * 1..throughWeek, computed on-read from the immutable post-draft roster ×
+ * raw stats. Same shape as getFfWeekScores so standings/matchup/playoff
+ * code composes for both game types.
+ */
+export async function getBestBallWeekScores(
+  poolId: string,
+  seasonYear: number,
+  scoring: FFScoringSettings,
+  bb: FFBestBallSettings,
+  throughWeek: number
+): Promise<FFWeekScores[]> {
+  const supabase = await createClient()
+  const [rostersRes, statsRes, gamesRes] = await Promise.all([
+    supabase
+      .from('ff_rosters')
+      .select('member_id, player_id, ff_players(position)')
+      .eq('pool_id', poolId),
+    supabase
+      .from('ff_player_stats')
+      .select('player_id, week, stats')
+      .eq('season_year', seasonYear)
+      .lte('week', throughWeek),
+    supabase
+      .from('ff_nfl_games')
+      .select('week, status')
+      .eq('season_year', seasonYear)
+      .eq('season_type', 2)
+      .lte('week', throughWeek),
+  ])
+
+  const rosterByMember = new Map<string, Array<{ id: string; position: FFPosition }>>()
+  for (const row of rostersRes.data ?? []) {
+    const position = (row.ff_players as unknown as { position: FFPosition } | null)?.position
+    if (!position) continue
+    const list = rosterByMember.get(row.member_id) ?? []
+    list.push({ id: row.player_id, position })
+    rosterByMember.set(row.member_id, list)
+  }
+
+  const statsByWeek = new Map<number, Record<string, FFStatLine>>()
+  for (const row of statsRes.data ?? []) {
+    const forWeek = statsByWeek.get(row.week) ?? {}
+    forWeek[row.player_id] = row.stats as FFStatLine
+    statsByWeek.set(row.week, forWeek)
+  }
+
+  const weekHasGames = new Set<number>()
+  const weekHasNonFinal = new Set<number>()
+  for (const g of gamesRes.data ?? []) {
+    weekHasGames.add(g.week)
+    if (g.status !== 'final') weekHasNonFinal.add(g.week)
+  }
+
+  const results: FFWeekScores[] = []
+  for (let week = 1; week <= throughWeek; week++) {
+    const scoreByMember = new Map<string, number>()
+    const stats = statsByWeek.get(week) ?? {}
+    for (const [memberId, players] of rosterByMember) {
+      scoreByMember.set(memberId, optimalLineup(players, stats, scoring, bb).total)
     }
     results.push({
       week,

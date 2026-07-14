@@ -1,8 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import { getPool } from '@/lib/pools/queries'
 import { getFfCurrentWeek } from '@/lib/ff/queries'
-import { resolveLeagueSettings } from '@/lib/ff/settings'
+import { resolveBestBallSettings, resolveLeagueSettings } from '@/lib/ff/settings'
 import { playoffRoundsCount } from '@/lib/ff/playoffs'
+import { isFfFamily } from '@/lib/games/registry'
 
 export default async function MatchupsIndexPage({
   params,
@@ -11,7 +12,11 @@ export default async function MatchupsIndexPage({
 }) {
   const { poolId } = await params
   const pool = await getPool(poolId)
-  if (!pool || pool.game_type !== 'ff') notFound()
+  if (!pool || !isFfFamily(pool.game_type)) notFound()
+  // Best ball total-points pools have no matchups
+  if (pool.game_type === 'ff_bestball' && resolveBestBallSettings(pool).format !== 'h2h') {
+    notFound()
+  }
 
   const settings = resolveLeagueSettings(pool)
   const maxWeek = Math.max(

@@ -1,6 +1,6 @@
 // Domain types — framework-agnostic, portable to React Native
 
-export type GameType = 'cfb' | 'world_cup' | 'pga' | 'ff'
+export type GameType = 'cfb' | 'world_cup' | 'pga' | 'ff' | 'ff_bestball'
 
 export interface Profile {
   id: string

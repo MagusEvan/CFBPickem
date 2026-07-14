@@ -5,7 +5,11 @@ import { z } from 'zod'
 import type { GameType } from '@/lib/types'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { GAMES, TOTAL_WC_TEAMS } from './registry'
-import { ffLeagueSettingsSchema, ffScoringSettingsSchema } from '@/lib/ff/settings'
+import {
+  ffBestBallSettingsSchema,
+  ffLeagueSettingsSchema,
+  ffScoringSettingsSchema,
+} from '@/lib/ff/settings'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -215,6 +219,36 @@ export const GAME_SERVERS: Record<GameType, GameServerDefinition> = {
       }
     },
     // Wired to the NFL data provider in src/lib/ff/refresh.ts (Phase 2)
+    refreshGames: null,
+    afterPoolCreate: async (admin, pool) => {
+      const { error } = await admin
+        .from('ff_draft_state')
+        .insert({ pool_id: pool.id })
+      if (error) throw new Error(`Failed to seed FF draft state: ${error.message}`)
+    },
+  },
+  ff_bestball: {
+    key: 'ff_bestball',
+    parsePoolInsert: (formData) => {
+      const input = baseSchema('ff_bestball').extend({
+        ff_league_settings: ffBestBallSettingsSchema,
+        ff_scoring_settings: ffScoringSettingsSchema,
+      }).parse({
+        ...baseFormValues(formData),
+        ff_league_settings: JSON.parse(formData.get('ff_league_settings') as string),
+        ff_scoring_settings: JSON.parse(formData.get('ff_scoring_settings') as string),
+      })
+      return {
+        ...input,
+        game_type: 'ff_bestball',
+        scoring_strategy: 'ff',
+        conferences: null,
+        num_rounds: 0,
+        teams_per_manager: null,
+        scoring_config: null,
+      }
+    },
+    // Shares the FF data feed; freshness is triggered per page like ff
     refreshGames: null,
     afterPoolCreate: async (admin, pool) => {
       const { error } = await admin
