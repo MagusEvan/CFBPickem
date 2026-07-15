@@ -146,7 +146,7 @@ export function PgaDraftRoom({
             </p>
             {golfers.length === 0 && (
               <p className="mb-4 text-sm text-red-600">
-                No golfers loaded yet. Refresh the field from the tournament page before starting.
+                No golfers loaded yet. Use Refresh Field on the tournament page before starting.
               </p>
             )}
             {isAdmin && golfers.length > 0 && (

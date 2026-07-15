@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getPool } from '@/lib/pools/queries'
+import { getPool, getCurrentUserId } from '@/lib/pools/queries'
 import { getTournament, getTournamentMembers, getTournamentGolfers } from '@/lib/pga/queries'
+import { DeleteTournamentButton, RefreshFieldButton } from '@/components/pga/tournament-admin-actions'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -17,13 +18,15 @@ export default async function TournamentDetailPage({
   params: Promise<{ poolId: string; tournamentId: string }>
 }) {
   const { poolId, tournamentId } = await params
-  const [pool, tournament, members] = await Promise.all([
+  const [pool, tournament, members, userId] = await Promise.all([
     getPool(poolId),
     getTournament(tournamentId),
     getTournamentMembers(tournamentId),
+    getCurrentUserId(),
   ])
 
   if (!pool || !tournament) notFound()
+  const isAdmin = pool.admin_id === userId
 
   // Staleness-gated, deduplicated field/score refresh
   await ensureFreshGolfers(tournamentId, tournament.espn_event_id)
@@ -117,16 +120,29 @@ export default async function TournamentDetailPage({
       </div>
 
       {/* Golfer field */}
-      {golfers.length > 0 && (
-        <>
-          <Separator />
-          <div>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">
-                Field ({golfers.length} golfers)
-              </h2>
-            </div>
-            <Card>
+      <Separator />
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">
+            Field ({golfers.length} golfers)
+          </h2>
+          {isAdmin && tournament.espn_event_id && (
+            <RefreshFieldButton tournamentId={tournamentId} poolId={poolId} />
+          )}
+        </div>
+        {golfers.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              <p>No golfers loaded yet.</p>
+              <p className="mt-1">
+                {tournament.espn_event_id
+                  ? 'ESPN typically publishes the field the week of the tournament.'
+                  : 'This tournament has no ESPN event linked, so the field cannot be fetched automatically.'}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
               <CardContent className="overflow-x-auto py-4">
                 <table className="w-full text-sm">
                   <thead>
@@ -168,6 +184,25 @@ export default async function TournamentDetailPage({
                 )}
               </CardContent>
             </Card>
+        )}
+      </div>
+
+      {/* Danger zone (admin only) */}
+      {isAdmin && (
+        <>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Danger Zone</h2>
+              <p className="text-sm text-muted-foreground">
+                Permanently delete this tournament and all of its draft data.
+              </p>
+            </div>
+            <DeleteTournamentButton
+              tournamentId={tournamentId}
+              poolId={poolId}
+              tournamentName={tournament.name}
+            />
           </div>
         </>
       )}

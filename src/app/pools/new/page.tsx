@@ -198,19 +198,22 @@ export default function CreatePoolPage() {
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label>Draft Order</Label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2">
-                  <input type="radio" name="draft_order_mode" value="random" defaultChecked />
-                  <span className="text-sm">Random</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="radio" name="draft_order_mode" value="manual" />
-                  <span className="text-sm">Manual</span>
-                </label>
+            {/* PGA draft order is chosen per tournament, not per pool */}
+            {gameType !== 'pga' && (
+              <div className="space-y-2">
+                <Label>Draft Order</Label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input type="radio" name="draft_order_mode" value="random" defaultChecked />
+                    <span className="text-sm">Random</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="radio" name="draft_order_mode" value="manual" />
+                    <span className="text-sm">Manual</span>
+                  </label>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* CFB: Conference Selection */}
             {gameType === 'cfb' && (

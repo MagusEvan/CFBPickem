@@ -46,6 +46,8 @@ export default function NewTournamentPage({
   const [members, setMembers] = useState<PoolMemberInfo[]>([])
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set())
   const [loadingMembers, setLoadingMembers] = useState(true)
+  const [draftOrderMode, setDraftOrderMode] = useState<'random' | 'manual'>('random')
+  const [positionByMember, setPositionByMember] = useState<Record<string, number>>({})
   const seasonYear = new Date().getFullYear()
 
   useEffect(() => {
@@ -100,7 +102,12 @@ export default function NewTournamentPage({
       formData.set('enable_scraps', String(enableScraps))
       formData.set('course_par', String(coursePar))
       formData.set('missed_cut_score', String(missedCutScore))
-      formData.set('draft_order_mode', 'random')
+      formData.set('draft_order_mode', draftOrderMode)
+      if (draftOrderMode === 'manual') {
+        for (const id of selectedMemberIds) {
+          formData.append('member_positions', `${id}:${positionByMember[id] ?? ''}`)
+        }
+      }
       if (selectedEvent) {
         formData.set('espn_event_id', selectedEvent.id)
         if (selectedEvent.startDate) formData.set('start_date', selectedEvent.startDate.split('T')[0])
@@ -119,13 +126,32 @@ export default function NewTournamentPage({
   function toggleMember(id: string) {
     setSelectedMemberIds((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(id)) {
+        next.delete(id)
+        // Un-checking a member clears their manual draft position
+        setPositionByMember((p) => {
+          const rest = { ...p }
+          delete rest[id]
+          return rest
+        })
+      } else {
+        next.add(id)
+      }
       return next
     })
   }
 
-  const isValid = name.length > 0 && topNScoring <= golfersPerManager && selectedMemberIds.size >= 2
+  // Manual order requires a complete 1..N permutation over selected members
+  const manualPositions = [...selectedMemberIds].map((id) => positionByMember[id])
+  const manualOrderValid =
+    manualPositions.every((p) => Number.isInteger(p) && p! >= 1 && p! <= selectedMemberIds.size) &&
+    new Set(manualPositions).size === selectedMemberIds.size
+
+  const isValid =
+    name.length > 0 &&
+    topNScoring <= golfersPerManager &&
+    selectedMemberIds.size >= 2 &&
+    (draftOrderMode === 'random' || manualOrderValid)
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -266,6 +292,38 @@ export default function NewTournamentPage({
               </div>
             </div>
 
+            {/* Draft order */}
+            <div className="space-y-2">
+              <Label>Draft Order</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="draft_order_mode_choice"
+                    value="random"
+                    checked={draftOrderMode === 'random'}
+                    onChange={() => setDraftOrderMode('random')}
+                  />
+                  <span className="text-sm">Random</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="draft_order_mode_choice"
+                    value="manual"
+                    checked={draftOrderMode === 'manual'}
+                    onChange={() => setDraftOrderMode('manual')}
+                  />
+                  <span className="text-sm">Manual</span>
+                </label>
+              </div>
+              {draftOrderMode === 'manual' && (
+                <p className="text-xs text-muted-foreground">
+                  Assign each participant a draft position below.
+                </p>
+              )}
+            </div>
+
             {/* Participant selection */}
             <div className="space-y-2">
               <Label>Participants ({selectedMemberIds.size} of {members.length})</Label>
@@ -290,11 +348,33 @@ export default function NewTournamentPage({
                         onChange={() => toggleMember(m.id)}
                         className="accent-primary"
                       />
-                      {m.display_name}
+                      <span className="flex-1">{m.display_name}</span>
+                      {draftOrderMode === 'manual' && selectedMemberIds.has(m.id) && (
+                        <Input
+                          type="number"
+                          value={positionByMember[m.id] ?? ''}
+                          onChange={(e) =>
+                            setPositionByMember((p) => ({
+                              ...p,
+                              [m.id]: Number(e.target.value),
+                            }))
+                          }
+                          onClick={(e) => e.preventDefault()}
+                          min={1}
+                          max={selectedMemberIds.size}
+                          placeholder="#"
+                          className="h-8 w-16"
+                        />
+                      )}
                     </label>
                   ))}
                   {selectedMemberIds.size < 2 && (
                     <p className="text-xs text-red-600">Select at least 2 participants.</p>
+                  )}
+                  {draftOrderMode === 'manual' && selectedMemberIds.size >= 2 && !manualOrderValid && (
+                    <p className="text-xs text-red-600">
+                      Assign each participant a unique position from 1 to {selectedMemberIds.size}.
+                    </p>
                   )}
                 </div>
               )}

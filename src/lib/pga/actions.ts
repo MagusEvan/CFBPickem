@@ -36,6 +36,7 @@ export async function createTournament(formData: FormData): Promise<void> {
   if (!name) throw new Error('Tournament name is required')
   if (golfersPerManager < 1 || golfersPerManager > 20) throw new Error('Invalid golfers per manager')
   if (topNScoring < 1 || topNScoring > golfersPerManager) throw new Error('Top N must be between 1 and golfers per manager')
+  if (draftOrderMode !== 'random' && draftOrderMode !== 'manual') throw new Error('Invalid draft order mode')
 
   const admin = createAdminClient()
 
@@ -63,14 +64,32 @@ export async function createTournament(formData: FormData): Promise<void> {
 
   // Add selected members (or all pool members if none specified)
   const allMembers = await getPoolMembers(poolId)
-  const selectedIds = memberIds.length > 0 ? memberIds : allMembers.map((m) => m.id)
-
-  const memberInserts = selectedIds
+  const selectedIds = (memberIds.length > 0 ? memberIds : allMembers.map((m) => m.id))
     .filter((id) => allMembers.some((m) => m.id === id))
-    .map((poolMemberId) => ({
-      tournament_id: tournament.id,
-      pool_member_id: poolMemberId,
-    }))
+
+  // Manual draft order: positions submitted as "memberId:position" pairs and
+  // must form a complete 1..N permutation over the selected members
+  const positionByMember = new Map<string, number>()
+  if (draftOrderMode === 'manual') {
+    for (const entry of formData.getAll('member_positions') as string[]) {
+      const [memberId, pos] = entry.split(':')
+      positionByMember.set(memberId, Number(pos))
+    }
+    const positions = selectedIds.map((id) => positionByMember.get(id))
+    const valid =
+      positions.every((p): p is number => Number.isInteger(p)) &&
+      new Set(positions).size === selectedIds.length &&
+      positions.every((p) => p >= 1 && p <= selectedIds.length)
+    if (!valid) throw new Error('Manual draft order must assign each participant a unique position from 1 to ' + selectedIds.length)
+  }
+
+  const memberInserts = selectedIds.map((poolMemberId) => ({
+    tournament_id: tournament.id,
+    pool_member_id: poolMemberId,
+    ...(draftOrderMode === 'manual'
+      ? { draft_position: positionByMember.get(poolMemberId) }
+      : {}),
+  }))
 
   if (memberInserts.length > 0) {
     const { error: mErr } = await admin
@@ -110,6 +129,42 @@ export async function deleteTournament(
 
   revalidatePath(`/pools/${poolId}/tournaments`)
   return {}
+}
+
+/** Admin-triggered golfer field fetch from ESPN, bypassing the staleness gate. */
+export async function refreshTournamentField(
+  tournamentId: string,
+  poolId: string
+): Promise<{ error?: string; count?: number }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const pool = await getPool(poolId)
+  if (!pool || pool.admin_id !== user.id) return { error: 'Only the league admin can refresh the field' }
+
+  const tournament = await getTournament(tournamentId)
+  if (!tournament || tournament.pool_id !== poolId) return { error: 'Tournament not found' }
+  if (!tournament.espn_event_id) {
+    return { error: 'This tournament has no ESPN event linked, so the field cannot be fetched automatically.' }
+  }
+
+  const admin = createAdminClient()
+  try {
+    const { fetchAndCacheGolfers } = await import('@/lib/data-refresh')
+    await fetchAndCacheGolfers(admin, tournamentId, tournament.espn_event_id)
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to fetch the field from ESPN' }
+  }
+
+  const { count } = await admin
+    .from('pga_golfers')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', tournamentId)
+
+  revalidatePath(`/pools/${poolId}/tournaments/${tournamentId}`)
+  revalidatePath(`/pools/${poolId}/tournaments/${tournamentId}/draft`)
+  return { count: count ?? 0 }
 }
 
 // ============================================================
