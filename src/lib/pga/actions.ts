@@ -167,6 +167,59 @@ export async function refreshTournamentField(
   return { count: count ?? 0 }
 }
 
+/** Change the draft order mode (and manual positions) before the draft starts. */
+export async function updateTournamentDraftOrder(
+  tournamentId: string,
+  poolId: string,
+  mode: 'random' | 'manual',
+  positions?: Record<string, number> // tournament member id -> draft position
+): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const pool = await getPool(poolId)
+  if (!pool || pool.admin_id !== user.id) return { error: 'Only the league admin can change the draft order' }
+
+  const tournament = await getTournament(tournamentId)
+  if (!tournament || tournament.pool_id !== poolId) return { error: 'Tournament not found' }
+  if (tournament.draft_status !== 'pre_draft') return { error: 'Draft order is locked once the draft has started' }
+  if (mode !== 'random' && mode !== 'manual') return { error: 'Invalid draft order mode' }
+
+  const members = await getTournamentMembers(tournamentId)
+
+  if (mode === 'manual') {
+    const assigned = members.map((m) => positions?.[m.id])
+    const valid =
+      assigned.every((p): p is number => Number.isInteger(p)) &&
+      new Set(assigned).size === members.length &&
+      assigned.every((p) => p >= 1 && p <= members.length)
+    if (!valid) {
+      return { error: `Manual draft order must assign each participant a unique position from 1 to ${members.length}` }
+    }
+  }
+
+  const admin = createAdminClient()
+  const { error: tErr } = await admin
+    .from('pga_tournaments')
+    .update({ draft_order_mode: mode })
+    .eq('id', tournamentId)
+  if (tErr) return { error: tErr.message }
+
+  // Manual: persist positions; random: clear them (assigned at draft start)
+  for (const m of members) {
+    const { error: mErr } = await admin
+      .from('pga_tournament_members')
+      .update({ draft_position: mode === 'manual' ? positions![m.id] : null })
+      .eq('id', m.id)
+    if (mErr) return { error: mErr.message }
+  }
+
+  revalidatePath(`/pools/${poolId}/tournaments/${tournamentId}`)
+  revalidatePath(`/pools/${poolId}/tournaments/${tournamentId}/draft`)
+  return {}
+}
+
 // ============================================================
 // Draft actions
 // ============================================================

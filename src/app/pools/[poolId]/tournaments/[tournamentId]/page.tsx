@@ -2,7 +2,11 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getCurrentUserId } from '@/lib/pools/queries'
 import { getTournament, getTournamentMembers, getTournamentGolfers } from '@/lib/pga/queries'
-import { DeleteTournamentButton, RefreshFieldButton } from '@/components/pga/tournament-admin-actions'
+import {
+  DeleteTournamentButton,
+  RefreshFieldButton,
+  TournamentDraftOrderCard,
+} from '@/components/pga/tournament-admin-actions'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -118,6 +122,20 @@ export default async function TournamentDetailPage({
           ))}
         </div>
       </div>
+
+      {/* Draft order (admin only, pre-draft only) */}
+      {isAdmin && tournament.draft_status === 'pre_draft' && (
+        <TournamentDraftOrderCard
+          tournamentId={tournamentId}
+          poolId={poolId}
+          initialMode={tournament.draft_order_mode}
+          members={members.map((m) => ({
+            id: m.id,
+            name: m.pool_member?.profiles?.display_name ?? '—',
+            position: m.draft_position,
+          }))}
+        />
+      )}
 
       {/* Golfer field */}
       <Separator />

@@ -108,6 +108,23 @@ export async function fetchAndCacheGolfers(
       .from('pga_golfers')
       .upsert(rows, { onConflict: 'id,tournament_id' })
     if (error) throw new Error(error.message)
+
+    // Prune golfers who dropped out of the ESPN field (e.g. the preliminary
+    // entry list shrinking to the final field), but never drafted ones —
+    // picks reference golfer rows for scoring.
+    const { data: picks } = await admin
+      .from('pga_draft_picks')
+      .select('golfer_id')
+      .eq('tournament_id', tournamentId)
+    const keepIds = new Set([
+      ...golfers.map((g) => g.id),
+      ...(picks ?? []).map((p) => p.golfer_id as string),
+    ])
+    await admin
+      .from('pga_golfers')
+      .delete()
+      .eq('tournament_id', tournamentId)
+      .not('id', 'in', `(${[...keepIds].join(',')})`)
   }
 
   // Also update course par if we can extract it from ESPN
