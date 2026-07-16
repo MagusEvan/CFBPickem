@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import type { ManagerStanding } from '@/lib/pga/scoring'
 import { formatScoreToPar } from '@/lib/pga/scoring'
 import { Card, CardContent } from '@/components/ui/card'
+import { ChevronDown } from 'lucide-react'
 
 interface PgaLeaderboardProps {
   standings: ManagerStanding[]
@@ -24,7 +26,7 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore, cou
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
         {standings.map((standing, idx) => (
           <ManagerCard
             key={standing.memberId}
@@ -40,6 +42,7 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore, cou
           <span className="font-bold text-[#228B22]">Green bold</span> = score counts toward team&apos;s round total (best {topN})
         </p>
         <p>CUT/WD penalty: {missedCutScore} strokes ({formatScoreToPar(missedCutScore - coursePar)}) per round</p>
+        <p>Click a team to see strokes per round and each golfer&apos;s counting contribution.</p>
       </div>
     </div>
   )
@@ -56,18 +59,30 @@ function ManagerCard({
   activeRounds: number[]
   highlightBg: string | null
 }) {
+  const [expanded, setExpanded] = useState(false)
+
   return (
     <Card className="py-0">
       <CardContent className="px-3 py-2">
-        <div className="flex items-baseline justify-between gap-2 border-b pb-1.5">
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="flex w-full items-baseline justify-between gap-2 border-b pb-1.5 text-left"
+          aria-expanded={expanded}
+        >
           <div className="flex min-w-0 items-baseline gap-2">
             <span className="shrink-0 text-xs font-semibold text-muted-foreground">#{rank}</span>
             <span className="truncate text-sm font-medium">{standing.memberName}</span>
           </div>
-          <span className="shrink-0 text-sm font-bold tabular-nums">
-            {formatScoreToPar(standing.cumulativeScore)}
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span className="text-sm font-bold tabular-nums">
+              {formatScoreToPar(standing.cumulativeScore)}
+            </span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 self-center text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
+            />
           </span>
-        </div>
+        </button>
         <table className="w-full text-xs">
           <thead>
             <tr className="text-[10px] text-muted-foreground">
@@ -77,11 +92,12 @@ function ManagerCard({
                 <th key={r} className="w-8 py-1 text-center font-normal">R{r + 1}</th>
               ))}
               <th className="w-9 py-1 text-center font-normal">Tot</th>
+              {expanded && <th className="w-9 py-1 text-center font-normal">Cont</th>}
             </tr>
           </thead>
           <tbody>
             {standing.golfers.map((golfer) => (
-              <tr key={golfer.golferId} className="border-t border-border/50">
+              <tr key={golfer.golferId} className="border-t border-border/50 align-top">
                 <td className="max-w-0 py-0.5 pr-1">
                   <div className="flex items-baseline gap-1.5 overflow-hidden">
                     <span className="truncate text-muted-foreground">{golfer.golferName}</span>
@@ -104,6 +120,7 @@ function ManagerCard({
                 </td>
                 {activeRounds.map((r) => {
                   const score = golfer.roundScores[r]
+                  const strokes = golfer.roundStrokes[r]
                   const counts = golfer.countsForRound[r]
                   const penalty = golfer.isPenalty[r]
                   const cellStyle: React.CSSProperties = {}
@@ -124,12 +141,27 @@ function ManagerCard({
                       style={Object.keys(cellStyle).length > 0 ? cellStyle : undefined}
                     >
                       {formatScoreToPar(score)}
+                      {expanded && (
+                        <span className="block text-[9px] font-normal not-italic text-muted-foreground">
+                          {strokes ?? '—'}
+                        </span>
+                      )}
                     </td>
                   )
                 })}
                 <td className="py-0.5 text-center tabular-nums">
                   {formatScoreToPar(golfer.totalScore)}
+                  {expanded && (
+                    <span className="block text-[9px] text-muted-foreground">
+                      {golfer.totalStrokes ?? '—'}
+                    </span>
+                  )}
                 </td>
+                {expanded && (
+                  <td className="py-0.5 text-center font-medium tabular-nums">
+                    {formatScoreToPar(golfer.contribution)}
+                  </td>
+                )}
               </tr>
             ))}
             {/* Team round totals */}
@@ -143,7 +175,13 @@ function ManagerCard({
               ))}
               <td className="py-1 text-center font-bold tabular-nums">
                 {formatScoreToPar(standing.cumulativeScore)}
+                {expanded && (
+                  <span className="block text-[9px] font-normal text-muted-foreground">
+                    {standing.cumulativeStrokes ?? '—'}
+                  </span>
+                )}
               </td>
+              {expanded && <td />}
             </tr>
           </tbody>
         </table>
