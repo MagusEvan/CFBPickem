@@ -42,10 +42,32 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore, cou
           <span className="font-bold text-[#228B22]">Green bold</span> = score counts toward team&apos;s round total (best {topN})
         </p>
         <p>CUT/WD penalty: {missedCutScore} strokes ({formatScoreToPar(missedCutScore - coursePar)}) per round</p>
+        <p>Today = tee time before play, hole thru during play, or day&apos;s total strokes when finished.</p>
         <p>Click a team to see strokes per round and each golfer&apos;s counting contribution.</p>
       </div>
     </div>
   )
+}
+
+/**
+ * What to show in the "Today" column:
+ * - Not teed off yet → tee time
+ * - In play → hole they're thru
+ * - Finished for the day → total strokes for that day's round
+ */
+function todayStatus(golfer: ManagerStanding['golfers'][number]): string {
+  if (golfer.thru && golfer.thru !== 'F') return golfer.thru
+  if (golfer.thru === 'F') {
+    // Latest real (non-penalty) round played
+    for (let r = 3; r >= 0; r--) {
+      if (golfer.roundStrokes[r] !== null && !golfer.isPenalty[r]) {
+        return `${golfer.roundStrokes[r]}`
+      }
+    }
+    return 'F'
+  }
+  if (golfer.teeTime) return golfer.teeTime
+  return '—'
 }
 
 function ManagerCard({
@@ -88,6 +110,7 @@ function ManagerCard({
             <tr className="text-[10px] text-muted-foreground">
               <th className="py-1 text-left font-normal">Golfer</th>
               <th className="w-9 py-1 text-center font-normal">Pos</th>
+              <th className="w-10 py-1 text-center font-normal">Today</th>
               {activeRounds.map((r) => (
                 <th key={r} className="w-8 py-1 text-center font-normal">R{r + 1}</th>
               ))}
@@ -107,16 +130,13 @@ function ManagerCard({
                     {golfer.status === 'withdrawn' && (
                       <span className="shrink-0 text-[9px] font-semibold text-muted-foreground">WD</span>
                     )}
-                    {golfer.thru && golfer.status === 'active' && golfer.thru !== 'F' && (
-                      <span className="shrink-0 text-[9px] text-muted-foreground">{golfer.thru}</span>
-                    )}
-                    {golfer.teeTime && !golfer.thru && golfer.status === 'active' && (
-                      <span className="shrink-0 text-[9px] text-muted-foreground">{golfer.teeTime}</span>
-                    )}
                   </div>
                 </td>
                 <td className="py-0.5 text-center text-muted-foreground">
                   {golfer.position ?? '—'}
+                </td>
+                <td className="whitespace-nowrap py-0.5 text-center tabular-nums text-muted-foreground">
+                  {golfer.status === 'active' ? todayStatus(golfer) : '—'}
                 </td>
                 {activeRounds.map((r) => {
                   const score = golfer.roundScores[r]
@@ -167,6 +187,7 @@ function ManagerCard({
             {/* Team round totals */}
             <tr className="border-t font-medium">
               <td className="py-1">Team</td>
+              <td />
               <td />
               {activeRounds.map((r) => (
                 <td key={r} className="py-1 text-center tabular-nums">
