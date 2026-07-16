@@ -2,7 +2,7 @@
 
 import type { ManagerStanding } from '@/lib/pga/scoring'
 import { formatScoreToPar } from '@/lib/pga/scoring'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 
 interface PgaLeaderboardProps {
   standings: ManagerStanding[]
@@ -23,38 +23,21 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore, cou
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b">
-            <th className="px-2 py-2 text-left text-xs text-muted-foreground w-8">#</th>
-            <th className="px-2 py-2 text-left text-xs text-muted-foreground">Manager</th>
-            <th className="px-2 py-2 text-center text-xs text-muted-foreground border-l">Pos</th>
-            <th className="px-2 py-2 text-center text-xs text-muted-foreground">Total</th>
-            {activeRounds.map((r) => (
-              <th key={r} className="px-2 py-2 text-center text-xs text-muted-foreground border-l first:border-l">
-                R{r + 1}
-              </th>
-            ))}
-            <th className="px-2 py-2 text-center text-xs text-muted-foreground border-l">Contribution</th>
-          </tr>
-        </thead>
-        <tbody>
-          {standings.map((standing, idx) => (
-            <ManagerRow
-              key={standing.memberId}
-              standing={standing}
-              rank={idx + 1}
-              activeRounds={activeRounds}
-              topN={topN}
-              highlightBg={highlightBg}
-            />
-          ))}
-        </tbody>
-      </table>
-      <div className="mt-3 space-y-0.5 text-xs text-muted-foreground">
-        <p className="flex items-center gap-1">
-          <span className="font-bold text-[#228B22]">Green bold</span> = score counts toward manager&apos;s round total (best {topN})
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {standings.map((standing, idx) => (
+          <ManagerCard
+            key={standing.memberId}
+            standing={standing}
+            rank={idx + 1}
+            activeRounds={activeRounds}
+            highlightBg={highlightBg}
+          />
+        ))}
+      </div>
+      <div className="space-y-0.5 text-xs text-muted-foreground">
+        <p>
+          <span className="font-bold text-[#228B22]">Green bold</span> = score counts toward team&apos;s round total (best {topN})
         </p>
         <p>CUT/WD penalty: {missedCutScore} strokes ({formatScoreToPar(missedCutScore - coursePar)}) per round</p>
       </div>
@@ -62,7 +45,7 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore, cou
   )
 }
 
-function ManagerRow({
+function ManagerCard({
   standing,
   rank,
   activeRounds,
@@ -71,88 +54,100 @@ function ManagerRow({
   standing: ManagerStanding
   rank: number
   activeRounds: number[]
-  topN: number
   highlightBg: string | null
 }) {
   return (
-    <>
-      {/* Manager summary row */}
-      <tr className="border-b bg-muted/50">
-        <td className="px-2 py-2 text-muted-foreground">{rank}</td>
-        <td className="px-2 py-2 font-medium whitespace-nowrap">
-          {standing.memberName}
-        </td>
-        <td className="px-2 py-2 text-center font-bold border-l">
-          {rank}
-        </td>
-        <td className="px-2 py-2 text-center font-bold">
-          {formatScoreToPar(standing.cumulativeScore)}
-        </td>
-        {activeRounds.map((r) => (
-          <td key={r} className="px-2 py-2 text-center font-medium border-l">
-            {formatScoreToPar(standing.roundTotals[r])}
-          </td>
-        ))}
-        <td className="px-2 py-2 border-l" />
-      </tr>
-
-      {/* Golfer rows — always expanded */}
-      {standing.golfers.map((golfer) => (
-        <tr key={golfer.golferId} className="border-b h-9">
-          <td className="px-2" />
-          <td className="px-2 pl-6 text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <span className="text-xs">{golfer.golferName}</span>
-              {golfer.status === 'cut' && (
-                <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30 py-0 leading-tight">CUT</Badge>
-              )}
-              {golfer.status === 'withdrawn' && (
-                <Badge variant="outline" className="text-[10px] py-0 leading-tight">WD</Badge>
-              )}
-              {golfer.thru && golfer.status === 'active' && golfer.thru !== 'F' && (
-                <span className="text-[10px] text-muted-foreground">thru {golfer.thru}</span>
-              )}
-              {golfer.teeTime && !golfer.thru && golfer.status === 'active' && (
-                <span className="text-[10px] text-muted-foreground">{golfer.teeTime}</span>
-              )}
-            </div>
-          </td>
-          <td className="px-2 text-center text-xs text-muted-foreground border-l">
-            {golfer.position ?? '—'}
-          </td>
-          <td className="px-2 text-center text-xs">
-            {formatScoreToPar(golfer.totalScore)}
-          </td>
-          {activeRounds.map((r) => {
-            const score = golfer.roundScores[r]
-            const counts = golfer.countsForRound[r]
-            const penalty = golfer.isPenalty[r]
-            const cellStyle: React.CSSProperties = {}
-            if (counts && !penalty) {
-              cellStyle.color = '#228B22'
-              if (highlightBg) cellStyle.backgroundColor = highlightBg
-            }
-            return (
-              <td
-                key={r}
-                className={`px-2 text-center text-xs border-l ${
-                  penalty
-                    ? 'text-muted-foreground/50 italic'
-                    : counts
-                      ? 'font-bold'
-                      : 'text-muted-foreground'
-                }`}
-                style={Object.keys(cellStyle).length > 0 ? cellStyle : undefined}
-              >
-                {formatScoreToPar(score)}
+    <Card className="py-0">
+      <CardContent className="px-3 py-2">
+        <div className="flex items-baseline justify-between gap-2 border-b pb-1.5">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <span className="shrink-0 text-xs font-semibold text-muted-foreground">#{rank}</span>
+            <span className="truncate text-sm font-medium">{standing.memberName}</span>
+          </div>
+          <span className="shrink-0 text-sm font-bold tabular-nums">
+            {formatScoreToPar(standing.cumulativeScore)}
+          </span>
+        </div>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-[10px] text-muted-foreground">
+              <th className="py-1 text-left font-normal">Golfer</th>
+              <th className="w-9 py-1 text-center font-normal">Pos</th>
+              {activeRounds.map((r) => (
+                <th key={r} className="w-8 py-1 text-center font-normal">R{r + 1}</th>
+              ))}
+              <th className="w-9 py-1 text-center font-normal">Tot</th>
+            </tr>
+          </thead>
+          <tbody>
+            {standing.golfers.map((golfer) => (
+              <tr key={golfer.golferId} className="border-t border-border/50">
+                <td className="max-w-0 py-0.5 pr-1">
+                  <div className="flex items-baseline gap-1.5 overflow-hidden">
+                    <span className="truncate text-muted-foreground">{golfer.golferName}</span>
+                    {golfer.status === 'cut' && (
+                      <span className="shrink-0 text-[9px] font-semibold text-destructive">CUT</span>
+                    )}
+                    {golfer.status === 'withdrawn' && (
+                      <span className="shrink-0 text-[9px] font-semibold text-muted-foreground">WD</span>
+                    )}
+                    {golfer.thru && golfer.status === 'active' && golfer.thru !== 'F' && (
+                      <span className="shrink-0 text-[9px] text-muted-foreground">{golfer.thru}</span>
+                    )}
+                    {golfer.teeTime && !golfer.thru && golfer.status === 'active' && (
+                      <span className="shrink-0 text-[9px] text-muted-foreground">{golfer.teeTime}</span>
+                    )}
+                  </div>
+                </td>
+                <td className="py-0.5 text-center text-muted-foreground">
+                  {golfer.position ?? '—'}
+                </td>
+                {activeRounds.map((r) => {
+                  const score = golfer.roundScores[r]
+                  const counts = golfer.countsForRound[r]
+                  const penalty = golfer.isPenalty[r]
+                  const cellStyle: React.CSSProperties = {}
+                  if (counts && !penalty) {
+                    cellStyle.color = '#228B22'
+                    if (highlightBg) cellStyle.backgroundColor = highlightBg
+                  }
+                  return (
+                    <td
+                      key={r}
+                      className={`py-0.5 text-center tabular-nums ${
+                        penalty
+                          ? 'italic text-muted-foreground/50'
+                          : counts
+                            ? 'font-bold'
+                            : 'text-muted-foreground'
+                      }`}
+                      style={Object.keys(cellStyle).length > 0 ? cellStyle : undefined}
+                    >
+                      {formatScoreToPar(score)}
+                    </td>
+                  )
+                })}
+                <td className="py-0.5 text-center tabular-nums">
+                  {formatScoreToPar(golfer.totalScore)}
+                </td>
+              </tr>
+            ))}
+            {/* Team round totals */}
+            <tr className="border-t font-medium">
+              <td className="py-1">Team</td>
+              <td />
+              {activeRounds.map((r) => (
+                <td key={r} className="py-1 text-center tabular-nums">
+                  {formatScoreToPar(standing.roundTotals[r])}
+                </td>
+              ))}
+              <td className="py-1 text-center font-bold tabular-nums">
+                {formatScoreToPar(standing.cumulativeScore)}
               </td>
-            )
-          })}
-          <td className="px-2 text-center text-xs border-l">
-            {formatScoreToPar(golfer.contribution)}
-          </td>
-        </tr>
-      ))}
-    </>
+            </tr>
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
   )
 }

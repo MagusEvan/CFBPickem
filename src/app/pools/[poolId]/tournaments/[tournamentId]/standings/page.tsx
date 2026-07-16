@@ -72,17 +72,13 @@ export default async function PgaStandingsPage({
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="py-4">
-            <PgaLeaderboard
-              standings={standings}
-              topN={tournament.top_n_scoring}
-              coursePar={tournament.course_par}
-              missedCutScore={tournament.missed_cut_score}
-              countingHighlightColor={pool.counting_highlight_color ?? '#e6f4e6'}
-            />
-          </CardContent>
-        </Card>
+        <PgaLeaderboard
+          standings={standings}
+          topN={tournament.top_n_scoring}
+          coursePar={tournament.course_par}
+          missedCutScore={tournament.missed_cut_score}
+          countingHighlightColor={pool.counting_highlight_color ?? '#e6f4e6'}
+        />
       )}
     </div>
   )
