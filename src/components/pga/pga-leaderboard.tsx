@@ -66,7 +66,14 @@ function todayStatus(golfer: ManagerStanding['golfers'][number]): string {
     }
     return 'F'
   }
-  if (golfer.teeTime) return golfer.teeTime
+  if (golfer.teeTime) {
+    // ESPN sends an ISO timestamp (e.g. "2026-07-16T14:15Z") — show local time
+    const d = new Date(golfer.teeTime)
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    }
+    return golfer.teeTime
+  }
   return '—'
 }
 
@@ -135,7 +142,10 @@ function ManagerCard({
                 <td className="py-0.5 text-center text-muted-foreground">
                   {golfer.position ?? '—'}
                 </td>
-                <td className="whitespace-nowrap py-0.5 text-center tabular-nums text-muted-foreground">
+                <td
+                  className="whitespace-nowrap py-0.5 text-center tabular-nums text-muted-foreground"
+                  suppressHydrationWarning
+                >
                   {golfer.status === 'active' ? todayStatus(golfer) : '—'}
                 </td>
                 {activeRounds.map((r) => {

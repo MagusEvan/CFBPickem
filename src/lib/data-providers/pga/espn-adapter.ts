@@ -166,14 +166,50 @@ export async function fetchPgaMajors(year: number): Promise<PgaEventInfo[]> {
 }
 
 /**
+ * Fetch per-golfer live status (tee time, thru, position, cut/WD) from ESPN's
+ * leaderboard endpoint. The scoreboard endpoint returns `status: null` for
+ * competitors, so this is the only source for that data. Returns an empty map
+ * on any failure — status is a best-effort enhancement.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchLeaderboardStatuses(eventId: string): Promise<Map<string, any>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const map = new Map<string, any>()
+  try {
+    const url = `https://site.web.api.espn.com/apis/site/v2/sports/golf/leaderboard?league=pga&event=${eventId}`
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      next: { revalidate: 300 },
+    })
+    if (!res.ok) return map
+
+    const data = await res.json()
+    const events = data.events || []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const event = events.find((e: any) => String(e.id) === eventId) || events[0]
+    const competitors = event?.competitions?.[0]?.competitors || []
+    for (const c of competitors) {
+      const id = String(c.athlete?.id || c.id)
+      if (c.status) map.set(id, c.status)
+    }
+  } catch {
+    // leaderboard unavailable (e.g. pre-tournament) — keep scoreboard data
+  }
+  return map
+}
+
+/**
  * Fetch the golfer field (competitors) for a specific event.
  */
 export async function fetchPgaEventGolfers(eventId: string): Promise<PgaGolferData[]> {
   const url = `${ESPN_PGA_BASE}/scoreboard?event=${eventId}`
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json' },
-    next: { revalidate: 300 }, // 5 minutes
-  })
+  const [res, statuses] = await Promise.all([
+    fetch(url, {
+      headers: { Accept: 'application/json' },
+      next: { revalidate: 300 }, // 5 minutes
+    }),
+    fetchLeaderboardStatuses(eventId),
+  ])
 
   if (!res.ok) {
     throw new Error(`ESPN PGA event API error: ${res.status} ${res.statusText}`)
@@ -188,5 +224,23 @@ export async function fetchPgaEventGolfers(eventId: string): Promise<PgaGolferDa
   if (!event) return []
 
   const competitors = event.competitions?.[0]?.competitors || []
-  return competitors.map(parseGolfer)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return competitors.map((c: any) => {
+    const golfer = parseGolfer(c)
+    const st = statuses.get(golfer.id)
+    if (st) {
+      golfer.teeTime = st.teeTime || golfer.teeTime
+      golfer.position = st.position?.displayName || golfer.position
+      const state = st.type?.state
+      if (state === 'post') {
+        golfer.thru = 'F'
+      } else if (state === 'in') {
+        golfer.thru = String(st.displayThru ?? st.thru ?? '') || golfer.thru
+      } else {
+        golfer.thru = null // scheduled — show tee time instead
+      }
+      golfer.status = parseGolferStatus({ status: st })
+    }
+    return golfer
+  })
 }
