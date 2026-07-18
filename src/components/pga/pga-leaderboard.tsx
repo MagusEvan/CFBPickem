@@ -162,7 +162,8 @@ function ManagerCard({
                     // Dimmer green for cutoff ties where only some of the
                     // tied scores actually count
                     cellStyle.color = tied ? '#228B2280' : '#228B22'
-                    if (highlightBg) cellStyle.backgroundColor = highlightBg
+                    // Color inputs produce #rrggbb, so alpha suffix is safe
+                    if (highlightBg) cellStyle.backgroundColor = tied ? `${highlightBg}80` : highlightBg
                   }
                   return (
                     <td
