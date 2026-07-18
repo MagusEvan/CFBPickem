@@ -100,20 +100,25 @@ export function calculatePgaStandings(
       ]
       const isPenalty = [false, false, false, false]
 
-      // Detect missed cut from data: golfer has real R1+R2 scores but
-      // missing/zero R3 when R3 exists in the tournament field
+      // Fallback cut inference: golfer played R1+R2 but has nothing for R3
+      // while R4 already has field data — they missed the cut even if ESPN
+      // never set STATUS_CUT. While R3 itself is in progress we rely on
+      // ESPN's status instead, since "hasn't teed off yet" looks identical.
       const hasR1 = roundStrokes[0] !== null && roundStrokes[0]! > 0
       const hasR2 = roundStrokes[1] !== null && roundStrokes[1]! > 0
       const missingR3 = roundStrokes[2] === null || roundStrokes[2] === 0
-      if (hasR1 && hasR2 && missingR3 && roundHasData[2]) {
+      if (hasR1 && hasR2 && missingR3 && roundHasData[3]) {
         status = 'cut'
       }
 
-      // Apply missed-cut/WD penalties for missing rounds
+      // Apply missed-cut/WD penalties for missing rounds — but only rounds
+      // that have actually started somewhere in the field. Future rounds
+      // must not count toward current totals.
       if (status === 'cut' || status === 'withdrawn') {
         const hasPlayedAnyRound = roundStrokes.some((s) => s !== null && s > 0)
         if (hasPlayedAnyRound) {
           for (let r = 0; r < 4; r++) {
+            if (!roundHasData[r]) continue
             if (roundStrokes[r] === null || roundStrokes[r] === 0) {
               roundStrokes[r] = missedCutScore
               roundScores[r] = missedCutScore - coursePar
@@ -153,9 +158,22 @@ export function calculatePgaStandings(
     // For each round, pick the best topN scores (to par)
     const roundTotals: (number | null)[] = []
 
+    // The in-progress (or most recent) round: the last round with any data
+    const currentRound = roundHasData.lastIndexOf(true)
+
     for (let r = 0; r < 4; r++) {
       const withScores = golferScores
-        .map((gs, idx) => ({ gs, idx, score: gs.roundScores[r], strokes: gs.roundStrokes[r] }))
+        .map((gs, idx) => {
+          let score = gs.roundScores[r]
+          let strokes = gs.roundStrokes[r]
+          // In the current round, active golfers who haven't teed off yet count
+          // as even par (0) so cut/WD penalties don't dominate the day's total
+          if (r === currentRound && score === null && gs.status === 'active') {
+            score = 0
+            strokes = 0
+          }
+          return { gs, idx, score, strokes }
+        })
         .filter((x) => x.score !== null && x.strokes !== null) as {
           gs: GolferRoundScore; idx: number; score: number; strokes: number
         }[]
