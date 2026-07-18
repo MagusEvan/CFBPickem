@@ -144,7 +144,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Standings</h1>
-        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Pool
         </Link>
         <Card>
@@ -184,7 +184,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
-      <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+      <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
         &lt; Return to Pool
       </Link>
 
@@ -277,7 +277,7 @@ async function FfStandings({
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Standings</h1>
-        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Pool
         </Link>
         <Card>
@@ -304,7 +304,7 @@ async function FfStandings({
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Standings</h1>
-        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Pool
         </Link>
         <Card>
@@ -424,7 +424,7 @@ async function FfStandings({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
-      <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+      <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
         &lt; Return to Pool
       </Link>
 
@@ -590,7 +590,7 @@ async function WorldCupStandings({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
-      <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+      <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
         &lt; Return to Pool
       </Link>
 

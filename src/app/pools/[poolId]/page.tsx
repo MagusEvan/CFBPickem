@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import { buttonVariants } from '@/components/ui/button'
@@ -12,8 +12,15 @@ import { resolveBestBallSettings } from '@/lib/ff/settings'
 
 export const revalidate = 60
 
-export default async function PoolDashboard({ params }: { params: Promise<{ poolId: string }> }) {
+export default async function PoolDashboard({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ poolId: string }>
+  searchParams: Promise<{ view?: string }>
+}) {
   const { poolId } = await params
+  const { view } = await searchParams
   const [pool, members, userId] = await Promise.all([
     getPool(poolId),
     getPoolMembers(poolId),
@@ -21,6 +28,13 @@ export default async function PoolDashboard({ params }: { params: Promise<{ pool
   ])
 
   if (!pool) notFound()
+
+  // Once the draft is done the season is in-flight — land on standings by
+  // default (?view=details reaches this page). PGA drafts are per-tournament,
+  // so its pool dashboard stays the landing page.
+  if (pool.draft_status === 'completed' && pool.game_type !== 'pga' && view !== 'details') {
+    redirect(`/pools/${poolId}/standings`)
+  }
 
   const isAdmin = pool.admin_id === userId
   const myMember = members.find((m) => m.user_id === userId)

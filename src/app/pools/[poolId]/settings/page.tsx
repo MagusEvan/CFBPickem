@@ -76,7 +76,7 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
       .update({ name, max_managers: maxManagers, bg_color: bgColor, font_color: fontColor, subfont_color: subfontColor, border_color: borderColor, counting_highlight_color: countingHighlightColor })
       .eq('id', poolId)
 
-    redirect(`/pools/${poolId}`)
+    redirect(`/pools/${poolId}?view=details`)
   }
 
   async function updateDraftOrder(formData: FormData) {
@@ -94,7 +94,7 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
       }
     }
 
-    redirect(`/pools/${poolId}`)
+    redirect(`/pools/${poolId}?view=details`)
   }
 
   async function updateScoringConfig(formData: FormData) {
@@ -128,7 +128,7 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
       .update({ scoring_config: config })
       .eq('id', poolId)
 
-    redirect(`/pools/${poolId}`)
+    redirect(`/pools/${poolId}?view=details`)
   }
 
   const scoringConfig = (pool.scoring_config ?? {
@@ -140,7 +140,7 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
     <div className="mx-auto max-w-lg space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Pool Settings</h1>
-        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Pool
         </Link>
       </div>

@@ -78,7 +78,7 @@ export default async function SchedulePage({
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Schedule</h1>
-        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Pool
         </Link>
         <Card>
@@ -216,7 +216,7 @@ export default async function SchedulePage({
         <ScheduleHeader lastFetchedAt={cfbLastFetched} />
       </div>
       <div className="flex items-center gap-3">
-        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Pool
         </Link>
         <MyTeamsToggle />
@@ -386,7 +386,7 @@ async function WorldCupSchedule({
         <ScheduleHeader lastFetchedAt={wcLastFetched} />
       </div>
       <div className="flex items-center gap-3">
-        <Link href={`/pools/${poolId}`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
+        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Pool
         </Link>
         <MyTeamsToggle />
