@@ -42,7 +42,7 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore, cou
       <div className="space-y-0.5 text-xs text-muted-foreground">
         <p>
           <span className="font-bold text-[#228B22]">Green bold</span> = score counts toward team&apos;s round total (best {topN});{' '}
-          <span className="font-bold text-[#228B2280]">dim green</span> = tied at the cutoff, only some of the tied scores count
+          <span className="font-bold text-[#228B22B3]">dim green</span> = tied at the cutoff, only some of the tied scores count
         </p>
         <p>CUT/WD penalty: {missedCutScore} strokes ({formatScoreToPar(missedCutScore - coursePar)}) per round</p>
         <p>Today = tee time before play, hole thru during play, or day&apos;s total strokes when finished.</p>
@@ -161,9 +161,9 @@ function ManagerCard({
                   if (counts && !penalty) {
                     // Dimmer green for cutoff ties where only some of the
                     // tied scores actually count
-                    cellStyle.color = tied ? '#228B2280' : '#228B22'
+                    cellStyle.color = tied ? '#228B22B3' : '#228B22'
                     // Color inputs produce #rrggbb, so alpha suffix is safe
-                    if (highlightBg) cellStyle.backgroundColor = tied ? `${highlightBg}80` : highlightBg
+                    if (highlightBg) cellStyle.backgroundColor = tied ? `${highlightBg}4D` : highlightBg
                   }
                   return (
                     <td
