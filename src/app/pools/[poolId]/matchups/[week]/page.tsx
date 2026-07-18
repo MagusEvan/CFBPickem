@@ -19,7 +19,7 @@ import { playoffRoundName, playoffRoundsCount } from '@/lib/ff/playoffs'
 import { ensurePlayoffs, type PlayoffScoreProvider } from '@/lib/ff/playoff-processing'
 import { isFfFamily } from '@/lib/games/registry'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { MatchupLive } from '@/components/ff/matchup-live'
+import { LiveRefresh } from '@/components/live-refresh'
 import { buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -134,7 +134,7 @@ export default async function MatchupWeekPage({
 
   return (
     <div className="space-y-6">
-      <MatchupLive anyGameLive={anyGameLive} />
+      <LiveRefresh live={anyGameLive} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">Week {week} Matchups</h1>

@@ -263,6 +263,26 @@ export function calculatePgaStandings(
   return standings
 }
 
+/**
+ * Whether any golfer is (about to be) on the course: mid-round, or with a
+ * tee time within ±30 minutes. Drives live polling and refresh staleness.
+ */
+export function golfersInPlay(
+  golfers: Array<Pick<PgaGolfer, 'status' | 'thru' | 'tee_time'>>
+): boolean {
+  const now = Date.now()
+  const WINDOW_MS = 30 * 60 * 1000
+  return golfers.some((g) => {
+    if (g.status !== 'active') return false
+    if (g.thru && g.thru !== 'F') return true
+    if (g.tee_time) {
+      const t = new Date(g.tee_time).getTime()
+      if (!Number.isNaN(t) && Math.abs(t - now) <= WINDOW_MS) return true
+    }
+    return false
+  })
+}
+
 /** Format a score relative to par for display (e.g. -5 → "-5", 0 → "E", 3 → "+3") */
 export function formatScoreToPar(score: number | null): string {
   if (score === null) return '—'

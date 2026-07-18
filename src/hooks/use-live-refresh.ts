@@ -6,16 +6,16 @@ import { useRouter } from 'next/navigation'
 const POLL_MS = 60_000
 
 /**
- * Near-real-time matchup scores: while any NFL game is live and the tab is
- * visible, refresh the server component tree every 60s (the staleness gate
- * upstream dedupes actual ESPN fetches). Also refreshes when the tab
- * becomes visible again.
+ * Near-real-time score pages: while play is live and the tab is visible,
+ * refresh the server component tree every 60s (the staleness gate upstream
+ * dedupes actual ESPN fetches). Also refreshes when the tab becomes
+ * visible again.
  */
-export function useFfMatchupPoll(anyGameLive: boolean) {
+export function useLiveRefresh(live: boolean) {
   const router = useRouter()
 
   useEffect(() => {
-    if (!anyGameLive) return
+    if (!live) return
 
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') router.refresh()
@@ -30,5 +30,5 @@ export function useFfMatchupPoll(anyGameLive: boolean) {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [anyGameLive, router])
+  }, [live, router])
 }

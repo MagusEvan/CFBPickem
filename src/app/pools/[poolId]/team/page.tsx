@@ -17,7 +17,7 @@ import { isPlayerLocked, sortSlots } from '@/lib/ff/roster'
 import { isFfFamily } from '@/lib/games/registry'
 import { LineupEditor } from '@/components/ff/lineup-editor'
 import { BestBallTeam } from '@/components/ff/bestball-team'
-import { MatchupLive } from '@/components/ff/matchup-live'
+import { LiveRefresh } from '@/components/live-refresh'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { FFStatLine } from '@/lib/ff/types'
@@ -130,7 +130,7 @@ export default async function TeamPage({
 
   return (
     <div className="space-y-6">
-      <MatchupLive anyGameLive={anyGameLive} />
+      <LiveRefresh live={anyGameLive} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">My Team</h1>

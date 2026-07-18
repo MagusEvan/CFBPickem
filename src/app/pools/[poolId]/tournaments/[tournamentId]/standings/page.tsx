@@ -2,12 +2,13 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPool } from '@/lib/pools/queries'
 import { getTournament, getTournamentMembers, getTournamentGolfers, getTournamentPicks } from '@/lib/pga/queries'
-import { calculatePgaStandings } from '@/lib/pga/scoring'
+import { calculatePgaStandings, golfersInPlay } from '@/lib/pga/scoring'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ArrowLeft } from 'lucide-react'
 import { PgaLeaderboard } from '@/components/pga/pga-leaderboard'
 import { ensureFreshGolfers } from '@/lib/data-refresh'
+import { LiveRefresh } from '@/components/live-refresh'
 
 export const revalidate = 60
 
@@ -34,6 +35,9 @@ export default async function PgaStandingsPage({
     tournament.course_par, tournament.missed_cut_score
   )
 
+  // Poll for updates while golfers are on the course
+  const live = golfersInPlay(golfers)
+
   // Find the latest fetched_at for display
   const lastFetched = golfers.length > 0
     ? golfers.reduce((latest, g) => (g.fetched_at > latest ? g.fetched_at : latest), golfers[0].fetched_at)
@@ -41,6 +45,7 @@ export default async function PgaStandingsPage({
 
   return (
     <div className="space-y-6">
+      <LiveRefresh live={live} />
       <div className="flex items-center gap-4">
         <Link
           href={`/pools/${poolId}/tournaments/${tournamentId}?view=details`}

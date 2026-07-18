@@ -63,7 +63,16 @@ export async function ensureFreshGolfers(
 
   const admin = createAdminClient()
   try {
-    if (!(await claimRefresh(admin, `golfers:${tournamentId}`))) return
+    // Tighter staleness while golfers are on the course (mirrors FF stats)
+    const { golfersInPlay } = await import('@/lib/pga/scoring')
+    const { data: cached } = await admin
+      .from('pga_golfers')
+      .select('status,thru,tee_time')
+      .eq('tournament_id', tournamentId)
+    const live = golfersInPlay(cached ?? [])
+    const staleMs = live ? 90 * 1000 : STALE_MS
+
+    if (!(await claimRefresh(admin, `golfers:${tournamentId}`, staleMs))) return
     await fetchAndCacheGolfers(admin, tournamentId, espnEventId)
   } catch (err) {
     console.error(`ensureFreshGolfers(${tournamentId}) failed:`, err)
