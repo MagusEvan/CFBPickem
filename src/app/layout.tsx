@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Great Value Pickems",
+  title: "EVGV Pickems",
   description: "Draft teams. Compete with friends. Dominate.",
 };
 

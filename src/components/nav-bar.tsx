@@ -29,7 +29,7 @@ export function NavBar() {
     <header className="border-b bg-background">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         <Link href="/pools" className="text-lg font-bold">
-          Great Value Pickems
+          EVGV Pickems
         </Link>
         <div className="flex items-center gap-1">
         <ThemeToggle />
