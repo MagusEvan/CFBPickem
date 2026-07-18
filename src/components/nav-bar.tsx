@@ -41,6 +41,10 @@ export function NavBar() {
             <DropdownMenuItem className="text-muted-foreground text-xs" disabled>
               {user.email}
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push(`/profile/${user.id}`)}>
+              <User className="mr-2 h-4 w-4" />
+              My Profile
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleSignOut}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign Out

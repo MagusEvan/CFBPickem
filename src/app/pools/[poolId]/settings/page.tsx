@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { DeletePoolButton } from '@/components/pool/delete-pool'
+import { FinalizeSeasonButton } from '@/components/pool/finalize-season'
 import { deletePool } from '@/lib/pools/actions'
+import { finalizeSeason } from '@/lib/pools/championship-actions'
 import { getGame, isFfFamily } from '@/lib/games/registry'
 import { FfLeagueSettingsCard } from '@/components/ff/ff-league-settings-card'
 import { BestBallSettingsCard } from '@/components/ff/bestball-settings-card'
@@ -28,6 +30,19 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
   if (!pool) notFound()
 
   const isAdmin = pool.admin_id === userId
+
+  let alreadyFinalized = false
+  let finalizedAt: string | null = null
+  if (isAdmin) {
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    const { data: championship } = await createAdminClient()
+      .from('pool_championships')
+      .select('finalized_at')
+      .eq('pool_id', poolId)
+      .maybeSingle()
+    alreadyFinalized = !!championship
+    finalizedAt = championship?.finalized_at ?? null
+  }
   const isWorldCup = pool.game_type === 'world_cup'
   const isFf = pool.game_type === 'ff'
   const isBestBall = pool.game_type === 'ff_bestball'
@@ -334,6 +349,32 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
               <Button type="submit">Save Draft Order</Button>
             </CardFooter>
           </form>
+        </Card>
+      )}
+
+      {/* Finalize Season (admin only) */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Finalize Season</CardTitle>
+            <CardDescription>
+              Snapshot the final standings and record the champion. Do this once the
+              season is over.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FinalizeSeasonButton
+              poolId={poolId}
+              poolName={pool.name}
+              alreadyFinalized={alreadyFinalized}
+              finalizeAction={finalizeSeason}
+            />
+            {alreadyFinalized && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Finalized {finalizedAt ? new Date(finalizedAt).toLocaleDateString() : ''}
+              </p>
+            )}
+          </CardContent>
         </Card>
       )}
 
