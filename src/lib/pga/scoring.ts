@@ -15,6 +15,8 @@ export interface GolferRoundScore {
   roundScores: (number | null)[]   // R1-R4 relative to par
   /** Whether this golfer's score counts toward the manager's total for each round */
   countsForRound: boolean[]
+  /** Counting only via a tie at the cutoff — more tied golfers than counting slots */
+  tiedForRound: boolean[]
   /** Whether each round is a penalty (missed cut / WD) */
   isPenalty: boolean[]
 }
@@ -151,6 +153,7 @@ export function calculatePgaStandings(
         roundStrokes,
         roundScores,
         countsForRound: [false, false, false, false],
+        tiedForRound: [false, false, false, false],
         isPenalty,
       }
     })
@@ -197,6 +200,14 @@ export function calculatePgaStandings(
       // Mark all tied golfers as counting (for contribution display)
       for (const c of counting) {
         golferScores[c.idx].countsForRound[r] = true
+      }
+
+      // When the tie at the cutoff overflows the counting slots, flag every
+      // golfer at the cutoff score so the UI can dim them (only some count)
+      if (counting.length > topN) {
+        for (const c of counting) {
+          if (c.score === cutoffScore) golferScores[c.idx].tiedForRound[r] = true
+        }
       }
     }
 
