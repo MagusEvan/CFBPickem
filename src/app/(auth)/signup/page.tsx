@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { TurnstileWidget, captchaEnabled } from '@/components/turnstile-widget'
+import type { TurnstileInstance } from '@marsidev/react-turnstile'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -16,6 +18,9 @@ export default function SignupPage() {
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [confirmationSent, setConfirmationSent] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileInstance>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -29,20 +34,49 @@ export default function SignupPage() {
       password,
       options: {
         data: { display_name: displayName },
+        captchaToken: captchaToken ?? undefined,
       },
     })
 
     if (error) {
       setError(error.message)
       setLoading(false)
+      // Turnstile tokens are single-use — get a fresh one for the retry
+      turnstileRef.current?.reset()
+      setCaptchaToken(null)
     } else if (data.user?.identities?.length === 0) {
       // Supabase returns an empty identities array for existing accounts
       setError('An account with this email already exists. Please sign in instead.')
+      setLoading(false)
+      turnstileRef.current?.reset()
+      setCaptchaToken(null)
+    } else if (!data.session) {
+      // Email confirmation required — no session until the link is clicked
+      setConfirmationSent(true)
       setLoading(false)
     } else {
       router.push('/pools')
       router.refresh()
     }
+  }
+
+  if (confirmationSent) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold">Check your email</CardTitle>
+            <CardDescription>
+              We sent a confirmation link to <span className="font-medium">{email}</span>.
+              Click it to activate your account, then sign in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center text-sm text-muted-foreground">
+            Didn&apos;t get it? Check your spam folder.
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -93,9 +127,14 @@ export default function SignupPage() {
                 minLength={6}
               />
             </div>
+            <TurnstileWidget ref={turnstileRef} onToken={setCaptchaToken} />
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || (captchaEnabled && !captchaToken)}
+            >
               {loading && <Spinner className="mr-2" />}
               {loading ? 'Creating account...' : 'Create Account'}
             </Button>

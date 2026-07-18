@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -8,12 +8,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { TurnstileWidget, captchaEnabled } from '@/components/turnstile-widget'
+import type { TurnstileInstance } from '@marsidev/react-turnstile'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileInstance>(null)
   const supabase = createClient()
 
   async function handleSubmit(e: React.FormEvent) {
@@ -23,10 +27,14 @@ export default function ForgotPasswordPage() {
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
+      captchaToken: captchaToken ?? undefined,
     })
 
     if (error) {
       setError(error.message)
+      // Turnstile tokens are single-use — get a fresh one for the retry
+      turnstileRef.current?.reset()
+      setCaptchaToken(null)
     } else {
       setSent(true)
     }
@@ -76,9 +84,14 @@ export default function ForgotPasswordPage() {
                 required
               />
             </div>
+            <TurnstileWidget ref={turnstileRef} onToken={setCaptchaToken} />
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || (captchaEnabled && !captchaToken)}
+            >
               {loading && <Spinner className="mr-2" />}
               {loading ? 'Sending...' : 'Send Reset Link'}
             </Button>

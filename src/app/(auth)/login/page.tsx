@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -9,12 +9,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { TurnstileWidget, captchaEnabled } from '@/components/turnstile-widget'
+import type { TurnstileInstance } from '@marsidev/react-turnstile'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileInstance>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -23,11 +27,18 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken: captchaToken ?? undefined },
+    })
 
     if (error) {
       setError(error.message)
       setLoading(false)
+      // Turnstile tokens are single-use — get a fresh one for the retry
+      turnstileRef.current?.reset()
+      setCaptchaToken(null)
     } else {
       router.push('/pools')
       router.refresh()
@@ -69,9 +80,14 @@ export default function LoginPage() {
                 required
               />
             </div>
+            <TurnstileWidget ref={turnstileRef} onToken={setCaptchaToken} />
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || (captchaEnabled && !captchaToken)}
+            >
               {loading && <Spinner className="mr-2" />}
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
