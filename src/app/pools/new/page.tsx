@@ -68,7 +68,11 @@ export default function CreatePoolPage() {
         formData.set('ff_league_settings', JSON.stringify(ffBestBall))
         formData.set('ff_scoring_settings', JSON.stringify(ffScoring))
       }
-      await createPool(formData)
+      const result = await createPool(formData)
+      if (result?.error) {
+        setError(result.error)
+        setLoading(false)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setLoading(false)

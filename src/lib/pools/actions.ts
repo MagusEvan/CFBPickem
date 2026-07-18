@@ -6,14 +6,33 @@ import { nanoid } from 'nanoid'
 import { redirect } from 'next/navigation'
 import { isGameType } from '@/lib/games/registry'
 import { GAME_SERVERS } from '@/lib/games/server'
+import { countActivePools, getEffectivePoolLimit } from '@/lib/pools/limits'
 
-export async function createPool(formData: FormData) {
+export async function createPool(formData: FormData): Promise<{ error: string } | void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
   const gameType = formData.get('game_type')
   if (!isGameType(gameType)) throw new Error('Invalid game type')
+
+  // Pool-creation cap (site admins exempt)
+  const { data: profile } = await createAdminClient()
+    .from('profiles')
+    .select('is_site_admin')
+    .eq('id', user.id)
+    .single()
+  if (!profile?.is_site_admin) {
+    const [limit, active] = await Promise.all([
+      getEffectivePoolLimit(user.id),
+      countActivePools(user.id),
+    ])
+    if (active >= limit) {
+      return {
+        error: `You've reached your limit of ${limit} active pool${limit === 1 ? '' : 's'}. Contact the site admin if you need more.`,
+      }
+    }
+  }
 
   const poolInsert = {
     ...GAME_SERVERS[gameType].parsePoolInsert(formData),

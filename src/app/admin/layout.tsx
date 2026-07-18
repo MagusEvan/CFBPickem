@@ -1,6 +1,11 @@
+import { notFound } from 'next/navigation'
 import { NavBar } from '@/components/nav-bar'
+import { requireSiteAdmin } from '@/lib/admin/auth'
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const auth = await requireSiteAdmin()
+  if ('error' in auth) notFound()
+
   return (
     <>
       <NavBar />

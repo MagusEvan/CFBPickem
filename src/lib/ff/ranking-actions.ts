@@ -1,29 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { requireSiteAdmin } from '@/lib/admin/auth'
 import {
   compositeRank,
   recomputeEffectiveRanks,
   refreshRankingsFromSources,
   type RankingRefreshSummary,
 } from './rankings'
-
-async function requireSiteAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' as const }
-
-  const admin = createAdminClient()
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_site_admin')
-    .eq('id', user.id)
-    .single()
-  if (!profile?.is_site_admin) return { error: 'Site admin access required' as const }
-  return { admin }
-}
 
 /** Pull fresh ranks from ESPN, Yahoo, Sleeper, and FantasyPros. */
 export async function refreshFfRankings(
