@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getCurrentUserId } from '@/lib/pools/queries'
 import { getTournament, getTournamentMembers, getTournamentGolfers } from '@/lib/pga/queries'
@@ -18,10 +18,13 @@ export const revalidate = 60
 
 export default async function TournamentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ poolId: string; tournamentId: string }>
+  searchParams: Promise<{ view?: string }>
 }) {
   const { poolId, tournamentId } = await params
+  const { view } = await searchParams
   const [pool, tournament, members, userId] = await Promise.all([
     getPool(poolId),
     getTournament(tournamentId),
@@ -30,6 +33,12 @@ export default async function TournamentDetailPage({
   ])
 
   if (!pool || !tournament) notFound()
+
+  // Once the draft is done the tournament is in-flight — land on the
+  // leaderboard by default (?view=details reaches this page)
+  if (tournament.draft_status === 'completed' && view !== 'details') {
+    redirect(`/pools/${poolId}/tournaments/${tournamentId}/standings`)
+  }
   const isAdmin = pool.admin_id === userId
 
   // Staleness-gated, deduplicated field/score refresh

@@ -43,7 +43,7 @@ export default async function PgaStandingsPage({
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Link
-          href={`/pools/${poolId}/tournaments/${tournamentId}`}
+          href={`/pools/${poolId}/tournaments/${tournamentId}?view=details`}
           className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}
         >
           <ArrowLeft className="mr-1 h-4 w-4" /> Tournament

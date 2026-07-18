@@ -26,7 +26,9 @@ export function PgaLeaderboard({ standings, topN, coursePar, missedCutScore, cou
 
   return (
     <div className="space-y-3">
-      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {/* Break out of the layout's max-w-5xl on wide screens so 3-up cards
+          have room for golfer names (capped at 84rem, centered) */}
+      <div className="grid items-start gap-3 md:grid-cols-2 xl:mx-[calc((62rem-min(100vw-2rem,84rem))/2)] xl:grid-cols-3">
         {standings.map((standing, idx) => (
           <ManagerCard
             key={standing.memberId}
