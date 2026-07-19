@@ -3,6 +3,7 @@ import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import { getFfTransactions } from '@/lib/ff/queries'
 import { Badge } from '@/components/ui/badge'
 import type { FFTransaction } from '@/lib/ff/types'
+import { GameTime } from '@/components/schedule/game-time'
 
 const TYPE_LABELS: Record<FFTransaction['type'], string> = {
   free_agent_add: 'Free agent',
@@ -58,12 +59,7 @@ export default async function TransactionsPage({
                 </td>
                 <td className="px-3 py-2">{describe(t)}</td>
                 <td className="px-3 py-2 text-right text-xs text-muted-foreground">
-                  {new Date(t.created_at).toLocaleString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
+                  <GameTime startTime={t.created_at} />
                 </td>
               </tr>
             ))}

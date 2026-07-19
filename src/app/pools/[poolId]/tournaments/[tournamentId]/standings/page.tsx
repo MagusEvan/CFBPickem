@@ -9,6 +9,7 @@ import { ArrowLeft } from 'lucide-react'
 import { PgaLeaderboard } from '@/components/pga/pga-leaderboard'
 import { ensureFreshGolfers } from '@/lib/data-refresh'
 import { LiveRefresh } from '@/components/live-refresh'
+import { GameTime } from '@/components/schedule/game-time'
 
 export const revalidate = 60
 
@@ -66,7 +67,7 @@ export default async function PgaStandingsPage({
 
       {lastFetched && (
         <p className="text-xs text-muted-foreground">
-          Scores last updated: {new Date(lastFetched).toLocaleString()}
+          Scores last updated: <GameTime startTime={lastFetched} />
         </p>
       )}
 
