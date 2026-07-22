@@ -48,6 +48,7 @@ export default function NewTournamentPage({
   const [loadingMembers, setLoadingMembers] = useState(true)
   const [draftOrderMode, setDraftOrderMode] = useState<'random' | 'manual'>('random')
   const [positionByMember, setPositionByMember] = useState<Record<string, number>>({})
+  const [draftType, setDraftType] = useState<'snake' | 'calcutta'>('snake')
   const seasonYear = new Date().getFullYear()
 
   useEffect(() => {
@@ -102,8 +103,9 @@ export default function NewTournamentPage({
       formData.set('enable_scraps', String(enableScraps))
       formData.set('course_par', String(coursePar))
       formData.set('missed_cut_score', String(missedCutScore))
-      formData.set('draft_order_mode', draftOrderMode)
-      if (draftOrderMode === 'manual') {
+      formData.set('draft_type', draftType)
+      formData.set('draft_order_mode', draftType === 'calcutta' ? 'random' : draftOrderMode)
+      if (draftType === 'snake' && draftOrderMode === 'manual') {
         for (const id of selectedMemberIds) {
           formData.append('member_positions', `${id}:${positionByMember[id] ?? ''}`)
         }
@@ -149,9 +151,9 @@ export default function NewTournamentPage({
 
   const isValid =
     name.length > 0 &&
-    topNScoring <= golfersPerManager &&
     selectedMemberIds.size >= 2 &&
-    (draftOrderMode === 'random' || manualOrderValid)
+    (draftType === 'calcutta' ||
+      (topNScoring <= golfersPerManager && (draftOrderMode === 'random' || manualOrderValid)))
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -236,6 +238,43 @@ export default function NewTournamentPage({
               />
             </div>
 
+            {/* Game type */}
+            <div className="space-y-2">
+              <Label>Game Type</Label>
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDraftType('snake')}
+                  className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                    draftType === 'snake'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  <p className="font-medium text-foreground">Draft</p>
+                  <p className="text-xs">
+                    Snake draft — managers take turns picking golfers; best scores count each round.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftType('calcutta')}
+                  className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                    draftType === 'calcutta'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  <p className="font-medium text-foreground">Calcutta</p>
+                  <p className="text-xs">
+                    Auction — golfers are sold one at a time (longshots first); the pot pays out by
+                    finish position.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {draftType === 'snake' && (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="golfers_per_manager">Golfers per Manager</Label>
@@ -263,6 +302,7 @@ export default function NewTournamentPage({
                 </p>
               </div>
             </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -293,6 +333,7 @@ export default function NewTournamentPage({
             </div>
 
             {/* Draft order */}
+            {draftType === 'snake' && (
             <div className="space-y-2">
               <Label>Draft Order</Label>
               <div className="flex gap-4">
@@ -323,6 +364,7 @@ export default function NewTournamentPage({
                 </p>
               )}
             </div>
+            )}
 
             {/* Participant selection */}
             <div className="space-y-2">
@@ -349,7 +391,7 @@ export default function NewTournamentPage({
                         className="accent-primary"
                       />
                       <span className="flex-1">{m.display_name}</span>
-                      {draftOrderMode === 'manual' && selectedMemberIds.has(m.id) && (
+                      {draftType === 'snake' && draftOrderMode === 'manual' && selectedMemberIds.has(m.id) && (
                         <Input
                           type="number"
                           value={positionByMember[m.id] ?? ''}
@@ -371,7 +413,7 @@ export default function NewTournamentPage({
                   {selectedMemberIds.size < 2 && (
                     <p className="text-xs text-red-600">Select at least 2 participants.</p>
                   )}
-                  {draftOrderMode === 'manual' && selectedMemberIds.size >= 2 && !manualOrderValid && (
+                  {draftType === 'snake' && draftOrderMode === 'manual' && selectedMemberIds.size >= 2 && !manualOrderValid && (
                     <p className="text-xs text-red-600">
                       Assign each participant a unique position from 1 to {selectedMemberIds.size}.
                     </p>
@@ -380,6 +422,7 @@ export default function NewTournamentPage({
               )}
             </div>
 
+            {draftType === 'snake' && (
             <div className="space-y-2">
               <label className="flex items-center gap-2">
                 <input
@@ -391,6 +434,13 @@ export default function NewTournamentPage({
                 <span className="text-sm">Create scraps team(s) from undrafted golfers</span>
               </label>
             </div>
+            )}
+            {draftType === 'calcutta' && (
+              <p className="text-xs text-muted-foreground">
+                Auction settings (odds, scraps packages, payouts, bidding rules) are configured on
+                the tournament page after creation.
+              </p>
+            )}
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={loading || !isValid}>

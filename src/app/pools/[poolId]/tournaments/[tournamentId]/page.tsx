@@ -1,7 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getCurrentUserId } from '@/lib/pools/queries'
-import { getTournament, getTournamentMembers, getTournamentGolfers } from '@/lib/pga/queries'
+import { getTournament, getTournamentMembers, getTournamentGolfers, getCalcuttaLots } from '@/lib/pga/queries'
+import { CalcuttaSetup } from '@/components/pga/calcutta-setup'
+import { DEFAULT_CALCUTTA_SETTINGS } from '@/lib/pga/calcutta-types'
 import {
   DeleteTournamentButton,
   RefreshFieldButton,
@@ -40,10 +42,12 @@ export default async function TournamentDetailPage({
     redirect(`/pools/${poolId}/tournaments/${tournamentId}/standings`)
   }
   const isAdmin = pool.admin_id === userId
+  const isCalcutta = tournament.draft_type === 'calcutta'
 
   // Staleness-gated, deduplicated field/score refresh
   await ensureFreshGolfers(tournamentId, tournament.espn_event_id)
   const golfers = await getTournamentGolfers(tournamentId)
+  const calcuttaLots = isCalcutta ? await getCalcuttaLots(tournamentId) : []
 
   return (
     <div className="space-y-6">
@@ -65,7 +69,9 @@ export default async function TournamentDetailPage({
                   month: 'short', day: 'numeric', year: 'numeric',
                 })
               : `${tournament.season_year}`}
-            {' · '}{tournament.golfers_per_manager} golfers/mgr · Top {tournament.top_n_scoring}
+            {isCalcutta
+              ? ' · Calcutta auction'
+              : ` · ${tournament.golfers_per_manager} golfers/mgr · Top ${tournament.top_n_scoring}`}
           </p>
         </div>
         <Badge variant={tournament.draft_status === 'completed' ? 'secondary' : 'outline'}>
@@ -82,7 +88,7 @@ export default async function TournamentDetailPage({
             <CardContent className="flex items-center gap-3 px-4 py-4">
               <Users className="h-5 w-5 text-muted-foreground" />
               <div>
-                <p className="font-medium">Draft</p>
+                <p className="font-medium">{isCalcutta ? 'Auction' : 'Draft'}</p>
                 <p className="text-sm text-muted-foreground">
                   {tournament.draft_status === 'pre_draft' ? 'Not started' :
                    tournament.draft_status === 'in_progress' ? 'In progress' : 'View results'}
@@ -132,8 +138,26 @@ export default async function TournamentDetailPage({
         </div>
       </div>
 
+      {/* Calcutta setup (admin only, pre-draft only) */}
+      {isAdmin && isCalcutta && tournament.draft_status === 'pre_draft' && (
+        <CalcuttaSetup
+          tournamentId={tournamentId}
+          poolId={poolId}
+          initialSettings={tournament.calcutta_settings ?? DEFAULT_CALCUTTA_SETTINGS}
+          golfers={golfers
+            .filter((g) => g.status === 'active')
+            .map((g) => ({
+              id: g.id,
+              name: g.name,
+              calcutta_odds: g.calcutta_odds,
+              odds_source: g.odds_source,
+            }))}
+          lots={calcuttaLots}
+        />
+      )}
+
       {/* Draft order (admin only, pre-draft only) */}
-      {isAdmin && tournament.draft_status === 'pre_draft' && (
+      {isAdmin && !isCalcutta && tournament.draft_status === 'pre_draft' && (
         <TournamentDraftOrderCard
           tournamentId={tournamentId}
           poolId={poolId}
@@ -175,7 +199,9 @@ export default async function TournamentDetailPage({
                   <thead>
                     <tr className="border-b">
                       <th className="px-2 py-2 text-left text-xs text-muted-foreground">Golfer</th>
-                      <th className="px-2 py-2 text-center text-xs text-muted-foreground">DraftKings Odds</th>
+                      <th className="px-2 py-2 text-center text-xs text-muted-foreground">
+                        {isCalcutta ? 'Calcutta Odds' : 'DraftKings Odds'}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -193,7 +219,11 @@ export default async function TournamentDetailPage({
                               <span className="ml-1 text-xs text-muted-foreground">{g.country}</span>
                             )}
                           </td>
-                          <td className="px-2 py-2 text-center text-xs">{g.odds_draftkings || '—'}</td>
+                          <td className="px-2 py-2 text-center text-xs">
+                            {isCalcutta
+                              ? g.calcutta_odds !== null ? `+${g.calcutta_odds}` : '—'
+                              : g.odds_draftkings || '—'}
+                          </td>
                         </tr>
                       ))}
                   </tbody>

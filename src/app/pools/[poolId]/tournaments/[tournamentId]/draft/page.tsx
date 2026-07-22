@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getPool, getCurrentUserId } from '@/lib/pools/queries'
 import { getTournament, getTournamentMembers, getTournamentGolfers } from '@/lib/pga/queries'
 import { PgaDraftRoom } from '@/components/pga/pga-draft-room'
+import { CalcuttaAuctionRoom } from '@/components/pga/calcutta-auction-room'
 
 export const revalidate = 60
 
@@ -20,6 +21,19 @@ export default async function PgaDraftPage({
   ])
 
   if (!pool || !tournament) notFound()
+
+  if (tournament.draft_type === 'calcutta') {
+    return (
+      <CalcuttaAuctionRoom
+        tournament={tournament}
+        poolId={poolId}
+        members={members}
+        golfers={golfers}
+        currentUserId={userId!}
+        isAdmin={pool.admin_id === userId}
+      />
+    )
+  }
 
   return (
     <PgaDraftRoom

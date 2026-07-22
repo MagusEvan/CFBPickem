@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import type { PgaTournament, PgaTournamentMember, PgaGolfer, PgaDraftPick, PgaDraftState, PoolMember, Profile } from '@/lib/types'
+import type { PgaTournament, PgaTournamentMember, PgaGolfer, PgaDraftPick, PgaDraftState, PgaCalcuttaLot, PgaCalcuttaBid, PoolMember, Profile } from '@/lib/types'
 
 export async function getTournament(tournamentId: string) {
   const supabase = await createClient()
@@ -72,4 +72,27 @@ export async function getTournamentDraftState(tournamentId: string) {
     .eq('tournament_id', tournamentId)
     .single()
   return data as PgaDraftState | null
+}
+
+export async function getCalcuttaLots(tournamentId: string) {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('pga_calcutta_lots')
+    .select('*')
+    .eq('tournament_id', tournamentId)
+    .order('lot_order', { ascending: true })
+  return (data ?? []) as PgaCalcuttaLot[]
+}
+
+export async function getCalcuttaBids(tournamentId: string, lotId?: string) {
+  const supabase = await createClient()
+  let query = supabase
+    .from('pga_calcutta_bids')
+    .select('*')
+    .eq('tournament_id', tournamentId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (lotId) query = query.eq('lot_id', lotId)
+  const { data } = await query
+  return (data ?? []) as PgaCalcuttaBid[]
 }

@@ -179,6 +179,8 @@ export interface PgaTournament {
   draft_order_mode: 'manual' | 'random'
   course_par: number
   missed_cut_score: number
+  draft_type: 'snake' | 'calcutta'
+  calcutta_settings: import('@/lib/pga/calcutta-types').CalcuttaSettings | null
   created_at: string
 }
 
@@ -201,6 +203,8 @@ export interface PgaGolfer {
   odds_draftkings: string | null
   odds_mgm: string | null
   odds_betonline: string | null
+  calcutta_odds: number | null
+  odds_source: string | null
   status: 'active' | 'cut' | 'withdrawn' | 'disqualified'
   position: string | null
   total_score: number | null
@@ -223,6 +227,11 @@ export interface PgaDraftState {
   current_round: number
   current_pick_number: number
   current_member_id: string | null
+  current_lot_id: string | null
+  lot_high_bid: number | null
+  lot_high_bidder_id: string | null
+  lot_deadline: string | null
+  auction_cycle: number
   updated_at: string
 }
 
@@ -234,5 +243,29 @@ export interface PgaDraftPick {
   pick_number: number
   golfer_id: string
   golfer_name: string
+  price: number | null
+  lot_id: string | null
   picked_at: string
+}
+
+export interface PgaCalcuttaLot {
+  id: string
+  tournament_id: string
+  lot_order: number
+  kind: 'golfer' | 'scraps'
+  label: string
+  golfer_ids: string[]
+  status: 'pending' | 'open' | 'sold' | 'unsold'
+  winner_member_id: string | null
+  price: number | null
+  sold_at: string | null
+}
+
+export interface PgaCalcuttaBid {
+  id: string
+  tournament_id: string
+  lot_id: string
+  member_id: string
+  amount: number
+  created_at: string
 }

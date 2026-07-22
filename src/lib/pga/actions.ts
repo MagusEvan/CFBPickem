@@ -31,11 +31,15 @@ export async function createTournament(formData: FormData): Promise<void> {
   const draftOrderMode = (formData.get('draft_order_mode') as string) || 'random'
   const coursePar = Number(formData.get('course_par') || 72)
   const missedCutScore = Number(formData.get('missed_cut_score') || 80)
+  const draftType = (formData.get('draft_type') as string) || 'snake'
   const memberIds = formData.getAll('member_ids') as string[]
 
   if (!name) throw new Error('Tournament name is required')
-  if (golfersPerManager < 1 || golfersPerManager > 20) throw new Error('Invalid golfers per manager')
-  if (topNScoring < 1 || topNScoring > golfersPerManager) throw new Error('Top N must be between 1 and golfers per manager')
+  if (draftType !== 'snake' && draftType !== 'calcutta') throw new Error('Invalid draft type')
+  if (draftType === 'snake') {
+    if (golfersPerManager < 1 || golfersPerManager > 20) throw new Error('Invalid golfers per manager')
+    if (topNScoring < 1 || topNScoring > golfersPerManager) throw new Error('Top N must be between 1 and golfers per manager')
+  }
   if (draftOrderMode !== 'random' && draftOrderMode !== 'manual') throw new Error('Invalid draft order mode')
 
   const admin = createAdminClient()
@@ -56,6 +60,10 @@ export async function createTournament(formData: FormData): Promise<void> {
       draft_order_mode: draftOrderMode,
       course_par: coursePar,
       missed_cut_score: missedCutScore,
+      draft_type: draftType,
+      ...(draftType === 'calcutta'
+        ? { calcutta_settings: (await import('@/lib/pga/calcutta-types')).DEFAULT_CALCUTTA_SETTINGS }
+        : {}),
     })
     .select()
     .single()
@@ -234,6 +242,7 @@ export async function startPgaDraft(tournamentId: string, poolId: string) {
 
   const tournament = await getTournament(tournamentId)
   if (!tournament) throw new Error('Tournament not found')
+  if (tournament.draft_type === 'calcutta') throw new Error('Use the Calcutta auction to start this draft')
   if (tournament.draft_status !== 'pre_draft') throw new Error('Draft already started')
 
   const admin = createAdminClient()

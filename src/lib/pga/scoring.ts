@@ -51,21 +51,9 @@ export function calculatePgaStandings(
 ): ManagerStanding[] {
   const golferMap = new Map(golfers.map((g) => [g.id, g]))
 
-  // Compute tournament positions from total_score across the entire field.
-  // Sort all golfers by total_score ascending, assign positions with ties (T1, T2, etc.)
+  const fieldPositions = computeFieldPositions(golfers)
   const positionMap = new Map<string, string>()
-  const sortedField = [...golfers]
-    .filter((g) => g.total_score !== null && g.total_score !== undefined)
-    .sort((a, b) => a.total_score! - b.total_score!)
-  for (let i = 0; i < sortedField.length; i++) {
-    // Find how many golfers share this score
-    const score = sortedField[i].total_score!
-    const tiedStart = sortedField.findIndex((g) => g.total_score === score)
-    const tiedCount = sortedField.filter((g) => g.total_score === score).length
-    const pos = tiedStart + 1
-    const label = tiedCount > 1 ? `T${pos}` : `${pos}`
-    positionMap.set(sortedField[i].id, label)
-  }
+  for (const [id, fp] of fieldPositions) positionMap.set(id, fp.label)
 
   // Determine which rounds have real data across the entire field.
   // A round "exists" if any golfer in the tournament has real strokes (> 0) for it.
@@ -261,6 +249,30 @@ export function calculatePgaStandings(
   })
 
   return standings
+}
+
+/**
+ * Compute tournament finish positions from total_score across the field.
+ * Sorted ascending; ties share the same numeric position ("T3") and report
+ * how many golfers are tied there. Used by the leaderboard display and by
+ * Calcutta payout math.
+ */
+export function computeFieldPositions(
+  golfers: Array<Pick<PgaGolfer, 'id' | 'total_score'>>
+): Map<string, { position: number; tiedCount: number; label: string }> {
+  const result = new Map<string, { position: number; tiedCount: number; label: string }>()
+  const sortedField = [...golfers]
+    .filter((g) => g.total_score !== null && g.total_score !== undefined)
+    .sort((a, b) => a.total_score! - b.total_score!)
+  for (let i = 0; i < sortedField.length; i++) {
+    const score = sortedField[i].total_score!
+    const tiedStart = sortedField.findIndex((g) => g.total_score === score)
+    const tiedCount = sortedField.filter((g) => g.total_score === score).length
+    const pos = tiedStart + 1
+    const label = tiedCount > 1 ? `T${pos}` : `${pos}`
+    result.set(sortedField[i].id, { position: pos, tiedCount, label })
+  }
+  return result
 }
 
 /**
