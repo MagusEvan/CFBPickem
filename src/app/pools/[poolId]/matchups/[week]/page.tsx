@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
 import {
+  getBestBallCurrentWeek,
   getBestBallWeekScores,
   getFfCurrentWeek,
   getFfRosters,
@@ -52,13 +53,16 @@ export default async function MatchupWeekPage({
   if (week > maxWeek) notFound()
 
   const scoring = resolveScoringSettings(pool)
-  const currentWeek = await getFfCurrentWeek(pool.season_year)
+  // Best ball honors site-admin test mode (simulated week)
+  const { currentWeek, progressWeek } = bb
+    ? await getBestBallCurrentWeek(pool.season_year, bb)
+    : await getFfCurrentWeek(pool.season_year).then((w) => ({ currentWeek: w, progressWeek: w }))
   // Best ball scores come from optimal lineups — never materialize lineup rows
   const bestBallProvider: PlayoffScoreProvider | undefined = bb
     ? (p, through) => getBestBallWeekScores(p.id, p.season_year, scoring, bb, through)
     : undefined
   // Lazily generate/advance the playoff bracket (no-op during regular season)
-  await ensurePlayoffs(createAdminClient(), pool, settings, currentWeek, bestBallProvider)
+  await ensurePlayoffs(createAdminClient(), pool, settings, progressWeek, bestBallProvider)
 
   const playoffRound =
     week >= settings.season.playoffStartWeek && playoffRounds > 0
@@ -129,8 +133,13 @@ export default async function MatchupWeekPage({
   const totalFor = (memberId: string) =>
     round2(starterRows(memberId).reduce((sum, s) => sum + pointsFor(s.player_id), 0))
 
-  const anyGameLive = games.some((g) => g.status === 'in_progress')
-  const weekFinal = games.length > 0 && games.every((g) => g.status === 'final')
+  // Test mode: simulated past weeks are final and nothing is live
+  const sim = bb?.test?.simulatedWeek ?? null
+  const anyGameLive = sim !== null ? false : games.some((g) => g.status === 'in_progress')
+  const weekFinal =
+    sim !== null
+      ? week < sim
+      : games.length > 0 && games.every((g) => g.status === 'final')
 
   return (
     <div className="space-y-6">

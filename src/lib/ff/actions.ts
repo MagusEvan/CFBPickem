@@ -95,6 +95,12 @@ export async function updateBestBallSettings(
     return { error: 'Invalid settings' }
   }
 
+  // Test mode is site-admin-only — ignore whatever the form sent and
+  // force-preserve the stored value
+  const storedTest = resolveBestBallSettings(pool).test
+  if (storedTest) settings.test = storedTest
+  else delete settings.test
+
   // Format, roster shape, roster size, and draft structure are locked once
   // the draft starts (they define what was drafted). Scoring stays editable —
   // best ball scores are computed on-read.

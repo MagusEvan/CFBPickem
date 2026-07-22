@@ -76,6 +76,8 @@ export const ffBestBallSettingsSchema = z.object({
     playoffTeams: z.union([z.literal(2), z.literal(4), z.literal(6), z.literal(8)]),
     playoffStartWeek: z.number().int().min(2).max(18),
   }),
+  // Site-admin-only season replay; optional so real pools are unaffected
+  test: z.object({ simulatedWeek: z.number().int().min(1).max(19) }).optional(),
 }).refine(
   (s) => s.totalRosterSize >= bestBallStarters(s.roster),
   { message: 'Total roster size must be at least the number of starting slots' }
@@ -203,6 +205,11 @@ export function resolveLeagueSettings(
   if (bb.success) return bestBallToLeagueSettings(bb.data)
   const parsed = ffLeagueSettingsSchema.safeParse(pool.ff_league_settings)
   return parsed.success ? parsed.data : DEFAULT_FF_LEAGUE_SETTINGS
+}
+
+/** Simulated week when test mode is active, else null */
+export function bestBallSimulatedWeek(bb: FFBestBallSettings): number | null {
+  return bb.test?.simulatedWeek ?? null
 }
 
 /** Parse a best ball pool's settings (call only for game_type 'ff_bestball'). */

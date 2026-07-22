@@ -68,6 +68,12 @@ export interface FFBestBallSettings {
   /** 'total' = season-long points leaderboard; 'h2h' = weekly matchups + playoffs */
   format: 'total' | 'h2h'
   season: FFLeagueSettings['season']
+  /**
+   * Site-admin-only season replay (e.g. 2025 backfill): weeks below
+   * simulatedWeek are treated as final; 19 = season complete. Never settable
+   * from the commissioner settings form.
+   */
+  test?: { simulatedWeek: number }
 }
 
 export interface FFScoringSettings {

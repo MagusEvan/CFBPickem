@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureFreshPlayerCatalog, ensureFreshFfData, currentWeek } from './refresh'
 import { scoreLineup } from './scoring'
 import { optimalLineup } from './bestball'
+import { bestBallSimulatedWeek } from './settings'
 import type {
   FFBestBallSettings,
   FFPlayer,
@@ -56,6 +57,21 @@ export async function getFfCurrentWeek(seasonYear: number): Promise<number> {
     .eq('season_year', seasonYear)
     .eq('season_type', 2)
   return currentWeek(data ?? []) ?? 1
+}
+
+/**
+ * Best ball current week, honoring site-admin test mode. currentWeek is
+ * capped at 18 for display/score fetches; progressWeek can reach 19
+ * (= season complete) and drives playoff generation.
+ */
+export async function getBestBallCurrentWeek(
+  seasonYear: number,
+  bb: FFBestBallSettings
+): Promise<{ currentWeek: number; progressWeek: number }> {
+  const sim = bestBallSimulatedWeek(bb)
+  if (sim !== null) return { currentWeek: Math.min(sim, 18), progressWeek: sim }
+  const week = await getFfCurrentWeek(seasonYear)
+  return { currentWeek: week, progressWeek: week }
 }
 
 /** All NFL games for one week (drives lineup locks + live badges). */
@@ -367,6 +383,9 @@ export async function getBestBallWeekScores(
     if (g.status !== 'final') weekHasNonFinal.add(g.week)
   }
 
+  // Test mode: weeks before the simulated week are final by definition
+  const sim = bestBallSimulatedWeek(bb)
+
   const results: FFWeekScores[] = []
   for (let week = 1; week <= throughWeek; week++) {
     const scoreByMember = new Map<string, number>()
@@ -376,7 +395,10 @@ export async function getBestBallWeekScores(
     }
     results.push({
       week,
-      final: weekHasGames.has(week) && !weekHasNonFinal.has(week),
+      final:
+        sim !== null
+          ? week < sim
+          : weekHasGames.has(week) && !weekHasNonFinal.has(week),
       scoreByMember,
     })
   }

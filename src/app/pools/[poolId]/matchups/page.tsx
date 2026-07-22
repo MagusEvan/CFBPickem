@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { getPool } from '@/lib/pools/queries'
-import { getFfCurrentWeek } from '@/lib/ff/queries'
+import { getBestBallCurrentWeek, getFfCurrentWeek } from '@/lib/ff/queries'
 import { resolveBestBallSettings, resolveLeagueSettings } from '@/lib/ff/settings'
 import { playoffRoundsCount } from '@/lib/ff/playoffs'
 import { isFfFamily } from '@/lib/games/registry'
@@ -23,6 +23,10 @@ export default async function MatchupsIndexPage({
     settings.season.regularSeasonWeeks,
     settings.season.playoffStartWeek + playoffRoundsCount(settings.season.playoffTeams) - 1
   )
-  const week = Math.min(await getFfCurrentWeek(pool.season_year), maxWeek)
+  const currentWeek =
+    pool.game_type === 'ff_bestball'
+      ? (await getBestBallCurrentWeek(pool.season_year, resolveBestBallSettings(pool))).currentWeek
+      : await getFfCurrentWeek(pool.season_year)
+  const week = Math.min(currentWeek, maxWeek)
   redirect(`/pools/${poolId}/matchups/${week}`)
 }

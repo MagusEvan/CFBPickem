@@ -14,6 +14,7 @@ import { finalizeSeason } from '@/lib/pools/championship-actions'
 import { getGame, isFfFamily } from '@/lib/games/registry'
 import { FfLeagueSettingsCard } from '@/components/ff/ff-league-settings-card'
 import { BestBallSettingsCard } from '@/components/ff/bestball-settings-card'
+import { BestBallTestModeCard } from '@/components/ff/bestball-test-mode-card'
 import { resolveBestBallSettings, resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import type { WorldCupScoringConfig } from '@/lib/types'
 
@@ -46,6 +47,18 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
   const isWorldCup = pool.game_type === 'world_cup'
   const isFf = pool.game_type === 'ff'
   const isBestBall = pool.game_type === 'ff_bestball'
+
+  // Site-admin check gates the best ball test-mode card
+  let isSiteAdmin = false
+  if (isBestBall && userId) {
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    const { data: profile } = await createAdminClient()
+      .from('profiles')
+      .select('is_site_admin')
+      .eq('id', userId)
+      .single()
+    isSiteAdmin = !!profile?.is_site_admin
+  }
 
   // FF family: roster/draft settings lock once the draft starts
   let ffDraftStarted = false
@@ -280,6 +293,13 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
           initialSettings={resolveBestBallSettings(pool)}
           initialScoring={resolveScoringSettings(pool)}
           structureLocked={ffDraftStarted}
+        />
+      )}
+      {isBestBall && isSiteAdmin && (
+        <BestBallTestModeCard
+          poolId={poolId}
+          seasonYear={pool.season_year}
+          initialWeek={resolveBestBallSettings(pool).test?.simulatedWeek ?? null}
         />
       )}
       {isBestBall && !isAdmin && (

@@ -13,7 +13,7 @@ import { TeamBreakdownGrid } from '@/components/standings/team-breakdown-grid'
 import { FfStandingsTable } from '@/components/ff/ff-standings-table'
 import { PlayoffBracket, type BracketRound } from '@/components/ff/playoff-bracket'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getBestBallWeekScores, getFfCurrentWeek, getFfLineups, getFfMatchups, getFfWeekScores } from '@/lib/ff/queries'
+import { getBestBallCurrentWeek, getBestBallWeekScores, getFfCurrentWeek, getFfLineups, getFfMatchups, getFfWeekScores } from '@/lib/ff/queries'
 import { resolveBestBallSettings, resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import { computeStandings, type FFMatchupResult } from '@/lib/ff/standings'
 import { ensurePlayoffs, playoffChampion, type PlayoffScoreProvider } from '@/lib/ff/playoff-processing'
@@ -291,10 +291,14 @@ async function FfStandings({
 
   const settings = resolveLeagueSettings(pool)
   const scoring = resolveScoringSettings(pool)
-  const currentWeek = await getFfCurrentWeek(pool.season_year)
-  const throughWeek = Math.min(currentWeek, settings.season.regularSeasonWeeks)
-
   const bb = pool.game_type === 'ff_bestball' ? resolveBestBallSettings(pool) : null
+
+  // Best ball honors site-admin test mode (simulated week); progressWeek can
+  // reach 19 (= season complete) and drives playoff generation.
+  const { currentWeek, progressWeek } = bb
+    ? await getBestBallCurrentWeek(pool.season_year, bb)
+    : await getFfCurrentWeek(pool.season_year).then((w) => ({ currentWeek: w, progressWeek: w }))
+  const throughWeek = Math.min(currentWeek, settings.season.regularSeasonWeeks)
 
   // Best ball total-points mode: no matchups or playoffs — just a leaderboard
   if (bb && bb.format === 'total') {
@@ -336,7 +340,7 @@ async function FfStandings({
     : undefined
 
   // Lazily generate/advance the playoff bracket once the regular season ends
-  await ensurePlayoffs(createAdminClient(), pool, settings, currentWeek, bestBallProvider)
+  await ensurePlayoffs(createAdminClient(), pool, settings, progressWeek, bestBallProvider)
 
   const playoffRounds = playoffRoundsCount(settings.season.playoffTeams)
   const playoffFinalWeek = settings.season.playoffStartWeek + playoffRounds - 1

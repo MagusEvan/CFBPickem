@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import {
+  getBestBallCurrentWeek,
   getFfCurrentWeek,
   getFfRosters,
   getFfWeekGames,
@@ -59,7 +60,7 @@ export default async function TeamPage({
   if (pool.game_type === 'ff_bestball') {
     const bb = resolveBestBallSettings(pool)
     const scoring = resolveScoringSettings(pool)
-    const currentWeek = await getFfCurrentWeek(pool.season_year)
+    const { currentWeek } = await getBestBallCurrentWeek(pool.season_year, bb)
     const sp = await searchParams
 
     const viewMember =
