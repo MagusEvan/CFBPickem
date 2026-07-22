@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
+import { createClient } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -29,6 +30,14 @@ export default async function PoolDashboard({
 
   if (!pool) notFound()
 
+  const supabase = await createClient()
+  const { data: championship } = await supabase
+    .from('pool_championships')
+    .select('pool_id')
+    .eq('pool_id', poolId)
+    .maybeSingle()
+  const isFinalized = championship !== null
+
   // Once the draft is done the season is in-flight — land on standings by
   // default (?view=details reaches this page). PGA drafts are per-tournament,
   // so its pool dashboard stays the landing page.
@@ -51,9 +60,13 @@ export default async function PoolDashboard({
           </p>
         </div>
         <Badge variant={pool.draft_status === 'completed' ? 'secondary' : 'outline'}>
-          {pool.draft_status === 'pre_draft' && 'Pre-Draft'}
-          {pool.draft_status === 'in_progress' && 'Drafting'}
-          {pool.draft_status === 'completed' && 'Season Active'}
+          {isFinalized
+            ? 'Completed'
+            : pool.draft_status === 'pre_draft'
+              ? 'Pre-Draft'
+              : pool.draft_status === 'in_progress'
+                ? 'Drafting'
+                : 'Season Active'}
         </Badge>
       </div>
 
