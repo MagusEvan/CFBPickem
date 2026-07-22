@@ -14,7 +14,7 @@ export default async function HomePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-4 text-center">
       <div className="space-y-4">
-        <h1 className="text-4xl font-bold tracking-tight">EVGV Pickems</h1>
+        <h1 className="text-4xl font-bold tracking-tight">EVGV Picks</h1>
         <p className="max-w-md text-lg text-muted-foreground">
           Draft teams. Compete with friends. Dominate.
         </p>
