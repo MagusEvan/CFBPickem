@@ -73,6 +73,7 @@ export async function finalizeSeason(poolId: string): Promise<{ error?: string }
   if (error) return { error: error.message }
 
   revalidatePath(`/pools/${poolId}`)
+  revalidatePath('/pools')
   return {}
 }
 

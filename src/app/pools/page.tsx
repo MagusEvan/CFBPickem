@@ -4,7 +4,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Plus } from 'lucide-react'
-import type { Pool, PoolMember } from '@/lib/types'
+import type { Pool } from '@/lib/types'
 import { getGame } from '@/lib/games/registry'
 
 export const revalidate = 60
@@ -22,14 +22,24 @@ export default async function PoolsPage() {
   const poolIds = memberships?.map((m: { pool_id: string }) => m.pool_id) ?? []
 
   let pools: Pool[] = []
+  let finalizedIds = new Set<string>()
   if (poolIds.length > 0) {
-    const { data } = await supabase
-      .from('pools')
-      .select('*')
-      .in('id', poolIds)
-      .order('created_at', { ascending: false })
-    pools = (data as Pool[]) ?? []
+    const [poolsRes, championshipsRes] = await Promise.all([
+      supabase
+        .from('pools')
+        .select('*')
+        .in('id', poolIds)
+        .order('created_at', { ascending: false }),
+      supabase.from('pool_championships').select('pool_id').in('pool_id', poolIds),
+    ])
+    pools = (poolsRes.data as Pool[]) ?? []
+    finalizedIds = new Set(
+      (championshipsRes.data ?? []).map((r: { pool_id: string }) => r.pool_id)
+    )
   }
+
+  const activePools = pools.filter((p) => !finalizedIds.has(p.id))
+  const completedPools = pools.filter((p) => finalizedIds.has(p.id))
 
   return (
     <div className="space-y-6">
@@ -50,40 +60,57 @@ export default async function PoolsPage() {
             </Link>
           </CardContent>
         </Card>
+      ) : activePools.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No active pools.</p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {pools.map((pool) => (
-            <Link key={pool.id} href={`/pools/${pool.id}`}>
-              <Card
-                className="transition-colors hover:bg-muted/50"
-                style={{
-                  ...(pool.bg_color ? { backgroundColor: pool.bg_color } : {}),
-                  ...(pool.border_color ? { borderColor: pool.border_color } : {}),
-                }}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle
-                      className="text-lg"
-                      style={pool.font_color ? { color: pool.font_color } : undefined}
-                    >
-                      {pool.name}
-                    </CardTitle>
-                    {pool.game_type !== 'pga' && (
-                      <DraftStatusBadge status={pool.draft_status} />
-                    )}
-                  </div>
-                  <CardDescription
-                    style={pool.subfont_color ? { color: pool.subfont_color } : undefined}
-                  >
-                    {getGame(pool.game_type).poolLabel(pool.season_year)} &middot; {pool.max_managers} managers
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <PoolGrid pools={activePools} finalized={false} />
       )}
+
+      {completedPools.length > 0 && (
+        <>
+          <h2 className="text-xl font-bold">Completed Pools</h2>
+          <PoolGrid pools={completedPools} finalized />
+        </>
+      )}
+    </div>
+  )
+}
+
+function PoolGrid({ pools, finalized }: { pools: Pool[]; finalized: boolean }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {pools.map((pool) => (
+        <Link key={pool.id} href={`/pools/${pool.id}`}>
+          <Card
+            className="transition-colors hover:bg-muted/50"
+            style={{
+              ...(pool.bg_color ? { backgroundColor: pool.bg_color } : {}),
+              ...(pool.border_color ? { borderColor: pool.border_color } : {}),
+            }}
+          >
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle
+                  className="text-lg"
+                  style={pool.font_color ? { color: pool.font_color } : undefined}
+                >
+                  {pool.name}
+                </CardTitle>
+                {finalized ? (
+                  <Badge variant="secondary">Completed</Badge>
+                ) : (
+                  pool.game_type !== 'pga' && <DraftStatusBadge status={pool.draft_status} />
+                )}
+              </div>
+              <CardDescription
+                style={pool.subfont_color ? { color: pool.subfont_color } : undefined}
+              >
+                {getGame(pool.game_type).poolLabel(pool.season_year)} &middot; {pool.max_managers} managers
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+      ))}
     </div>
   )
 }
