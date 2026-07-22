@@ -299,7 +299,9 @@ export default async function PoolDashboard({
                       {member.draft_position}
                     </span>
                   )}
-                  <span className="font-medium">{member.profiles.display_name}</span>
+                  <Link href={`/profile/${member.user_id}`} className="font-medium hover:underline">
+                    {member.profiles.display_name}
+                  </Link>
                 </div>
                 {member.user_id === pool.admin_id && (
                   <Badge variant="outline" className="text-xs">Admin</Badge>
