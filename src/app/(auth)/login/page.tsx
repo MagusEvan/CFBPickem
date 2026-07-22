@@ -29,6 +29,10 @@ function LoginForm() {
       ? 'That link is invalid or has expired. If you were resetting your password, request a new link below.'
       : null
 
+  // Only allow same-origin paths (prevents open redirects via ?next=)
+  const rawNext = searchParams.get('next') ?? '/pools'
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/pools'
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(callbackError)
@@ -56,7 +60,7 @@ function LoginForm() {
       turnstileRef.current?.reset()
       setCaptchaToken(null)
     } else {
-      router.push('/pools')
+      router.push(next)
       router.refresh()
     }
   }
@@ -112,7 +116,10 @@ function LoginForm() {
             </Link>
             <p className="text-sm text-muted-foreground">
               Don&apos;t have an account?{' '}
-              <Link href="/signup" className="text-primary underline">
+              <Link
+                href={next !== '/pools' ? `/signup?next=${encodeURIComponent(next)}` : '/signup'}
+                className="text-primary underline"
+              >
                 Sign up
               </Link>
             </p>

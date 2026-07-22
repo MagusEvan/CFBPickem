@@ -1,8 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { Suspense, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,19 @@ import { TurnstileWidget, captchaEnabled } from '@/components/turnstile-widget'
 import type { TurnstileInstance } from '@marsidev/react-turnstile'
 
 export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
+  )
+}
+
+function SignupForm() {
+  const searchParams = useSearchParams()
+  // Only allow same-origin paths (prevents open redirects via ?next=)
+  const rawNext = searchParams.get('next') ?? '/pools'
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/pools'
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -35,6 +48,9 @@ export default function SignupPage() {
       options: {
         data: { display_name: displayName },
         captchaToken: captchaToken ?? undefined,
+        // Route the confirmation email through /callback so the invite (or
+        // other ?next= destination) resumes after the account is verified
+        emailRedirectTo: `${window.location.origin}/callback?next=${encodeURIComponent(next)}`,
       },
     })
 
@@ -55,7 +71,7 @@ export default function SignupPage() {
       setConfirmationSent(true)
       setLoading(false)
     } else {
-      router.push('/pools')
+      router.push(next)
       router.refresh()
     }
   }
@@ -140,7 +156,10 @@ export default function SignupPage() {
             </Button>
             <p className="text-sm text-muted-foreground">
               Already have an account?{' '}
-              <Link href="/login" className="text-primary underline">
+              <Link
+                href={next !== '/pools' ? `/login?next=${encodeURIComponent(next)}` : '/login'}
+                className="text-primary underline"
+              >
                 Sign in
               </Link>
             </p>
