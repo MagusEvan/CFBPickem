@@ -1,8 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { Suspense, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,9 +13,25 @@ import { TurnstileWidget, captchaEnabled } from '@/components/turnstile-widget'
 import type { TurnstileInstance } from '@marsidev/react-turnstile'
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
+  const searchParams = useSearchParams()
+  // Surface auth callback failures (e.g. expired/invalid email links) that
+  // redirect here with ?error=
+  const callbackError =
+    searchParams.get('error') === 'auth_callback_error'
+      ? 'That link is invalid or has expired. If you were resetting your password, request a new link below.'
+      : null
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(callbackError)
   const [loading, setLoading] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const turnstileRef = useRef<TurnstileInstance>(null)

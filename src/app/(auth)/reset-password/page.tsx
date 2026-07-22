@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,8 +15,18 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [session, setSession] = useState<'checking' | 'ok' | 'missing'>('checking')
   const router = useRouter()
   const supabase = createClient()
+
+  // A recovery session (from the emailed link, exchanged in /callback) is
+  // required to set a new password — without one, updateUser can only fail.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setSession(user ? 'ok' : 'missing')
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -43,6 +54,35 @@ export default function ResetPasswordPage() {
       router.push('/pools')
       router.refresh()
     }
+  }
+
+  if (session === 'checking') {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Spinner />
+      </div>
+    )
+  }
+
+  if (session === 'missing') {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <CardTitle>Reset Link Invalid</CardTitle>
+            <CardDescription>
+              This password reset link is invalid or has expired. Reset links can only be used
+              once and must be opened in the same browser you requested them from.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="justify-center">
+            <Link href="/forgot-password" className="text-sm text-primary underline">
+              Request a new reset link
+            </Link>
+          </CardFooter>
+        </Card>
+      </div>
+    )
   }
 
   return (
