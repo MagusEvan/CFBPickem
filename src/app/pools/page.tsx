@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Plus } from 'lucide-react'
 import type { Pool } from '@/lib/types'
 import { getGame } from '@/lib/games/registry'
+import { cn } from '@/lib/utils'
 
 export const revalidate = 60
 
@@ -82,7 +83,12 @@ function PoolGrid({ pools, finalized }: { pools: Pool[]; finalized: boolean }) {
       {pools.map((pool) => (
         <Link key={pool.id} href={`/pools/${pool.id}`}>
           <Card
-            className="transition-colors hover:bg-muted/50"
+            className={cn(
+              'transition-colors hover:bg-muted/50',
+              // Card draws its edge with a ring, not a border — swap in a
+              // real border so the custom color is actually visible
+              pool.border_color && 'border-2 ring-0'
+            )}
             style={{
               ...(pool.bg_color ? { backgroundColor: pool.bg_color } : {}),
               ...(pool.border_color ? { borderColor: pool.border_color } : {}),
