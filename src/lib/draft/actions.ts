@@ -30,30 +30,38 @@ export async function startDraft(poolId: string) {
 
   if (!members || members.length < 2) throw new Error('Need at least 2 managers')
 
-  // Assign draft positions if random mode
+  // Positions have to be a dense 1..N or the snake order can't resolve every
+  // pick. Random reshuffles outright; manual keeps the admin's order and
+  // backfills anyone who joined after it was set.
+  const ordered = [...members]
   if (pool.draft_order_mode === 'random') {
-    const shuffled = [...members].sort(() => Math.random() - 0.5)
-    for (let i = 0; i < shuffled.length; i++) {
-      await admin
-        .from('pool_members')
-        .update({ draft_position: i + 1 })
-        .eq('id', shuffled[i].id)
+    for (let i = ordered.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[ordered[i], ordered[j]] = [ordered[j], ordered[i]]
     }
+  } else {
+    ordered.sort(
+      (a, b) =>
+        (a.draft_position ?? Number.MAX_SAFE_INTEGER) -
+          (b.draft_position ?? Number.MAX_SAFE_INTEGER) ||
+        a.joined_at.localeCompare(b.joined_at)
+    )
   }
 
-  const { data: firstMember } = await admin
-    .from('pool_members')
-    .select('id')
-    .eq('pool_id', poolId)
-    .eq('draft_position', 1)
-    .single()
+  for (let i = 0; i < ordered.length; i++) {
+    if (ordered[i].draft_position === i + 1) continue
+    await admin
+      .from('pool_members')
+      .update({ draft_position: i + 1 })
+      .eq('id', ordered[i].id)
+  }
 
   // Create draft state
   await admin.from('draft_state').insert({
     pool_id: poolId,
     current_round: 1,
     current_pick_number: 1,
-    current_member_id: firstMember?.id ?? null,
+    current_member_id: ordered[0]?.id ?? null,
     conference_key: null,
     pac12_ind_depleted: false,
   })

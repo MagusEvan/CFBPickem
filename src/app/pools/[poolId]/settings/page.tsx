@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { DeletePoolButton } from '@/components/pool/delete-pool'
+import { DraftOrderCard } from '@/components/pool/draft-order-card'
 import { FinalizeSeasonButton } from '@/components/pool/finalize-season'
 import { deletePool } from '@/lib/pools/actions'
 import { finalizeSeason } from '@/lib/pools/championship-actions'
@@ -45,6 +46,8 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
     finalizedAt = championship?.finalized_at ?? null
   }
   const isWorldCup = pool.game_type === 'world_cup'
+  // PGA picks its draft order per tournament, so there's nothing pool-level to set
+  const hasPoolDraftOrder = pool.game_type !== 'pga'
   const isFf = pool.game_type === 'ff'
   const isBestBall = pool.game_type === 'ff_bestball'
 
@@ -72,6 +75,10 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
     ffDraftStarted = !!ffDraftState && ffDraftState.status !== 'pre_draft'
   }
 
+  const draftOrderEditable =
+    hasPoolDraftOrder &&
+    (isFfFamily(pool.game_type) ? !ffDraftStarted : pool.draft_status === 'pre_draft')
+
   async function updatePool(formData: FormData) {
     'use server'
     const { createClient } = await import('@/lib/supabase/server')
@@ -88,24 +95,6 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
       .from('pools')
       .update({ name, max_managers: maxManagers, bg_color: bgColor, font_color: fontColor, subfont_color: subfontColor, border_color: borderColor, counting_highlight_color: countingHighlightColor })
       .eq('id', poolId)
-
-    redirect(`/pools/${poolId}?view=details`)
-  }
-
-  async function updateDraftOrder(formData: FormData) {
-    'use server'
-    const { createAdminClient } = await import('@/lib/supabase/admin')
-    const admin = createAdminClient()
-
-    for (const member of members) {
-      const position = Number(formData.get(`position-${member.id}`))
-      if (position) {
-        await admin
-          .from('pool_members')
-          .update({ draft_position: position })
-          .eq('id', member.id)
-      }
-    }
 
     redirect(`/pools/${poolId}?view=details`)
   }
@@ -342,34 +331,13 @@ export default async function PoolSettingsPage({ params }: { params: Promise<{ p
         </Card>
       )}
 
-      {/* Draft Order (admin only, pre-draft only) */}
-      {isAdmin && pool.draft_status === 'pre_draft' && pool.draft_order_mode === 'manual' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Draft Order</CardTitle>
-            <CardDescription>Set the draft position for each manager</CardDescription>
-          </CardHeader>
-          <form action={updateDraftOrder}>
-            <CardContent className="space-y-3">
-              {members.map((member) => (
-                <div key={member.id} className="flex items-center gap-4">
-                  <Input
-                    name={`position-${member.id}`}
-                    type="number"
-                    defaultValue={member.draft_position ?? ''}
-                    min={1}
-                    max={members.length}
-                    className="w-16"
-                  />
-                  <span>{member.profiles.display_name}</span>
-                </div>
-              ))}
-            </CardContent>
-            <CardFooter>
-              <Button type="submit">Save Draft Order</Button>
-            </CardFooter>
-          </form>
-        </Card>
+      {/* Draft Order (admin only, until the draft starts) */}
+      {isAdmin && draftOrderEditable && (
+        <DraftOrderCard
+          poolId={poolId}
+          initialMode={pool.draft_order_mode}
+          members={members.map((m) => ({ id: m.id, displayName: m.profiles.display_name }))}
+        />
       )}
 
       {/* Finalize Season (admin only) */}
