@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
+import { ConferenceLogo } from '@/components/conference-logo'
 import type { DraftPick, CachedTeam, CachedGame, WorldCupScoringConfig } from '@/lib/types'
 import { calculateTeamPoints, type GamePointBreakdown } from '@/lib/scoring/strategies/world-cup'
 
@@ -173,7 +174,10 @@ export default async function RosterPage({
                       <span className="ml-1 text-sm font-normal text-muted-foreground">(r{stat.pick.round})</span>
                     </p>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Badge variant="outline" className="text-xs">{stat.pick.conference_key}</Badge>
+                      <Badge variant="outline" className="gap-1 text-xs">
+                        <ConferenceLogo conferenceKey={stat.pick.conference_key} size={14} />
+                        {stat.pick.conference_key}
+                      </Badge>
                       {stat.pick.is_bonus_pick && (
                         <Badge variant="secondary" className="text-xs">Bonus</Badge>
                       )}

@@ -14,6 +14,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import type { Pool, PoolMember, Profile, CachedTeam, WcScrapsTeam } from '@/lib/types'
+import { ConferenceLogo } from '@/components/conference-logo'
 
 const CONFERENCE_LABELS: Record<string, string> = {
   ACC: 'ACC', B12: 'Big 12', B1G: 'Big Ten', SEC: 'SEC',
@@ -457,8 +458,11 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
                   className={`cursor-pointer transition-colors hover:bg-muted/50 ${submitting ? 'pointer-events-none opacity-50' : ''}`}
                   onClick={() => setSelectedConference(conf)}
                 >
-                  <CardContent className="flex items-center justify-between py-3">
-                    <span className="font-medium">{CONFERENCE_LABELS[conf] ?? conf}</span>
+                  <CardContent className="flex items-center justify-between gap-2 py-3">
+                    <span className="flex min-w-0 items-center gap-2 font-medium">
+                      <ConferenceLogo conferenceKey={conf} size={28} />
+                      <span className="truncate">{CONFERENCE_LABELS[conf] ?? conf}</span>
+                    </span>
                     <Badge variant="secondary">{teamsInConf} teams</Badge>
                   </CardContent>
                 </Card>
@@ -545,7 +549,10 @@ function DraftBoard({
               <th className="px-2 py-2 text-left font-medium text-muted-foreground">Manager</th>
               {conferences.map((conf) => (
                 <th key={conf} className="px-2 py-2 text-center font-medium text-muted-foreground">
-                  {CONFERENCE_LABELS[conf] ?? conf}
+                  <span className="flex flex-col items-center gap-1">
+                    <ConferenceLogo conferenceKey={conf} size={24} />
+                    <span className="whitespace-nowrap">{CONFERENCE_LABELS[conf] ?? conf}</span>
+                  </span>
                 </th>
               ))}
             </tr>

@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import type { GameType, WorldCupScoringConfig } from '@/lib/types'
 import type { FFBestBallSettings, FFLeagueSettings, FFScoringSettings } from '@/lib/ff/types'
 import { GAMES, GAME_LIST, CFB_CONFERENCES, TOTAL_WC_TEAMS, DEFAULT_WC_SCORING } from '@/lib/games/registry'
+import { ConferenceLogo } from '@/components/conference-logo'
 import {
   DEFAULT_FF_BESTBALL_SETTINGS,
   DEFAULT_FF_LEAGUE_SETTINGS,
@@ -239,7 +240,8 @@ export default function CreatePoolPage() {
                         onChange={() => toggleConference(conf.key)}
                         className="accent-primary"
                       />
-                      {conf.name}
+                      <ConferenceLogo conferenceKey={conf.key} size={22} />
+                      <span className="truncate">{conf.name}</span>
                     </label>
                   ))}
                 </div>

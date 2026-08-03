@@ -108,18 +108,26 @@ export function isFfFamily(gameType: GameType): boolean {
 
 // --- Game-specific pool-creation constants (client-safe) ---
 
+// Logos are self-hosted under /public/conferences rather than hotlinked —
+// it's a fixed set of ten that never changes, and ESPN's conference-logo ids
+// are a separate namespace from the API group ids in conference-map.ts
+// (group 21 is Pac-12 for teams, but Missouri Valley for logos).
 export const CFB_CONFERENCES = [
-  { key: 'ACC', name: 'ACC' },
-  { key: 'B12', name: 'Big 12' },
-  { key: 'B1G', name: 'Big Ten' },
-  { key: 'SEC', name: 'SEC' },
-  { key: 'AAC', name: 'American Athletic' },
-  { key: 'CUSA', name: 'Conference USA' },
-  { key: 'MAC', name: 'MAC' },
-  { key: 'MW', name: 'Mountain West' },
-  { key: 'SBC', name: 'Sun Belt' },
-  { key: 'PAC12_IND', name: 'Pac-12 / Independent' },
+  { key: 'ACC', name: 'ACC', logo: '/conferences/acc.png' },
+  { key: 'B12', name: 'Big 12', logo: '/conferences/b12.png' },
+  { key: 'B1G', name: 'Big Ten', logo: '/conferences/b1g.png' },
+  { key: 'SEC', name: 'SEC', logo: '/conferences/sec.png' },
+  { key: 'AAC', name: 'American Athletic', logo: '/conferences/aac.png' },
+  { key: 'CUSA', name: 'Conference USA', logo: '/conferences/cusa.png' },
+  { key: 'MAC', name: 'MAC', logo: '/conferences/mac.png' },
+  { key: 'MW', name: 'Mountain West', logo: '/conferences/mw.png' },
+  { key: 'SBC', name: 'Sun Belt', logo: '/conferences/sbc.png' },
+  { key: 'PAC12_IND', name: 'Pac-12 / Independent', logo: '/conferences/pac12-ind.png' },
 ]
+
+export const CFB_CONFERENCE_LOGOS: Record<string, string> = Object.fromEntries(
+  CFB_CONFERENCES.map((c) => [c.key, c.logo])
+)
 
 export const TOTAL_WC_TEAMS = 48
 
