@@ -2,6 +2,23 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
 
+// The verify endpoint only appends ?code= — it doesn't carry ?type= through.
+// The granted session records how it was obtained, so read that instead of
+// trusting the query string to tell us this was a recovery.
+function isRecoverySession(accessToken: string | undefined) {
+  if (!accessToken) return false
+  try {
+    const payload = JSON.parse(
+      Buffer.from(accessToken.split('.')[1], 'base64url').toString()
+    )
+    return (payload.amr ?? []).some(
+      (entry: { method?: string }) => entry.method === 'recovery'
+    )
+  } catch {
+    return false
+  }
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
@@ -17,9 +34,10 @@ export async function GET(request: Request) {
 
   // Handle OAuth / PKCE code exchange
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      return NextResponse.redirect(`${origin}${dest}`)
+      const recovery = isRecoverySession(data.session?.access_token)
+      return NextResponse.redirect(`${origin}${recovery ? '/reset-password' : dest}`)
     }
   }
 
