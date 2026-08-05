@@ -107,14 +107,25 @@ export function FfDraftRoom({
 
   // React Compiler memoizes these (manual useCallback deps can't be preserved)
   const handlePick = async (player: FFPlayer) => {
-    if (!draftState?.current_member_id) return
     setPendingPlayerId(player.id)
-    const result = await makeFfPick(pool.id, player.id, draftState.current_member_id)
+    // Only claim an on-behalf-of pick when it genuinely isn't our turn. Sending
+    // our cached current_member_id on our own turn made every pick depend on
+    // that cache being current: one missed realtime update and the server saw a
+    // pick for the wrong member and rejected it, so the first click only ever
+    // repaired the state via the error path and the second click did the pick.
+    // Non-admins can only ever pick as themselves, so never send it for them —
+    // a stale id would surface "only the commissioner can pick for others" on
+    // what is actually their own turn.
+    const result = await makeFfPick(
+      pool.id,
+      player.id,
+      isAdmin && !isMyTurn ? draftState?.current_member_id ?? undefined : undefined
+    )
     setPendingPlayerId(null)
-    if (result.error) {
-      toast.error(result.error)
-      refetch()
-    }
+    if (result.error) toast.error(result.error)
+    // Refetch either way — a successful pick advances the clock, and relying on
+    // realtime alone to deliver that is what let the client drift in the first place.
+    refetch()
   }
 
   const handleExpire = () => {
@@ -126,10 +137,8 @@ export function FfDraftRoom({
     setPendingPlayerId(player.id)
     const result = await nominateFfPlayer(pool.id, player.id)
     setPendingPlayerId(null)
-    if (result.error) {
-      toast.error(result.error)
-      refetch()
-    }
+    if (result.error) toast.error(result.error)
+    refetch()
   }
 
   const handleBid = async (amount: number) => {
