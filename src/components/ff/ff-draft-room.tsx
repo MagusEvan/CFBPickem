@@ -20,6 +20,7 @@ import { draftRounds, maxBid } from '@/lib/ff/draft-engine'
 import { PickTimer } from './pick-timer'
 import { PlayerPoolTable } from './player-pool-table'
 import { DraftBoard } from './draft-board'
+import { DraftRosterPanel } from './draft-roster-panel'
 import { AuctionLot } from './auction-lot'
 import { AuctionResults } from './auction-results'
 import { BudgetTracker, type BudgetRow } from './budget-tracker'
@@ -47,6 +48,7 @@ export function FfDraftRoom({
   const { draftState, picks, bids, loading, refetch } = useFfDraftRealtime(pool.id)
   const [pendingPlayerId, setPendingPlayerId] = useState<string | null>(null)
   const [actionPending, setActionPending] = useState(false)
+  const [sideView, setSideView] = useState<'board' | 'team'>('board')
 
   const isAdmin = pool.admin_id === currentUserId
   const myMember = members.find((m) => m.user_id === currentUserId)
@@ -236,6 +238,40 @@ export function FfDraftRoom({
   const myBudget = budgetRows.find((r) => r.isMe)
   const totalPicks = members.length * rounds
 
+  const myPicks = myMember ? picks.filter((p) => p.member_id === myMember.id) : []
+  const myTeamPanel = (
+    <DraftRosterPanel
+      picks={myPicks}
+      playersById={playerById}
+      settings={settings}
+      totalRounds={rounds}
+      isBestBall={pool.game_type === 'ff_bestball'}
+      emptyLabel="You haven't drafted anyone yet."
+    />
+  )
+
+  /** Segmented toggle for the right-hand column. */
+  const sideToggle = (label: string) => (
+    <div className="mb-2 flex items-center gap-1">
+      <Button
+        size="sm"
+        variant={sideView === 'board' ? 'default' : 'outline'}
+        onClick={() => setSideView('board')}
+      >
+        {label}
+      </Button>
+      {myMember && (
+        <Button
+          size="sm"
+          variant={sideView === 'team' ? 'default' : 'outline'}
+          onClick={() => setSideView('team')}
+        >
+          My Team
+        </Button>
+      )}
+    </div>
+  )
+
   const adminControls = isAdmin && (
     <div className="flex gap-2">
       {paused ? (
@@ -337,8 +373,12 @@ export function FfDraftRoom({
             </div>
           </div>
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Rosters</h2>
-            <AuctionResults members={members} picks={picks} budget={settings.draft.auctionBudget} />
+            {sideToggle('Rosters')}
+            {sideView === 'board' || !myMember ? (
+              <AuctionResults members={members} picks={picks} budget={settings.draft.auctionBudget} />
+            ) : (
+              myTeamPanel
+            )}
           </div>
         </div>
       </div>
@@ -386,18 +426,22 @@ export function FfDraftRoom({
           />
           {myMember && (
             <div className="mt-3 text-xs text-muted-foreground">
-              Your picks: {picks.filter((p) => p.member_id === myMember.id).length}/{rounds}
+              Your picks: {myPicks.length}/{rounds}
             </div>
           )}
         </div>
         <div>
-          <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Draft Board</h2>
-          <DraftBoard
-            members={members}
-            picks={picks}
-            rounds={rounds}
-            currentPickNumber={draftState.current_pick_number}
-          />
+          {sideToggle('Draft Board')}
+          {sideView === 'board' || !myMember ? (
+            <DraftBoard
+              members={members}
+              picks={picks}
+              rounds={rounds}
+              currentPickNumber={draftState.current_pick_number}
+            />
+          ) : (
+            myTeamPanel
+          )}
         </div>
       </div>
     </div>
