@@ -226,7 +226,12 @@ export default async function MatchupWeekPage({
                         i === 1 && 'flex-row-reverse text-right'
                       )}
                     >
-                      <span>{nameByMember.get(side.memberId)}</span>
+                      <Link
+                        href={`/pools/${poolId}/team?member=${side.memberId}&week=${week}`}
+                        className="underline-offset-2 hover:underline"
+                      >
+                        {nameByMember.get(side.memberId)}
+                      </Link>
                       <span
                         className={cn(
                           'font-mono tabular-nums',

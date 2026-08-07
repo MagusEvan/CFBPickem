@@ -18,6 +18,7 @@ import { isPlayerLocked, sortSlots } from '@/lib/ff/roster'
 import { isFfFamily } from '@/lib/games/registry'
 import { LineupEditor } from '@/components/ff/lineup-editor'
 import { BestBallTeam } from '@/components/ff/bestball-team'
+import { WeekSelector } from '@/components/ff/week-selector'
 import { LiveRefresh } from '@/components/live-refresh'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -101,15 +102,24 @@ export default async function TeamPage({
     )
   }
 
-  const week = await getFfCurrentWeek(pool.season_year)
+  // ?member= views any manager's roster (read-only); ?week= views past weeks
+  const sp = await searchParams
+  const currentWeek = await getFfCurrentWeek(pool.season_year)
+  const viewMember = (sp.member && members.find((m) => m.id === sp.member)) || myMember
+  const isMyTeam = viewMember.id === myMember.id
+  const requestedWeek = Number(sp.week)
+  const week = Number.isInteger(requestedWeek)
+    ? Math.min(Math.max(requestedWeek, 1), currentWeek)
+    : currentWeek
+
   const [games, statsByPlayer, lineups] = await Promise.all([
     getFfWeekGames(pool.season_year, week),
     getFfWeekStats(pool.season_year, week),
     getFfLineups(poolId, week),
   ])
 
-  const mySlots = sortSlots(lineups.filter((s) => s.member_id === myMember.id))
-  const playerIds = mySlots.map((s) => s.player_id).filter((id): id is string => id !== null)
+  const slots = sortSlots(lineups.filter((s) => s.member_id === viewMember.id))
+  const playerIds = slots.map((s) => s.player_id).filter((id): id is string => id !== null)
   const players = await getFfPlayersByIds(playerIds)
 
   const scoring = resolveScoringSettings(pool)
@@ -126,36 +136,54 @@ export default async function TeamPage({
     return p ? isPlayerLocked(p, startByTeam) : false
   })
 
-  const total = scoreLineup(mySlots, statsByPlayer, scoring)
-  const anyGameLive = games.some((g) => g.status === 'in_progress')
+  const total = scoreLineup(slots, statsByPlayer, scoring)
+  const anyGameLive = week === currentWeek && games.some((g) => g.status === 'in_progress')
+  const canEdit = isMyTeam && week === currentWeek
 
   return (
     <div className="space-y-6">
       <LiveRefresh live={anyGameLive} />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">My Team</h1>
+          <h1 className="text-2xl font-bold">
+            {isMyTeam ? 'My Team' : `${viewMember.profiles.display_name}'s Team`}
+          </h1>
           <p className="text-sm text-muted-foreground">
             Week {week} · {total.toFixed(2)} pts
           </p>
         </div>
-        <Link
-          href={`/pools/${poolId}/matchups/${week}`}
-          className={buttonVariants({ variant: 'outline' })}
-        >
-          View Matchups
-        </Link>
+        <div className="flex gap-2">
+          {!isMyTeam && (
+            <Link href={`/pools/${poolId}/team`} className={buttonVariants({ variant: 'outline' })}>
+              My Team
+            </Link>
+          )}
+          <Link
+            href={`/pools/${poolId}/matchups/${week}`}
+            className={buttonVariants({ variant: 'outline' })}
+          >
+            View Matchups
+          </Link>
+        </div>
       </div>
+
+      <WeekSelector
+        weeks={currentWeek}
+        selected={week}
+        hrefFor={(w) =>
+          `/pools/${poolId}/team?week=${w}${isMyTeam ? '' : `&member=${viewMember.id}`}`
+        }
+      />
 
       <div className="max-w-2xl">
         <LineupEditor
           poolId={poolId}
-          slots={mySlots}
+          slots={slots}
           playersById={Object.fromEntries(players)}
           pointsByPlayer={pointsByPlayer}
           lockedPlayerIds={lockedPlayerIds}
           settings={settings}
-          canEdit
+          canEdit={canEdit}
         />
       </div>
     </div>
