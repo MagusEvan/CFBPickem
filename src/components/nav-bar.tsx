@@ -3,17 +3,16 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
-import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut } from 'lucide-react'
+import { User, LogOut, Shield } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 
-export function NavBar() {
+export function NavBar({ isSiteAdmin = false }: { isSiteAdmin?: boolean }) {
   const { user, signOut } = useAuth()
   const router = useRouter()
 
@@ -45,6 +44,12 @@ export function NavBar() {
               <User className="mr-2 h-4 w-4" />
               My Profile
             </DropdownMenuItem>
+            {isSiteAdmin && (
+              <DropdownMenuItem onClick={() => router.push('/admin')}>
+                <Shield className="mr-2 h-4 w-4" />
+                Site Admin
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={handleSignOut}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign Out

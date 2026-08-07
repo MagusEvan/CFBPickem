@@ -1,9 +1,9 @@
-import { NavBar } from '@/components/nav-bar'
+import { NavBarServer } from '@/components/nav-bar-server'
 
 export default function ProfileLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <NavBar />
+      <NavBarServer />
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
         {children}
       </main>
