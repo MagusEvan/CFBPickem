@@ -27,6 +27,7 @@ const SLOT_LABEL: Record<FFSlot, string> = {
 export function DraftRosterPanel({
   picks,
   playersById,
+  byeWeeks,
   settings,
   totalRounds,
   isBestBall,
@@ -35,6 +36,8 @@ export function DraftRosterPanel({
   /** This member's picks, in draft order */
   picks: FFDraftPick[]
   playersById: Map<string, FFPlayer>
+  /** team_id -> regular-season bye week */
+  byeWeeks: Record<string, number>
   settings: FFLeagueSettings
   totalRounds: number
   isBestBall: boolean
@@ -70,6 +73,7 @@ export function DraftRosterPanel({
         }
         assignments={starters}
         playersById={playersById}
+        byeWeeks={byeWeeks}
         pickByPlayerId={pickByPlayerId}
       />
 
@@ -78,6 +82,7 @@ export function DraftRosterPanel({
           heading="Bench"
           assignments={bench}
           playersById={playersById}
+          byeWeeks={byeWeeks}
           pickByPlayerId={pickByPlayerId}
         />
       )}
@@ -90,12 +95,14 @@ function SlotGroup({
   note,
   assignments,
   playersById,
+  byeWeeks,
   pickByPlayerId,
 }: {
   heading: string
   note?: string
   assignments: Array<{ slot: FFSlot; slot_index: number; player_id: string | null }>
   playersById: Map<string, FFPlayer>
+  byeWeeks: Record<string, number>
   pickByPlayerId: Map<string, FFDraftPick>
 }) {
   return (
@@ -135,6 +142,9 @@ function SlotGroup({
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{player.name}</span>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {player.position} · {player.nfl_team_abbrev ?? 'FA'}
+                    {player.nfl_team_id != null &&
+                      byeWeeks[player.nfl_team_id] != null &&
+                      ` · Bye ${byeWeeks[player.nfl_team_id]}`}
                   </span>
                   {pick?.price != null ? (
                     <Badge variant="secondary" className="shrink-0 text-[10px]">

@@ -36,12 +36,15 @@ export function FfDraftRoom({
   pool,
   members,
   players,
+  byeWeeks,
   settings,
   currentUserId,
 }: {
   pool: Pool
   members: (PoolMember & { profiles: Profile })[]
   players: FFPlayer[]
+  /** team_id -> regular-season bye week */
+  byeWeeks: Record<string, number>
   settings: FFLeagueSettings
   currentUserId: string
 }) {
@@ -243,6 +246,7 @@ export function FfDraftRoom({
     <DraftRosterPanel
       picks={myPicks}
       playersById={playerById}
+      byeWeeks={byeWeeks}
       settings={settings}
       totalRounds={rounds}
       isBestBall={pool.game_type === 'ff_bestball'}
@@ -333,6 +337,7 @@ export function FfDraftRoom({
         {!paused && lotOpen && lotPlayer && (
           <AuctionLot
             player={lotPlayer}
+            byeWeek={lotPlayer.nfl_team_id ? byeWeeks[lotPlayer.nfl_team_id] ?? null : null}
             highBid={draftState.lot_high_bid ?? 1}
             highBidderName={
               draftState.lot_high_bidder_id
@@ -363,6 +368,7 @@ export function FfDraftRoom({
               </h2>
               <PlayerPoolTable
                 players={players}
+                byeWeeks={byeWeeks}
                 draftedIds={draftedIds}
                 canPick={(isMyNomination || (isAdmin && !paused)) && !lotOpen && !paused}
                 pendingPlayerId={pendingPlayerId}
@@ -419,6 +425,7 @@ export function FfDraftRoom({
           </h2>
           <PlayerPoolTable
             players={players}
+            byeWeeks={byeWeeks}
             draftedIds={draftedIds}
             canPick={canPick && !paused}
             pendingPlayerId={pendingPlayerId}

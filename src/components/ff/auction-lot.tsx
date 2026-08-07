@@ -14,6 +14,7 @@ import type { FFPlayer, FFAuctionBid } from '@/lib/ff/types'
  */
 export function AuctionLot({
   player,
+  byeWeek,
   highBid,
   highBidderName,
   iAmHighBidder,
@@ -26,6 +27,8 @@ export function AuctionLot({
   onExpire,
 }: {
   player: FFPlayer
+  /** Regular-season bye week of the player's team, if known */
+  byeWeek: number | null
   highBid: number
   highBidderName: string
   iAmHighBidder: boolean
@@ -73,6 +76,7 @@ export function AuctionLot({
               <p className="font-semibold">{player.name}</p>
               <p className="text-xs text-muted-foreground">
                 {player.position} · {player.nfl_team_abbrev ?? 'FA'}
+                {byeWeek != null && ` · Bye ${byeWeek}`}
               </p>
             </div>
           </div>

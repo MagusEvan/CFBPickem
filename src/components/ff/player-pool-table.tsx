@@ -12,6 +12,7 @@ const PAGE_SIZE = 40
 
 export function PlayerPoolTable({
   players,
+  byeWeeks,
   draftedIds,
   canPick,
   pendingPlayerId,
@@ -20,6 +21,8 @@ export function PlayerPoolTable({
   pendingLabel = 'Drafting…',
 }: {
   players: FFPlayer[]
+  /** team_id -> regular-season bye week */
+  byeWeeks: Record<string, number>
   draftedIds: Set<string>
   canPick: boolean
   pendingPlayerId: string | null
@@ -87,6 +90,7 @@ export function PlayerPoolTable({
           <tbody>
             {visible.map((p) => {
               const drafted = draftedIds.has(p.id)
+              const bye = p.nfl_team_id ? byeWeeks[p.nfl_team_id] : undefined
               return (
                 <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="px-3 py-1.5">
@@ -108,6 +112,7 @@ export function PlayerPoolTable({
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {p.position} · {p.nfl_team_abbrev ?? 'FA'}
+                        {bye != null && ` · Bye ${bye}`}
                       </span>
                       {p.injury_status && (
                         <Badge variant="destructive" className="text-[10px] uppercase">

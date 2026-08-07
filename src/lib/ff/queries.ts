@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { ensureFreshPlayerCatalog, ensureFreshFfData, currentWeek } from './refresh'
+import { ensureFreshPlayerCatalog, ensureFreshFfData, ensureFreshSchedule, currentWeek } from './refresh'
 import { scoreLineup } from './scoring'
 import { optimalLineup } from './bestball'
 import { bestBallSimulatedWeek } from './settings'
@@ -72,6 +72,41 @@ export async function getBestBallCurrentWeek(
   if (sim !== null) return { currentWeek: Math.min(sim, 18), progressWeek: sim }
   const week = await getFfCurrentWeek(seasonYear)
   return { currentWeek: week, progressWeek: week }
+}
+
+/**
+ * NFL bye weeks: team_id -> the regular-season week that team has no game.
+ * A bye is only assigned when the team plays in every other ingested week,
+ * so a partially ingested schedule yields no byes rather than wrong ones.
+ */
+export async function getNflByeWeeks(seasonYear: number): Promise<Record<string, number>> {
+  await ensureFreshSchedule(seasonYear)
+
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_nfl_games')
+    .select('week, home_team_id, away_team_id')
+    .eq('season_year', seasonYear)
+    .eq('season_type', 2)
+
+  const games = data ?? []
+  const allWeeks = new Set(games.map((g) => g.week))
+  const weeksByTeam = new Map<string, Set<number>>()
+  for (const g of games) {
+    for (const teamId of [g.home_team_id, g.away_team_id]) {
+      if (!teamId) continue
+      let weeks = weeksByTeam.get(teamId)
+      if (!weeks) weeksByTeam.set(teamId, (weeks = new Set()))
+      weeks.add(g.week)
+    }
+  }
+
+  const byes: Record<string, number> = {}
+  for (const [teamId, played] of weeksByTeam) {
+    const missing = [...allWeeks].filter((w) => !played.has(w))
+    if (missing.length === 1) byes[teamId] = missing[0]
+  }
+  return byes
 }
 
 /** All NFL games for one week (drives lineup locks + live badges). */
