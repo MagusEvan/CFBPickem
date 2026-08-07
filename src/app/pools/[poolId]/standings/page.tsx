@@ -277,9 +277,6 @@ async function FfStandings({
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Standings</h1>
-        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
-          &lt; Return to Pool
-        </Link>
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             Standings will be available after the draft is complete.
@@ -308,9 +305,6 @@ async function FfStandings({
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Standings</h1>
-        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
-          &lt; Return to Pool
-        </Link>
         <Card>
           <CardHeader>
             <CardTitle>Leaderboard</CardTitle>
@@ -428,9 +422,6 @@ async function FfStandings({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
-      <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
-        &lt; Return to Pool
-      </Link>
 
       {bracketRounds.length > 0 && (
         <PlayoffBracket poolId={poolId} rounds={bracketRounds} championName={championName} />

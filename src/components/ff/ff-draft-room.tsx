@@ -221,7 +221,7 @@ export function FfDraftRoom({
                 Undo Last Pick
               </Button>
             )}
-            <Link href={`/pools/${pool.id}?view=details`} className={buttonVariants({ variant: 'default' })}>
+            <Link href={`/pools/${pool.id}`} className={buttonVariants({ variant: 'default' })}>
               Go to League
             </Link>
           </div>
