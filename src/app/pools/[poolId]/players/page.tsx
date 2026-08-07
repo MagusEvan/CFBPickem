@@ -2,19 +2,29 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import {
+  getBestBallCurrentWeek,
+  getFfCurrentWeek,
   getFfPlayers,
   getFfPlayersByIds,
   getFfPlayerWaivers,
   getFfRosters,
+  getFfSeasonTotals,
   getFfWaiverClaims,
   getFfWaiverPriority,
   getFfWaiverState,
+  type FFSeasonTotals,
 } from '@/lib/ff/queries'
-import { resolveLeagueSettings, totalRosterSpots } from '@/lib/ff/settings'
+import {
+  resolveBestBallSettings,
+  resolveLeagueSettings,
+  resolveScoringSettings,
+  totalRosterSpots,
+} from '@/lib/ff/settings'
 import { isFfFamily } from '@/lib/games/registry'
 import { maybeProcessWaivers } from '@/lib/ff/waiver-processing'
 import { PlayersBrowser, type PlayersTransactionContext } from '@/components/ff/players-browser'
 import { WaiverClaimsPanel } from '@/components/ff/waiver-claims-panel'
+import { WaiverResultsCard, type ResolvedClaimRow } from '@/components/ff/waiver-results-card'
 
 export default async function PlayersPage({ params }: { params: Promise<{ poolId: string }> }) {
   const { poolId } = await params
@@ -22,6 +32,19 @@ export default async function PlayersPage({ params }: { params: Promise<{ poolId
   if (!pool || !isFfFamily(pool.game_type)) notFound()
 
   const players = await getFfPlayers(pool.season_year)
+
+  // Season point totals once games have been played (pre-draft they're all 0)
+  let seasonTotals: Record<string, FFSeasonTotals> | undefined
+  if (pool.draft_status === 'completed') {
+    const scoring = resolveScoringSettings(pool)
+    const currentWeek =
+      pool.game_type === 'ff_bestball'
+        ? (await getBestBallCurrentWeek(pool.season_year, resolveBestBallSettings(pool))).currentWeek
+        : await getFfCurrentWeek(pool.season_year)
+    seasonTotals = Object.fromEntries(
+      await getFfSeasonTotals(pool.season_year, scoring, currentWeek)
+    )
+  }
 
   const header = (
     <div>
@@ -40,7 +63,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ poolId
     return (
       <div className="space-y-4">
         {header}
-        <PlayersBrowser players={players} />
+        <PlayersBrowser players={players} poolId={poolId} seasonTotals={seasonTotals} />
       </div>
     )
   }
@@ -69,10 +92,22 @@ export default async function PlayersPage({ params }: { params: Promise<{ poolId
   const myPendingClaims = me
     ? claims.filter((c) => c.member_id === me.id && c.status === 'pending')
     : []
-  const claimPlayerIds = myPendingClaims.flatMap((c) =>
+  const resolvedClaims = claims.filter(
+    (c) => c.status === 'won' || c.status === 'lost' || c.status === 'invalid'
+  )
+  const claimPlayerIds = [...myPendingClaims, ...resolvedClaims].flatMap((c) =>
     [c.add_player_id, c.drop_player_id].filter((id): id is string => id !== null)
   )
   const playersById = await getFfPlayersByIds([...new Set([...myRosterIds, ...claimPlayerIds])])
+
+  const waiverResultRows: ResolvedClaimRow[] = resolvedClaims.map((claim) => ({
+    claim,
+    managerName: nameByMember.get(claim.member_id) ?? '—',
+    addName: playersById.get(claim.add_player_id)?.name ?? '—',
+    dropName: claim.drop_player_id
+      ? playersById.get(claim.drop_player_id)?.name ?? null
+      : null,
+  }))
 
   const faabRemainingFor = (memberId: string) =>
     settings.waivers.faabBudget -
@@ -123,7 +158,8 @@ export default async function PlayersPage({ params }: { params: Promise<{ poolId
           isCommissioner={pool.admin_id === userId}
         />
       )}
-      <PlayersBrowser players={players} tx={tx} />
+      <WaiverResultsCard rows={waiverResultRows} maxRuns={3} />
+      <PlayersBrowser players={players} tx={tx} poolId={poolId} seasonTotals={seasonTotals} />
     </div>
   )
 }

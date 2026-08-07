@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { addFfFreeAgent, dropFfPlayer, submitFfWaiverClaim } from '@/lib/ff/waiver-actions'
+import { PlayerDetailSheet } from './player-detail-sheet'
+import type { FFSeasonTotals } from '@/lib/ff/queries'
 import type { FFPlayer, FFPosition } from '@/lib/ff/types'
 
 const POSITIONS: Array<FFPosition | 'ALL'> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DST']
@@ -32,10 +34,16 @@ type Availability = 'ALL' | 'AVAILABLE'
 export function PlayersBrowser({
   players,
   tx,
+  poolId,
+  seasonTotals,
 }: {
   players: FFPlayer[]
   /** Present once the draft is complete and the caller can transact */
   tx?: PlayersTransactionContext
+  /** Enables the player detail dialog (click a name) */
+  poolId?: string
+  /** player_id -> season points; enables Pts/Avg columns */
+  seasonTotals?: Record<string, FFSeasonTotals>
 }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -43,6 +51,8 @@ export function PlayersBrowser({
   const [availability, setAvailability] = useState<Availability>(tx ? 'AVAILABLE' : 'ALL')
   const [limit, setLimit] = useState(PAGE_SIZE)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [detailPlayer, setDetailPlayer] = useState<FFPlayer | null>(null)
+  const [sortBy, setSortBy] = useState<'default' | 'totalPts' | 'avgPts'>('default')
   const [dropId, setDropId] = useState('')
   const [bid, setBid] = useState('0')
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +63,7 @@ export function PlayersBrowser({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return players.filter(
+    const matches = players.filter(
       (p) =>
         (position === 'ALL' || p.position === position) &&
         (availability === 'ALL' || !tx || !tx.ownerByPlayer[p.id]) &&
@@ -61,9 +71,30 @@ export function PlayersBrowser({
           p.name.toLowerCase().includes(q) ||
           (p.nfl_team_abbrev ?? '').toLowerCase().includes(q))
     )
-  }, [players, search, position, availability, tx])
+    if (sortBy !== 'default' && seasonTotals) {
+      return [...matches].sort(
+        (a, b) => (seasonTotals[b.id]?.[sortBy] ?? 0) - (seasonTotals[a.id]?.[sortBy] ?? 0)
+      )
+    }
+    return matches
+  }, [players, search, position, availability, tx, sortBy, seasonTotals])
 
   const visible = filtered.slice(0, limit)
+
+  const colCount = 4 + (seasonTotals ? 2 : 0) + (tx ? 1 : 0)
+
+  const sortHeader = (key: 'totalPts' | 'avgPts', label: string) => (
+    <th className="px-3 py-2 text-right font-medium">
+      <button
+        type="button"
+        className={sortBy === key ? 'font-semibold text-foreground' : 'hover:text-foreground'}
+        onClick={() => setSortBy(sortBy === key ? 'default' : key)}
+      >
+        {label}
+        {sortBy === key && ' ↓'}
+      </button>
+    </th>
+  )
 
   const openPanel = (playerId: string) => {
     setOpenId(openId === playerId ? null : playerId)
@@ -225,6 +256,8 @@ export function PlayersBrowser({
               <th className="px-3 py-2 font-medium">Player</th>
               <th className="px-3 py-2 font-medium">Pos</th>
               <th className="px-3 py-2 font-medium">Team</th>
+              {seasonTotals && sortHeader('totalPts', 'Pts')}
+              {seasonTotals && sortHeader('avgPts', 'Avg')}
               <th className="px-3 py-2 font-medium">{tx ? 'Manager' : 'Status'}</th>
               {tx && <th className="px-3 py-2" />}
             </tr>
@@ -247,7 +280,17 @@ export function PlayersBrowser({
                       ) : (
                         <span className="h-7 w-7 rounded-full bg-muted" />
                       )}
-                      <span className="font-medium">{p.name}</span>
+                      {poolId ? (
+                        <button
+                          type="button"
+                          className="font-medium underline-offset-2 hover:underline"
+                          onClick={() => setDetailPlayer(p)}
+                        >
+                          {p.name}
+                        </button>
+                      ) : (
+                        <span className="font-medium">{p.name}</span>
+                      )}
                       {p.injury_status && (
                         <Badge variant="destructive" className="text-[10px] uppercase">
                           {p.injury_status}
@@ -262,6 +305,16 @@ export function PlayersBrowser({
                   </td>
                   <td className="px-3 py-2">{p.position}</td>
                   <td className="px-3 py-2">{p.nfl_team_abbrev ?? '—'}</td>
+                  {seasonTotals && (
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      {(seasonTotals[p.id]?.totalPts ?? 0).toFixed(1)}
+                    </td>
+                  )}
+                  {seasonTotals && (
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      {(seasonTotals[p.id]?.avgPts ?? 0).toFixed(1)}
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-muted-foreground">
                     {tx
                       ? tx.ownerByPlayer[p.id] ?? 'Free agent'
@@ -271,7 +324,7 @@ export function PlayersBrowser({
                 </tr>
                 {openId === p.id && (
                   <tr className="border-b last:border-0">
-                    <td colSpan={5} className="p-0">
+                    <td colSpan={colCount} className="p-0">
                       {renderPanel(p)}
                     </td>
                   </tr>
@@ -280,7 +333,7 @@ export function PlayersBrowser({
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={tx ? 5 : 4} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={colCount} className="px-3 py-8 text-center text-muted-foreground">
                   No players found.
                 </td>
               </tr>
@@ -295,6 +348,14 @@ export function PlayersBrowser({
             Show more ({filtered.length - limit} remaining)
           </Button>
         </div>
+      )}
+
+      {poolId && (
+        <PlayerDetailSheet
+          poolId={poolId}
+          player={detailPlayer}
+          onClose={() => setDetailPlayer(null)}
+        />
       )}
     </div>
   )

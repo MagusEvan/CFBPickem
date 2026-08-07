@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureFreshPlayerCatalog, ensureFreshFfData, ensureFreshSchedule, currentWeek } from './refresh'
-import { scoreLineup } from './scoring'
+import { computeFantasyPoints, scoreLineup } from './scoring'
 import { optimalLineup } from './bestball'
 import { bestBallSimulatedWeek } from './settings'
 import type {
@@ -163,6 +163,66 @@ export async function getFfWeekStats(
   const byPlayer: Record<string, FFStatLine> = {}
   for (const row of data ?? []) byPlayer[row.player_id] = row.stats as FFStatLine
   return byPlayer
+}
+
+export interface FFSeasonTotals {
+  totalPts: number
+  /** Weeks with a recorded stat line */
+  games: number
+  avgPts: number
+}
+
+/**
+ * Season fantasy-point totals for every player with stats, computed on-read
+ * (points are never stored). Queried per week to stay under the PostgREST
+ * row cap — one week is ~700 stat rows, a season is 10k+.
+ */
+export async function getFfSeasonTotals(
+  seasonYear: number,
+  scoring: FFScoringSettings,
+  throughWeek: number
+): Promise<Map<string, FFSeasonTotals>> {
+  const supabase = await createClient()
+  const weeks = Array.from({ length: Math.max(0, throughWeek) }, (_, i) => i + 1)
+  const results = await Promise.all(
+    weeks.map((week) =>
+      supabase
+        .from('ff_player_stats')
+        .select('player_id, stats')
+        .eq('season_year', seasonYear)
+        .eq('week', week)
+    )
+  )
+
+  const totals = new Map<string, FFSeasonTotals>()
+  for (const res of results) {
+    for (const row of res.data ?? []) {
+      const pts = computeFantasyPoints(row.stats as FFStatLine, scoring)
+      const t = totals.get(row.player_id) ?? { totalPts: 0, games: 0, avgPts: 0 }
+      t.totalPts = Math.round((t.totalPts + pts) * 100) / 100
+      t.games += 1
+      totals.set(row.player_id, t)
+    }
+  }
+  for (const t of totals.values()) {
+    t.avgPts = t.games > 0 ? Math.round((t.totalPts / t.games) * 100) / 100 : 0
+  }
+  return totals
+}
+
+/** One player's weekly stat lines for a season, ascending by week. */
+export async function getFfPlayerGameLog(
+  playerId: string,
+  seasonYear: number
+): Promise<Array<{ week: number; stats: FFStatLine }>> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_player_stats')
+    .select('week, stats')
+    .eq('player_id', playerId)
+    .eq('season_year', seasonYear)
+    .order('week')
+  return (data ?? []).map((row) => ({ week: row.week, stats: row.stats as FFStatLine }))
 }
 
 /** All roster entries for a pool. */

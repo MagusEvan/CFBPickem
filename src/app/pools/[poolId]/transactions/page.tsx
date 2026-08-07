@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
 import { getPool, getPoolMembers } from '@/lib/pools/queries'
-import { getFfTransactions } from '@/lib/ff/queries'
+import { getFfPlayersByIds, getFfTransactions, getFfWaiverClaims } from '@/lib/ff/queries'
 import { Badge } from '@/components/ui/badge'
+import { WaiverResultsCard, type ResolvedClaimRow } from '@/components/ff/waiver-results-card'
 import type { FFTransaction } from '@/lib/ff/types'
 import { GameTime } from '@/components/schedule/game-time'
 
@@ -31,11 +32,31 @@ export default async function TransactionsPage({
   const pool = await getPool(poolId)
   if (!pool || pool.game_type !== 'ff') notFound()
 
-  const [transactions, members] = await Promise.all([
+  const [transactions, members, claims] = await Promise.all([
     getFfTransactions(poolId),
     getPoolMembers(poolId),
+    getFfWaiverClaims(poolId),
   ])
   const nameByMember = new Map(members.map((m) => [m.id, m.profiles.display_name]))
+
+  const resolvedClaims = claims.filter(
+    (c) => c.status === 'won' || c.status === 'lost' || c.status === 'invalid'
+  )
+  const claimPlayers = await getFfPlayersByIds([
+    ...new Set(
+      resolvedClaims.flatMap((c) =>
+        [c.add_player_id, c.drop_player_id].filter((id): id is string => id !== null)
+      )
+    ),
+  ])
+  const waiverResultRows: ResolvedClaimRow[] = resolvedClaims.map((claim) => ({
+    claim,
+    managerName: nameByMember.get(claim.member_id) ?? '—',
+    addName: claimPlayers.get(claim.add_player_id)?.name ?? '—',
+    dropName: claim.drop_player_id
+      ? claimPlayers.get(claim.drop_player_id)?.name ?? null
+      : null,
+  }))
 
   return (
     <div className="space-y-4">
@@ -73,6 +94,8 @@ export default async function TransactionsPage({
           </tbody>
         </table>
       </div>
+
+      <WaiverResultsCard rows={waiverResultRows} />
     </div>
   )
 }
