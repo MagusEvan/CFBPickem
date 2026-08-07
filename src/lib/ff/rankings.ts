@@ -98,46 +98,84 @@ export async function refreshRankingsFromSources(
     fantasypros: fp ? 0 : null,
   }
 
+  // real columns are float4 — compare with a tolerance so storage precision
+  // doesn't mark every row changed on each refresh
+  const floatChanged = (a: number | null, b: number | null) =>
+    (a === null) !== (b === null) || Math.abs((a ?? 0) - (b ?? 0)) > 0.005
+  // timestamptz round-trips in a different ISO format than toISOString()
+  const timeChanged = (a: string | null, b: string | null) =>
+    (a === null) !== (b === null) ||
+    (a !== null && b !== null && new Date(a).getTime() !== new Date(b).getTime())
+
   const changed: FFPlayer[] = []
   for (const p of players) {
     const next = { ...p }
 
+    const espnData = espn
+      ? p.position === 'DST'
+        ? p.nfl_team_id
+          ? espn.dstByTeamId.get(p.nfl_team_id)
+          : undefined
+        : espn.byAthleteId.get(p.id)
+      : undefined
+    const yahooData = yahoo
+      ? p.position === 'DST'
+        ? p.nfl_team_abbrev
+          ? yahoo.dstByTeamAbbrev.get(p.nfl_team_abbrev)
+          : undefined
+        : yahoo.byNamePosition.get(namePositionKey(p.name, p.position))
+      : undefined
+    const sleeperData = sleeper
+      ? p.position === 'DST'
+        ? p.nfl_team_abbrev
+          ? sleeper.dstByTeamAbbrev.get(p.nfl_team_abbrev)
+          : undefined
+        : sleeper.byEspnId.get(p.id) ??
+          sleeper.byNamePosition.get(namePositionKey(p.name, p.position))
+      : undefined
+    const fpData = fp
+      ? p.position === 'DST'
+        ? p.nfl_team_abbrev
+          ? fp.dstByTeamAbbrev.get(p.nfl_team_abbrev)
+          : undefined
+        : fp.byNamePosition.get(namePositionKey(p.name, p.position))
+      : undefined
+
     if (espn) {
-      next.rank_espn =
-        (p.position === 'DST'
-          ? p.nfl_team_id
-            ? espn.dstByTeamId.get(p.nfl_team_id)
-            : undefined
-          : espn.byAthleteId.get(p.id)) ?? null
+      next.rank_espn = espnData?.rank ?? null
       if (next.rank_espn !== null) summary.espn!++
     }
     if (yahoo) {
-      next.rank_yahoo =
-        (p.position === 'DST'
-          ? p.nfl_team_abbrev
-            ? yahoo.dstByTeamAbbrev.get(p.nfl_team_abbrev)
-            : undefined
-          : yahoo.byNamePosition.get(namePositionKey(p.name, p.position))) ?? null
+      next.rank_yahoo = yahooData?.rank ?? null
       if (next.rank_yahoo !== null) summary.yahoo!++
     }
     if (sleeper) {
-      next.rank_sleeper =
-        (p.position === 'DST'
-          ? p.nfl_team_abbrev
-            ? sleeper.dstByTeamAbbrev.get(p.nfl_team_abbrev)
-            : undefined
-          : sleeper.byEspnId.get(p.id) ??
-            sleeper.byNamePosition.get(namePositionKey(p.name, p.position))) ?? null
+      next.rank_sleeper = sleeperData?.rank ?? null
       if (next.rank_sleeper !== null) summary.sleeper!++
     }
     if (fp) {
-      next.rank_fantasypros =
-        (p.position === 'DST'
-          ? p.nfl_team_abbrev
-            ? fp.dstByTeamAbbrev.get(p.nfl_team_abbrev)
-            : undefined
-          : fp.byNamePosition.get(namePositionKey(p.name, p.position))) ?? null
+      next.rank_fantasypros = fpData?.rank ?? null
       if (next.rank_fantasypros !== null) summary.fantasypros!++
+    }
+
+    // Market data, best source first; a failed source leaves columns untouched
+    if (yahoo || espn) next.adp = yahooData?.averagePick ?? espnData?.adp ?? null
+    if (espn || yahoo) {
+      next.auction_value = espnData?.auctionValue ?? yahooData?.averageCost ?? null
+    }
+    if (espn || fp) {
+      next.percent_owned = espnData?.percentOwned ?? fpData?.ownedAvg ?? null
+    }
+    if (espn) next.proj_season_pts = espnData?.projSeasonPts ?? null
+    if (fp) {
+      next.tier = fpData?.tier ?? null
+      next.pos_rank = fpData?.posRank ?? null
+    }
+    if (sleeper) {
+      next.injury_note = sleeperData?.injuryNote ?? null
+      next.depth_chart_position = sleeperData?.depthChartPosition ?? null
+      next.depth_chart_order = sleeperData?.depthChartOrder ?? null
+      next.news_updated = sleeperData?.newsUpdated ?? null
     }
 
     next.rank_composite = compositeRank([
@@ -147,17 +185,22 @@ export async function refreshRankingsFromSources(
       next.rank_fantasypros,
     ])
 
-    // rank_composite is a float4 — compare with a tolerance so storage
-    // precision doesn't mark every row changed on each refresh
-    const compositeChanged =
-      (next.rank_composite === null) !== (p.rank_composite === null) ||
-      Math.abs((next.rank_composite ?? 0) - (p.rank_composite ?? 0)) > 0.005
     if (
       next.rank_espn !== p.rank_espn ||
       next.rank_yahoo !== p.rank_yahoo ||
       next.rank_sleeper !== p.rank_sleeper ||
       next.rank_fantasypros !== p.rank_fantasypros ||
-      compositeChanged
+      floatChanged(next.rank_composite, p.rank_composite) ||
+      floatChanged(next.adp, p.adp) ||
+      floatChanged(next.auction_value, p.auction_value) ||
+      floatChanged(next.percent_owned, p.percent_owned) ||
+      floatChanged(next.proj_season_pts, p.proj_season_pts) ||
+      next.tier !== p.tier ||
+      next.pos_rank !== p.pos_rank ||
+      next.injury_note !== p.injury_note ||
+      next.depth_chart_position !== p.depth_chart_position ||
+      next.depth_chart_order !== p.depth_chart_order ||
+      timeChanged(next.news_updated, p.news_updated)
     ) {
       changed.push(next)
     }

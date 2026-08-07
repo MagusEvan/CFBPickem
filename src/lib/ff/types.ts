@@ -129,6 +129,24 @@ export interface FFPlayer {
   rank_composite: number | null
   /** Manual admin override; wins over rank_composite when set */
   rank_composite_override: number | null
+  /** Average draft position (Yahoo draft_analysis, else ESPN ownership) */
+  adp: number | null
+  /** Average auction price (ESPN, else Yahoo average_cost) */
+  auction_value: number | null
+  /** Rostered percentage across leagues, 0-100 (ESPN, else FantasyPros) */
+  percent_owned: number | null
+  /** ESPN season projection (PPR applied total) */
+  proj_season_pts: number | null
+  /** FantasyPros consensus tier */
+  tier: number | null
+  /** FantasyPros position rank, e.g. "WR12" */
+  pos_rank: string | null
+  /** Sleeper injury note (+ body part) */
+  injury_note: string | null
+  depth_chart_position: string | null
+  /** 1 = depth-chart starter */
+  depth_chart_order: number | null
+  news_updated: string | null
   active: boolean
   fetched_at: string
 }
