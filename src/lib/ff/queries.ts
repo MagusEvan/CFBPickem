@@ -6,6 +6,8 @@ import { optimalLineup } from './bestball'
 import { bestBallSimulatedWeek } from './settings'
 import type {
   FFBestBallSettings,
+  FFDraftPick,
+  FFDraftState,
   FFPlayer,
   FFPosition,
   FFNflGame,
@@ -223,6 +225,28 @@ export async function getFfPlayerGameLog(
     .eq('season_year', seasonYear)
     .order('week')
   return (data ?? []).map((row) => ({ week: row.week, stats: row.stats as FFStatLine }))
+}
+
+/** Draft state row (null before the draft is initialized). */
+export async function getFfDraftState(poolId: string): Promise<FFDraftState | null> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_draft_state')
+    .select('*')
+    .eq('pool_id', poolId)
+    .maybeSingle()
+  return (data as FFDraftState | null) ?? null
+}
+
+/** All draft picks for a pool in pick order. */
+export async function getFfDraftPicks(poolId: string): Promise<FFDraftPick[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_draft_picks')
+    .select('*')
+    .eq('pool_id', poolId)
+    .order('pick_number')
+  return (data ?? []) as FFDraftPick[]
 }
 
 /** All roster entries for a pool. */
