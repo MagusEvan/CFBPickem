@@ -18,7 +18,12 @@ export async function refreshFfRankings(
 
   try {
     const summary = await refreshRankingsFromSources(auth.admin, seasonYear)
+    // Stamp the freshness row shown on /admin/nfl
+    await auth.admin
+      .from('data_refresh')
+      .upsert({ resource: 'ff_rankings', last_refreshed_at: new Date().toISOString() })
     revalidatePath('/admin/nflplayerrankings')
+    revalidatePath('/admin/nfl')
     return { summary }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Ranking refresh failed' }

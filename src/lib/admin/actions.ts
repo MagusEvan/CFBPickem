@@ -21,6 +21,28 @@ export async function updateMaxActivePools(limit: number): Promise<{ error?: str
   return {}
 }
 
+/** Grant or revoke the site-admin flag. Self-demotion is blocked (lockout). */
+export async function setSiteAdmin(
+  userId: string,
+  isAdmin: boolean
+): Promise<{ error?: string }> {
+  const auth = await requireSiteAdmin()
+  if ('error' in auth) return { error: auth.error }
+
+  if (!isAdmin && userId === auth.userId) {
+    return { error: 'You cannot remove your own admin access' }
+  }
+
+  const { error } = await auth.admin
+    .from('profiles')
+    .update({ is_site_admin: isAdmin })
+    .eq('id', userId)
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin/users')
+  return {}
+}
+
 /** Set (or clear with null) a per-user pool-creation limit override. */
 export async function setUserPoolLimit(
   userId: string,

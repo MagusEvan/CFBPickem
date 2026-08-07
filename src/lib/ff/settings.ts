@@ -207,6 +207,11 @@ export function resolveLeagueSettings(
   return parsed.success ? parsed.data : DEFAULT_FF_LEAGUE_SETTINGS
 }
 
+/** NFL season year for "now" (Jan/Feb still belong to the prior season). */
+export function currentNflSeasonYear(now = new Date()): number {
+  return now.getMonth() < 2 ? now.getFullYear() - 1 : now.getFullYear()
+}
+
 /** Simulated week when test mode is active, else null */
 export function bestBallSimulatedWeek(bb: FFBestBallSettings): number | null {
   return bb.test?.simulatedWeek ?? null

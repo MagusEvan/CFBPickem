@@ -1,22 +1,14 @@
-import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import Link from 'next/link'
+import { buttonVariants } from '@/components/ui/button'
+import { ArrowLeft } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { currentNflSeasonYear } from '@/lib/ff/settings'
 import { RankingsTable, type AdminRankRow } from '@/components/admin/rankings-table'
 import type { FFPlayer } from '@/lib/ff/types'
 
+// Site-admin auth is enforced by the /admin layout
 export default async function AdminRankingsPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) notFound()
-
   const admin = createAdminClient()
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_site_admin')
-    .eq('id', user.id)
-    .single()
-  if (!profile?.is_site_admin) notFound()
-
   const { data } = await admin
     .from('ff_players')
     .select('*')
@@ -37,12 +29,14 @@ export default async function AdminRankingsPage() {
     compositeOverride: p.rank_composite_override,
   }))
 
-  // NFL season year (Jan/Feb pages still belong to the prior season)
-  const now = new Date()
-  const seasonYear = now.getMonth() < 2 ? now.getFullYear() - 1 : now.getFullYear()
-
   return (
     <div className="space-y-4">
+      <Link
+        href="/admin"
+        className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}
+      >
+        <ArrowLeft className="mr-1 h-4 w-4" /> Admin
+      </Link>
       <div>
         <h1 className="text-2xl font-bold">Player Rankings</h1>
         <p className="text-muted-foreground">
@@ -51,7 +45,7 @@ export default async function AdminRankingsPage() {
           rank can also be edited by hand.
         </p>
       </div>
-      <RankingsTable players={rows} seasonYear={seasonYear} />
+      <RankingsTable players={rows} seasonYear={currentNflSeasonYear()} />
     </div>
   )
 }

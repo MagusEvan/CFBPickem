@@ -4,8 +4,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { UserLimitEditor } from '@/components/admin/user-limit-editor'
+import { SiteAdminToggle } from '@/components/admin/site-admin-toggle'
 
 export default async function AdminUsersPage({
   searchParams,
@@ -14,6 +16,8 @@ export default async function AdminUsersPage({
 }) {
   const { q } = await searchParams
   const admin = createAdminClient()
+  const supabase = await createClient()
+  const { data: { user: currentUser } } = await supabase.auth.getUser()
 
   let query = admin
     .from('profiles')
@@ -60,6 +64,7 @@ export default async function AdminUsersPage({
                 <th className="px-2 py-2 font-normal">User</th>
                 <th className="px-2 py-2 font-normal">Joined</th>
                 <th className="px-2 py-2 text-center font-normal">Active pools</th>
+                <th className="px-2 py-2 text-right font-normal">Site admin</th>
                 <th className="px-2 py-2 text-right font-normal">Pool limit override</th>
               </tr>
             </thead>
@@ -80,6 +85,13 @@ export default async function AdminUsersPage({
                   </td>
                   <td className="px-2 py-2 text-center tabular-nums">
                     {poolCounts.get(p.id) ?? 0}
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <SiteAdminToggle
+                      userId={p.id}
+                      isAdmin={p.is_site_admin}
+                      isSelf={p.id === currentUser?.id}
+                    />
                   </td>
                   <td className="px-2 py-2">
                     <UserLimitEditor userId={p.id} initialOverride={p.pool_limit_override} />
