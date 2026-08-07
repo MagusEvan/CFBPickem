@@ -86,7 +86,10 @@ function mapCategory(
 
     switch (cat.name) {
       case 'passing': {
+        const [cmp, att] = splitPair(stat(cat, a, 'completions/passingAttempts'))
         add(lines, id, {
+          pass_cmp: cmp,
+          pass_att: att,
           pass_yd: num(stat(cat, a, 'passingYards')),
           pass_td: num(stat(cat, a, 'passingTouchdowns')),
           pass_int: num(stat(cat, a, 'interceptions')),
@@ -95,6 +98,7 @@ function mapCategory(
       }
       case 'rushing': {
         add(lines, id, {
+          rush_att: num(stat(cat, a, 'rushingAttempts')),
           rush_yd: num(stat(cat, a, 'rushingYards')),
           rush_td: num(stat(cat, a, 'rushingTouchdowns')),
         })
@@ -102,6 +106,7 @@ function mapCategory(
       }
       case 'receiving': {
         add(lines, id, {
+          targets: num(stat(cat, a, 'receivingTargets')),
           rec: num(stat(cat, a, 'receptions')),
           rec_yd: num(stat(cat, a, 'receivingYards')),
           rec_td: num(stat(cat, a, 'receivingTouchdowns')),

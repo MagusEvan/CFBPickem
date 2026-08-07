@@ -9,8 +9,15 @@ import {
   getFfWeekStats,
   getFfLineups,
   getFfPlayersByIds,
+  getNflTeamAbbrevs,
   weekGameStartByTeamId,
 } from '@/lib/ff/queries'
+import {
+  formatStatLine,
+  playerGameInfo,
+  weekGamesByTeamId,
+  type PlayerGameInfo,
+} from '@/lib/ff/stat-format'
 import { resolveBestBallSettings, resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import { computeFantasyPoints, scoreLineup } from '@/lib/ff/scoring'
 import { optimalLineup } from '@/lib/ff/bestball'
@@ -73,9 +80,11 @@ export default async function TeamPage({
 
     const rosters = await getFfRosters(poolId)
     const memberRoster = rosters.filter((r) => r.member_id === viewMember.id)
-    const [players, statsByPlayer] = await Promise.all([
+    const [players, statsByPlayer, games, abbrevByTeamId] = await Promise.all([
       getFfPlayersByIds(memberRoster.map((r) => r.player_id)),
       getFfWeekStats(pool.season_year, week),
+      getFfWeekGames(pool.season_year, week),
+      getNflTeamAbbrevs(),
     ])
 
     const lineup = optimalLineup(
@@ -88,6 +97,16 @@ export default async function TeamPage({
       bb
     )
 
+    const gamesByTeam = weekGamesByTeamId(games)
+    const statLineByPlayer: Record<string, string> = {}
+    const gameInfoByPlayer: Record<string, PlayerGameInfo> = {}
+    for (const p of players.values()) {
+      const stats = statsByPlayer[p.id]
+      if (stats) statLineByPlayer[p.id] = formatStatLine(stats, p.position)
+      const info = playerGameInfo(p.nfl_team_id, gamesByTeam, abbrevByTeamId)
+      if (info) gameInfoByPlayer[p.id] = info
+    }
+
     return (
       <BestBallTeam
         poolId={poolId}
@@ -98,6 +117,8 @@ export default async function TeamPage({
         isMyTeam={viewMember.id === myMember.id}
         lineup={lineup}
         playersById={Object.fromEntries(players)}
+        statLineByPlayer={statLineByPlayer}
+        gameInfoByPlayer={gameInfoByPlayer}
       />
     )
   }
@@ -126,10 +147,19 @@ export default async function TeamPage({
   const settings = resolveLeagueSettings(pool)
   const startByTeam = weekGameStartByTeamId(games)
 
+  const abbrevByTeamId = await getNflTeamAbbrevs()
+  const gamesByTeam = weekGamesByTeamId(games)
+
   const pointsByPlayer: Record<string, number> = {}
+  const statLineByPlayer: Record<string, string> = {}
+  const gameInfoByPlayer: Record<string, PlayerGameInfo> = {}
   for (const id of playerIds) {
     const stats = statsByPlayer[id] as FFStatLine | undefined
     pointsByPlayer[id] = stats ? computeFantasyPoints(stats, scoring) : 0
+    const p = players.get(id)
+    if (p && stats) statLineByPlayer[id] = formatStatLine(stats, p.position)
+    const info = p ? playerGameInfo(p.nfl_team_id, gamesByTeam, abbrevByTeamId) : null
+    if (info) gameInfoByPlayer[id] = info
   }
   const lockedPlayerIds = playerIds.filter((id) => {
     const p = players.get(id)
@@ -184,6 +214,8 @@ export default async function TeamPage({
           lockedPlayerIds={lockedPlayerIds}
           settings={settings}
           canEdit={canEdit}
+          statLineByPlayer={statLineByPlayer}
+          gameInfoByPlayer={gameInfoByPlayer}
         />
       </div>
     </div>

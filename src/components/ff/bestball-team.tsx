@@ -5,6 +5,8 @@
 import Link from 'next/link'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PlayerGameContext } from './player-game-context'
+import type { PlayerGameInfo } from '@/lib/ff/stat-format'
 import type { BestBallLineup } from '@/lib/ff/bestball'
 import type { FFPlayer } from '@/lib/ff/types'
 
@@ -17,6 +19,8 @@ export function BestBallTeam({
   isMyTeam,
   lineup,
   playersById,
+  statLineByPlayer = {},
+  gameInfoByPlayer = {},
 }: {
   poolId: string
   week: number
@@ -26,7 +30,21 @@ export function BestBallTeam({
   isMyTeam: boolean
   lineup: BestBallLineup
   playersById: Record<string, FFPlayer>
+  /** Compact box-score line per player id (empty = game not started) */
+  statLineByPlayer?: Record<string, string>
+  /** Opponent/status line per player id */
+  gameInfoByPlayer?: Record<string, PlayerGameInfo>
 }) {
+  const subLine = (playerId: string) =>
+    statLineByPlayer[playerId] ? (
+      <p className="text-[11px] leading-tight text-muted-foreground">
+        {statLineByPlayer[playerId]}
+      </p>
+    ) : gameInfoByPlayer[playerId] ? (
+      <p className="text-[11px] leading-tight text-muted-foreground">
+        <PlayerGameContext info={gameInfoByPlayer[playerId]} />
+      </p>
+    ) : null
   const weekHref = (w: number) =>
     `/pools/${poolId}/team?week=${w}${isMyTeam ? '' : `&member=${memberId}`}`
 
@@ -95,6 +113,7 @@ export function BestBallTeam({
                                 {player.nfl_team_abbrev}
                               </span>
                             )}
+                            {subLine(player.id)}
                           </>
                         ) : (
                           <span className="text-muted-foreground">Empty</span>
@@ -142,6 +161,7 @@ export function BestBallTeam({
                         {p.nfl_team_abbrev && (
                           <span className="ml-1 text-xs">{p.nfl_team_abbrev}</span>
                         )}
+                        {subLine(p.id)}
                       </td>
                       <td className="px-2 py-2 text-right tabular-nums">
                         {(lineup.pointsByPlayer.get(p.id) ?? 0).toFixed(2)}

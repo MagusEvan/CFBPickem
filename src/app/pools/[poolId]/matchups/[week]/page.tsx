@@ -11,7 +11,10 @@ import {
   getFfLineups,
   getFfMatchups,
   getFfPlayersByIds,
+  getNflTeamAbbrevs,
 } from '@/lib/ff/queries'
+import { formatStatLine, playerGameInfo, weekGamesByTeamId } from '@/lib/ff/stat-format'
+import { PlayerGameContext } from '@/components/ff/player-game-context'
 import { resolveBestBallSettings, resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
 import { computeFantasyPoints, isStarterSlot, round2 } from '@/lib/ff/scoring'
 import { optimalLineup } from '@/lib/ff/bestball'
@@ -69,11 +72,13 @@ export default async function MatchupWeekPage({
       ? week - settings.season.playoffStartWeek + 1
       : null
 
-  const [games, statsByPlayer, matchups] = await Promise.all([
+  const [games, statsByPlayer, matchups, abbrevByTeamId] = await Promise.all([
     getFfWeekGames(pool.season_year, week),
     getFfWeekStats(pool.season_year, week),
     getFfMatchups(poolId, week),
+    getNflTeamAbbrevs(),
   ])
+  const gamesByTeam = weekGamesByTeamId(games)
 
   // Lineup rows: stored (ff) or synthesized from each member's optimal lineup
   // (best ball — read-only, derived from rosters)
@@ -251,23 +256,39 @@ export default async function MatchupWeekPage({
                     <div key={side.memberId} className="space-y-1">
                       {starterRows(side.memberId).map((s) => {
                         const p = s.player_id ? players.get(s.player_id) : null
+                        const stats = s.player_id ? statsByPlayer[s.player_id] : undefined
+                        const statLine = p && stats ? formatStatLine(stats, p.position) : ''
+                        const gameInfo = p
+                          ? playerGameInfo(p.nfl_team_id, gamesByTeam, abbrevByTeamId)
+                          : null
                         return (
-                          <div
-                            key={s.id}
-                            className={cn(
-                              'flex items-baseline justify-between gap-2',
-                              i === 1 && 'flex-row-reverse'
-                            )}
-                          >
-                            <span className="min-w-0 truncate">
-                              <span className="mr-1.5 text-xs font-semibold text-muted-foreground">
-                                {s.slot}
+                          <div key={s.id} className="space-y-0">
+                            <div
+                              className={cn(
+                                'flex items-baseline justify-between gap-2',
+                                i === 1 && 'flex-row-reverse'
+                              )}
+                            >
+                              <span className="min-w-0 truncate">
+                                <span className="mr-1.5 text-xs font-semibold text-muted-foreground">
+                                  {s.slot}
+                                </span>
+                                {p ? p.name : <span className="text-muted-foreground">Empty</span>}
                               </span>
-                              {p ? p.name : <span className="text-muted-foreground">Empty</span>}
-                            </span>
-                            <span className="shrink-0 font-mono text-xs tabular-nums">
-                              {pointsFor(s.player_id).toFixed(2)}
-                            </span>
+                              <span className="shrink-0 font-mono text-xs tabular-nums">
+                                {pointsFor(s.player_id).toFixed(2)}
+                              </span>
+                            </div>
+                            {p && (statLine || gameInfo) && (
+                              <p
+                                className={cn(
+                                  'truncate text-[11px] leading-tight text-muted-foreground',
+                                  i === 1 && 'text-right'
+                                )}
+                              >
+                                {statLine || <PlayerGameContext info={gameInfo} />}
+                              </p>
+                            )}
                           </div>
                         )
                       })}

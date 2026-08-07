@@ -122,6 +122,23 @@ export async function getFfWeekGames(seasonYear: number, week: number): Promise<
   return (data ?? []) as FFNflGame[]
 }
 
+/**
+ * team_id -> abbreviation for all 32 NFL teams (via the DST catalog rows,
+ * which exist one per team). Drives opponent labels in game-context lines.
+ */
+export async function getNflTeamAbbrevs(): Promise<Map<string, string>> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('ff_players')
+    .select('nfl_team_id, nfl_team_abbrev')
+    .eq('position', 'DST')
+  const map = new Map<string, string>()
+  for (const row of data ?? []) {
+    if (row.nfl_team_id && row.nfl_team_abbrev) map.set(row.nfl_team_id, row.nfl_team_abbrev)
+  }
+  return map
+}
+
 /** team_id -> game start_time for a week's games (lock checks). */
 export function weekGameStartByTeamId(games: FFNflGame[]): Map<string, string> {
   const map = new Map<string, string>()

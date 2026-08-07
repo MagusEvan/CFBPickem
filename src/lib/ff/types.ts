@@ -151,13 +151,17 @@ export interface FFNflGame {
 
 /** Canonical stat keys produced by the NFL stat-map */
 export interface FFStatLine {
+  pass_cmp?: number
+  pass_att?: number
   pass_yd?: number
   pass_td?: number
   pass_int?: number
   pass_2pt?: number
+  rush_att?: number
   rush_yd?: number
   rush_td?: number
   rush_2pt?: number
+  targets?: number
   rec?: number
   rec_yd?: number
   rec_td?: number

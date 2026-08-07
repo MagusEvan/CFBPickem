@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { swapFfLineupSlots } from '@/lib/ff/actions'
 import { eligiblePositionsForSlot } from '@/lib/ff/roster'
 import { isStarterSlot } from '@/lib/ff/scoring'
+import { PlayerGameContext } from './player-game-context'
+import type { PlayerGameInfo } from '@/lib/ff/stat-format'
 import type { FFLineupSlot, FFPlayer, FFLeagueSettings } from '@/lib/ff/types'
 
 /**
@@ -23,6 +25,8 @@ export function LineupEditor({
   lockedPlayerIds,
   settings,
   canEdit,
+  statLineByPlayer = {},
+  gameInfoByPlayer = {},
 }: {
   poolId: string
   slots: FFLineupSlot[]
@@ -31,6 +35,10 @@ export function LineupEditor({
   lockedPlayerIds: string[]
   settings: FFLeagueSettings
   canEdit: boolean
+  /** Compact box-score line per player id (empty = game not started) */
+  statLineByPlayer?: Record<string, string>
+  /** Opponent/status line per player id */
+  gameInfoByPlayer?: Record<string, PlayerGameInfo>
 }) {
   const router = useRouter()
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -111,12 +119,21 @@ export function LineupEditor({
                 className="h-8 w-8 rounded-full object-cover"
               />
             )}
-            <span className="min-w-0 flex-1 truncate">
-              <span className="font-medium">{player.name}</span>{' '}
-              <span className="text-xs text-muted-foreground">
-                {player.position} · {player.nfl_team_abbrev ?? 'FA'}
-                {player.injury_status && ` · ${player.injury_status}`}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">
+                <span className="font-medium">{player.name}</span>{' '}
+                <span className="text-xs text-muted-foreground">
+                  {player.position} · {player.nfl_team_abbrev ?? 'FA'}
+                  {player.injury_status && ` · ${player.injury_status}`}
+                </span>
               </span>
+              {(statLineByPlayer[player.id] || gameInfoByPlayer[player.id]) && (
+                <span className="block truncate text-[11px] leading-tight text-muted-foreground">
+                  {statLineByPlayer[player.id] || (
+                    <PlayerGameContext info={gameInfoByPlayer[player.id] ?? null} />
+                  )}
+                </span>
+              )}
             </span>
             {isLocked && <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
             <span className="w-14 shrink-0 text-right font-mono text-sm tabular-nums">
