@@ -81,7 +81,7 @@ export function PlayersBrowser({
 
   const visible = filtered.slice(0, limit)
 
-  const colCount = 4 + (seasonTotals ? 2 : 0) + (tx ? 1 : 0)
+  const colCount = 6 + (seasonTotals ? 2 : 0) + (tx ? 1 : 0)
 
   const sortHeader = (key: 'totalPts' | 'avgPts', label: string) => (
     <th className="px-3 py-2 text-right font-medium">
@@ -258,6 +258,8 @@ export function PlayersBrowser({
               <th className="px-3 py-2 font-medium">Team</th>
               {seasonTotals && sortHeader('totalPts', 'Pts')}
               {seasonTotals && sortHeader('avgPts', 'Avg')}
+              <th className="hidden px-3 py-2 text-right font-medium sm:table-cell">%Rost</th>
+              <th className="hidden px-3 py-2 text-right font-medium sm:table-cell">Proj</th>
               <th className="px-3 py-2 font-medium">{tx ? 'Manager' : 'Status'}</th>
               {tx && <th className="px-3 py-2" />}
             </tr>
@@ -315,6 +317,12 @@ export function PlayersBrowser({
                       {(seasonTotals[p.id]?.avgPts ?? 0).toFixed(1)}
                     </td>
                   )}
+                  <td className="hidden px-3 py-2 text-right font-mono tabular-nums text-muted-foreground sm:table-cell">
+                    {p.percent_owned !== null ? `${p.percent_owned.toFixed(1)}%` : '—'}
+                  </td>
+                  <td className="hidden px-3 py-2 text-right font-mono tabular-nums text-muted-foreground sm:table-cell">
+                    {p.proj_season_pts !== null ? p.proj_season_pts.toFixed(0) : '—'}
+                  </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {tx
                       ? tx.ownerByPlayer[p.id] ?? 'Free agent'

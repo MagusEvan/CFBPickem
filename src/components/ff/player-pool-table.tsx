@@ -19,6 +19,7 @@ export function PlayerPoolTable({
   onPick,
   actionLabel = 'Draft',
   pendingLabel = 'Drafting…',
+  showAuctionValues = false,
 }: {
   players: FFPlayer[]
   /** team_id -> regular-season bye week */
@@ -29,15 +30,20 @@ export function PlayerPoolTable({
   onPick: (player: FFPlayer) => void
   actionLabel?: string
   pendingLabel?: string
+  /** Auction drafts: show average auction value next to each player */
+  showAuctionValues?: boolean
 }) {
   const [search, setSearch] = useState('')
   const [position, setPosition] = useState<FFPosition | 'ALL'>('ALL')
   const [showDrafted, setShowDrafted] = useState(false)
+  const [sortByAdp, setSortByAdp] = useState(false)
   const [limit, setLimit] = useState(PAGE_SIZE)
+
+  const hasAdp = useMemo(() => players.some((p) => p.adp !== null), [players])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return players.filter(
+    const matches = players.filter(
       (p) =>
         (showDrafted || !draftedIds.has(p.id)) &&
         (position === 'ALL' || p.position === position) &&
@@ -45,7 +51,12 @@ export function PlayerPoolTable({
           p.name.toLowerCase().includes(q) ||
           (p.nfl_team_abbrev ?? '').toLowerCase().includes(q))
     )
-  }, [players, draftedIds, search, position, showDrafted])
+    if (sortByAdp) {
+      const inf = Number.POSITIVE_INFINITY
+      return [...matches].sort((a, b) => (a.adp ?? inf) - (b.adp ?? inf))
+    }
+    return matches // already sorted by default_rank from the server
+  }, [players, draftedIds, search, position, showDrafted, sortByAdp])
 
   const visible = filtered.slice(0, limit)
 
@@ -74,14 +85,26 @@ export function PlayerPoolTable({
               {pos === 'ALL' ? 'All' : pos}
             </Button>
           ))}
-          <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={showDrafted}
-              onChange={(e) => setShowDrafted(e.target.checked)}
-            />
-            Show drafted
-          </label>
+          <div className="ml-auto flex items-center gap-3">
+            {hasAdp && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={sortByAdp}
+                  onChange={(e) => setSortByAdp(e.target.checked)}
+                />
+                Sort by ADP
+              </label>
+            )}
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={showDrafted}
+                onChange={(e) => setShowDrafted(e.target.checked)}
+              />
+              Show drafted
+            </label>
+          </div>
         </div>
       </div>
 
@@ -95,6 +118,11 @@ export function PlayerPoolTable({
                 <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="px-3 py-1.5">
                     <div className="flex items-center gap-2">
+                      {p.default_rank !== null && (
+                        <span className="w-8 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                          {p.default_rank}
+                        </span>
+                      )}
                       {p.headshot_url ? (
                         <Image
                           src={p.headshot_url}
@@ -107,18 +135,31 @@ export function PlayerPoolTable({
                       ) : (
                         <span className="h-6 w-6 rounded-full bg-muted" />
                       )}
-                      <span className={drafted ? 'text-muted-foreground line-through' : 'font-medium'}>
-                        {p.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {p.position} · {p.nfl_team_abbrev ?? 'FA'}
-                        {bye != null && ` · Bye ${bye}`}
-                      </span>
-                      {p.injury_status && (
-                        <Badge variant="destructive" className="text-[10px] uppercase">
-                          {p.injury_status}
-                        </Badge>
-                      )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={drafted ? 'text-muted-foreground line-through' : 'font-medium'}>
+                            {p.name}
+                          </span>
+                          {p.tier !== null && (
+                            <Badge variant="outline" className="px-1 text-[10px]">
+                              T{p.tier}
+                            </Badge>
+                          )}
+                          {p.injury_status && (
+                            <Badge variant="destructive" className="text-[10px] uppercase">
+                              {p.injury_status}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="block text-xs text-muted-foreground">
+                          {p.pos_rank ?? p.position} · {p.nfl_team_abbrev ?? 'FA'}
+                          {bye != null && ` · Bye ${bye}`}
+                          {p.adp !== null && ` · ADP ${p.adp.toFixed(1)}`}
+                          {showAuctionValues &&
+                            p.auction_value !== null &&
+                            ` · $${Math.round(p.auction_value)}`}
+                        </span>
+                      </div>
                     </div>
                   </td>
                   <td className="px-3 py-1.5 text-right">

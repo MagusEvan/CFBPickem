@@ -370,6 +370,7 @@ export function FfDraftRoom({
                 players={players}
                 byeWeeks={byeWeeks}
                 draftedIds={draftedIds}
+                showAuctionValues
                 canPick={(isMyNomination || (isAdmin && !paused)) && !lotOpen && !paused}
                 pendingPlayerId={pendingPlayerId}
                 onPick={handleNominate}

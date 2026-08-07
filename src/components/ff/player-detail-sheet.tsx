@@ -87,6 +87,19 @@ export function PlayerDetailSheet({
               </DialogTitle>
             </DialogHeader>
 
+            {(player.injury_note || player.depth_chart_position) && (
+              <p className="text-sm text-muted-foreground">
+                {player.depth_chart_position && (
+                  <>
+                    Depth: {player.depth_chart_position}
+                    {player.depth_chart_order !== null && ` #${player.depth_chart_order}`}
+                    {player.injury_note && ' · '}
+                  </>
+                )}
+                {player.injury_note}
+              </p>
+            )}
+
             {error && <p className="text-sm text-destructive">{error}</p>}
             {!detail && !error && (
               <div className="flex justify-center py-8">
