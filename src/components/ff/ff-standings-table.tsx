@@ -7,11 +7,14 @@ export function FfStandingsTable({
   standings,
   nameByMember,
   playoffTeams,
+  streakByMember,
 }: {
   poolId: string
   standings: FFStanding[]
   nameByMember: Map<string, string>
   playoffTeams: number
+  /** memberId -> formatted streak ("W3"); omit to hide the column */
+  streakByMember?: Map<string, string | null>
 }) {
   return (
     <table className="w-full text-sm">
@@ -22,6 +25,7 @@ export function FfStandingsTable({
           <th className="px-2 py-2 text-center">W</th>
           <th className="px-2 py-2 text-center">L</th>
           <th className="px-2 py-2 text-center">T</th>
+          {streakByMember && <th className="px-2 py-2 text-center">Strk</th>}
           <th className="px-2 py-2 text-right">PF</th>
           <th className="px-2 py-2 text-right">PA</th>
         </tr>
@@ -48,6 +52,11 @@ export function FfStandingsTable({
             <td className="px-2 py-2 text-center">{s.wins}</td>
             <td className="px-2 py-2 text-center">{s.losses}</td>
             <td className="px-2 py-2 text-center">{s.ties}</td>
+            {streakByMember && (
+              <td className="px-2 py-2 text-center text-muted-foreground">
+                {streakByMember.get(s.memberId) ?? '—'}
+              </td>
+            )}
             <td className="px-2 py-2 text-right font-mono tabular-nums">{s.pointsFor.toFixed(2)}</td>
             <td className="px-2 py-2 text-right font-mono tabular-nums">{s.pointsAgainst.toFixed(2)}</td>
           </tr>

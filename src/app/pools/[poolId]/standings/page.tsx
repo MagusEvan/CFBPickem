@@ -15,7 +15,7 @@ import { PlayoffBracket, type BracketRound } from '@/components/ff/playoff-brack
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBestBallCurrentWeek, getBestBallWeekScores, getFfCurrentWeek, getFfLineups, getFfMatchups, getFfWeekScores } from '@/lib/ff/queries'
 import { resolveBestBallSettings, resolveLeagueSettings, resolveScoringSettings } from '@/lib/ff/settings'
-import { computeStandings, type FFMatchupResult } from '@/lib/ff/standings'
+import { computeStandings, currentStreak, type FFMatchupResult } from '@/lib/ff/standings'
 import { ensurePlayoffs, playoffChampion, type PlayoffScoreProvider } from '@/lib/ff/playoff-processing'
 import { pairingWinner, playoffRoundName, playoffRoundsCount } from '@/lib/ff/playoffs'
 import { isFfFamily } from '@/lib/games/registry'
@@ -419,6 +419,18 @@ async function FfStandings({
   )
   const championName = championId ? nameByMember.get(championId) ?? null : null
 
+  const streakByMember = new Map(
+    members.map((m) => [m.id, currentStreak(results, m.id)])
+  )
+
+  // Weekly high scores from the already-fetched regular-season week scores
+  const weeklyHighs = weekScores
+    .filter((ws) => ws.final && ws.week <= throughWeek && ws.scoreByMember.size > 0)
+    .map((ws) => {
+      const [memberId, score] = [...ws.scoreByMember.entries()].sort((a, b) => b[1] - a[1])[0]
+      return { week: ws.week, name: nameByMember.get(memberId) ?? '—', score }
+    })
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
@@ -437,12 +449,34 @@ async function FfStandings({
             standings={standings}
             nameByMember={nameByMember}
             playoffTeams={settings.season.playoffTeams}
+            streakByMember={streakByMember}
           />
           <p className="mt-3 text-xs text-muted-foreground">
             Top {settings.season.playoffTeams} make the playoffs (dashed line). Ties broken by points for.
           </p>
         </CardContent>
       </Card>
+
+      {weeklyHighs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Weekly High Scores</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+              {weeklyHighs.map((h) => (
+                <li key={h.week} className="flex items-baseline justify-between gap-2">
+                  <span className="text-muted-foreground">Week {h.week}</span>
+                  <span>
+                    <span className="font-medium">{h.name}</span>{' '}
+                    <span className="font-mono text-xs tabular-nums">{h.score.toFixed(2)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

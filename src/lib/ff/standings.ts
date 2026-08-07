@@ -71,3 +71,24 @@ export function computeStandings(
 export function playoffSeeds(standings: FFStanding[], playoffTeams: number): string[] {
   return standings.slice(0, playoffTeams).map((s) => s.memberId)
 }
+
+/**
+ * Current run of consecutive same-outcome results, e.g. "W3" / "L1" / "T2".
+ * Byes and non-final weeks are skipped; null = no completed games.
+ */
+export function currentStreak(results: FFMatchupResult[], memberId: string): string | null {
+  const outcomes: Array<'W' | 'L' | 'T'> = []
+  for (const r of [...results].sort((a, b) => a.week - b.week)) {
+    if (!r.final || r.awayMemberId === null) continue
+    let mine: number, theirs: number
+    if (r.homeMemberId === memberId) [mine, theirs] = [r.homeScore, r.awayScore]
+    else if (r.awayMemberId === memberId) [mine, theirs] = [r.awayScore, r.homeScore]
+    else continue
+    outcomes.push(mine > theirs ? 'W' : mine < theirs ? 'L' : 'T')
+  }
+  if (outcomes.length === 0) return null
+  const last = outcomes[outcomes.length - 1]
+  let len = 0
+  for (let i = outcomes.length - 1; i >= 0 && outcomes[i] === last; i--) len++
+  return `${last}${len}`
+}
