@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useDraftRealtime } from '@/hooks/use-draft-realtime'
-import { startDraft, makePick, resetDraft, undoPick, generateWcScraps, setProjectionVisibility, refreshProjectedWins } from '@/lib/draft/actions'
+import { startDraft, makePick, resetDraft, undoPick, generateWcScraps, setProjectionVisibility } from '@/lib/draft/actions'
 import { generateSnakeOrder, getPickInfo, getAvailableConferences } from '@/lib/draft/engine'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -62,13 +62,20 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
     setSubmitting(true)
     setError(null)
     try {
-      const result = await refreshProjectedWins(pool.id)
-      if (result.unmatched.length > 0) {
+      const res = await fetch('/api/data/win-totals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ poolId: pool.id }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error ?? 'Failed to refresh projections')
+      if (result.unmatched?.length > 0) {
         setError(`Updated ${result.updated} teams; unmatched: ${result.unmatched.join(', ')}`)
       }
-      const res = await fetch(`/api/data/teams?year=${pool.season_year}`)
-      if (res.ok) {
-        const teams: CachedTeam[] = await res.json()
+      // Refetch teams to pick up new projected_wins values
+      const teamsRes = await fetch(`/api/data/teams?year=${pool.season_year}`)
+      if (teamsRes.ok) {
+        const teams: CachedTeam[] = await teamsRes.json()
         setAllTeams(teams.filter((t) => t.conference_key && (pool.conferences ?? []).includes(t.conference_key)))
       }
     } catch (err) {
