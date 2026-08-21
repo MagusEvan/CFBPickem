@@ -44,11 +44,8 @@ export async function GET(request: NextRequest) {
       ? await provider.getTeamsByConference(conferenceKey, year)
       : await provider.getAllFbsTeams(year)
 
-    // Upsert into cache. projected_wins is ingested separately, so carry the
-    // cached value through rather than dropping it from the response.
-    const projByTeamId = new Map(
-      (cached ?? []).map((t) => [t.id, t.projected_wins ?? null])
-    )
+    // Upsert into cache. Omit projected_wins — it's ingested separately
+    // via the win-totals route and should never be overwritten here.
     const rows = teams.map((t) => ({
       id: t.id,
       name: t.name,
@@ -59,14 +56,20 @@ export async function GET(request: NextRequest) {
       color_secondary: t.colorSecondary,
       season_year: year,
       fetched_at: new Date().toISOString(),
-      projected_wins: projByTeamId.get(t.id) ?? null,
     }))
 
     if (rows.length > 0) {
       await admin.from('cached_teams').upsert(rows, { onConflict: 'id,season_year' })
     }
 
-    return NextResponse.json(rows, {
+    // Re-read from DB so the response includes projected_wins
+    const { data: fresh } = await admin
+      .from('cached_teams')
+      .select('*')
+      .eq('season_year', year)
+      .in('id', rows.map((r) => r.id))
+
+    return NextResponse.json(fresh ?? rows, {
       headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=3600' },
     })
   } catch (err) {
