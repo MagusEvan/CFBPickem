@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useDraftRealtime } from '@/hooks/use-draft-realtime'
-import { startDraft, makePick, resetDraft, undoPick, generateWcScraps } from '@/lib/draft/actions'
+import { startDraft, makePick, resetDraft, undoPick, generateWcScraps, setProjectionVisibility, refreshProjectedWins } from '@/lib/draft/actions'
 import { generateSnakeOrder, getPickInfo, getAvailableConferences } from '@/lib/draft/engine'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,6 +43,39 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
 
   // Use realtime pool status, falling back to server-rendered prop
   const draftStatus = poolStatus ?? pool.draft_status
+
+  // Projected win totals: admins always see them; everyone else only while
+  // the admin has flipped the live toggle (broadcast via draft_state realtime)
+  const projectionsBroadcast = draftState?.show_projections ?? false
+  const showProjections = !isWorldCup && ((pool.admin_id === currentUserId) || projectionsBroadcast)
+
+  async function handleToggleProjections() {
+    setError(null)
+    try {
+      await setProjectionVisibility(pool.id, !projectionsBroadcast)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to toggle projections')
+    }
+  }
+
+  async function handleRefreshProjections() {
+    setSubmitting(true)
+    setError(null)
+    try {
+      const result = await refreshProjectedWins(pool.id)
+      if (result.unmatched.length > 0) {
+        setError(`Updated ${result.updated} teams; unmatched: ${result.unmatched.join(', ')}`)
+      }
+      const res = await fetch(`/api/data/teams?year=${pool.season_year}`)
+      if (res.ok) {
+        const teams: CachedTeam[] = await res.json()
+        setAllTeams(teams.filter((t) => t.conference_key && (pool.conferences ?? []).includes(t.conference_key)))
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh projections')
+    }
+    setSubmitting(false)
+  }
 
   // Fetch WC scraps teams when draft is completed
   useEffect(() => {
@@ -90,6 +123,10 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   }, [draftState?.current_pick_number])
 
   const draftedTeamIds = useMemo(() => new Set(picks.map((p) => p.team_id)), [picks])
+  const projByTeamId = useMemo(
+    () => new Map(allTeams.map((t) => [t.id, t.projected_wins])),
+    [allTeams]
+  )
   const isMyTurn = draftState?.current_member_id === currentMember?.id
   const currentPicker = members.find((m) => m.id === draftState?.current_member_id)
   // Admin can pick on behalf of the current picker after enabling proxy mode
@@ -289,6 +326,20 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
                 {submitting && <Spinner className="mr-2" />}
                 Reset Draft
               </Button>
+              {!isWorldCup && (
+                <>
+                  <Button variant="outline" size="sm" onClick={handleRefreshProjections} disabled={submitting}>
+                    Refresh Projections
+                  </Button>
+                  <Button
+                    variant={projectionsBroadcast ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={handleToggleProjections}
+                  >
+                    {projectionsBroadcast ? 'Projections: Visible to All' : 'Projections: Only You'}
+                  </Button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -296,7 +347,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
         {isWorldCup ? (
           <WcDraftBoard picks={picks} members={members} numRounds={pool.teams_per_manager ?? 1} />
         ) : (
-          <DraftBoard picks={picks} members={members} conferences={conferences} />
+          <DraftBoard picks={picks} members={members} conferences={conferences} showProjections={showProjections} projByTeamId={projByTeamId} />
         )}
         {wcScraps.length > 0 && (
           <WcScrapsBoard scraps={wcScraps} />
@@ -335,6 +386,20 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
               {submitting && <Spinner className="mr-2" />}
               Reset
             </Button>
+            {!isWorldCup && (
+              <>
+                <Button variant="outline" size="sm" onClick={handleRefreshProjections} disabled={submitting}>
+                  Refresh Projections
+                </Button>
+                <Button
+                  variant={projectionsBroadcast ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={handleToggleProjections}
+                >
+                  {projectionsBroadcast ? 'Projections: Visible to All' : 'Projections: Only You'}
+                </Button>
+              </>
+            )}
           </>
         )}
       </div>
@@ -400,6 +465,11 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
                 {!isWorldCup && (
                   <p className="text-sm text-muted-foreground">
                     {pendingPick.wins}-{pendingPick.losses}
+                  </p>
+                )}
+                {showProjections && pendingPick.projected_wins != null && (
+                  <p className="text-sm font-medium text-primary">
+                    Proj: {pendingPick.projected_wins} wins
                   </p>
                 )}
               </div>
@@ -498,6 +568,11 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
                     <p className="font-medium">{team.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {team.wins}-{team.losses}
+                      {showProjections && team.projected_wins != null && (
+                        <span className="ml-2 font-medium text-primary">
+                          Proj: {team.projected_wins}
+                        </span>
+                      )}
                     </p>
                   </div>
                 </CardContent>
@@ -513,7 +588,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
       {isWorldCup ? (
         <WcDraftBoard picks={picks} members={members} numRounds={pool.teams_per_manager ?? 1} />
       ) : (
-        <DraftBoard picks={picks} members={members} conferences={conferences} />
+        <DraftBoard picks={picks} members={members} conferences={conferences} showProjections={showProjections} projByTeamId={projByTeamId} />
       )}
     </div>
   )
@@ -524,10 +599,14 @@ function DraftBoard({
   picks,
   members,
   conferences,
+  showProjections,
+  projByTeamId,
 }: {
-  picks: { pick_number: number; member_id: string | null; team_name: string; conference_key: string; is_bonus_pick: boolean }[]
+  picks: { pick_number: number; member_id: string | null; team_id: string; team_name: string; conference_key: string; is_bonus_pick: boolean }[]
   members: (PoolMember & { profiles: Profile })[]
   conferences: string[]
+  showProjections: boolean
+  projByTeamId: Map<string, number | null>
 }) {
   const memberPickMap = new Map<string, typeof picks>()
   const memberNameMap = new Map<string, string>()
@@ -612,6 +691,9 @@ function DraftBoard({
                 <th className="px-2 py-2 text-left font-medium text-muted-foreground">Manager</th>
                 <th className="px-2 py-2 text-left font-medium text-muted-foreground">Team</th>
                 <th className="px-2 py-2 text-left font-medium text-muted-foreground">Conference</th>
+                {showProjections && (
+                  <th className="px-2 py-2 text-right font-medium text-muted-foreground">Proj W</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -631,6 +713,11 @@ function DraftBoard({
                       {CONFERENCE_LABELS[pick.conference_key] ?? pick.conference_key}
                     </span>
                   </td>
+                  {showProjections && (
+                    <td className="px-2 py-2 text-right font-medium text-primary">
+                      {projByTeamId.get(pick.team_id) ?? '—'}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

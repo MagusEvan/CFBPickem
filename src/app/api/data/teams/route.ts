@@ -44,7 +44,11 @@ export async function GET(request: NextRequest) {
       ? await provider.getTeamsByConference(conferenceKey, year)
       : await provider.getAllFbsTeams(year)
 
-    // Upsert into cache
+    // Upsert into cache. projected_wins is ingested separately, so carry the
+    // cached value through rather than dropping it from the response.
+    const projByTeamId = new Map(
+      (cached ?? []).map((t) => [t.id, t.projected_wins ?? null])
+    )
     const rows = teams.map((t) => ({
       id: t.id,
       name: t.name,
@@ -55,6 +59,7 @@ export async function GET(request: NextRequest) {
       color_secondary: t.colorSecondary,
       season_year: year,
       fetched_at: new Date().toISOString(),
+      projected_wins: projByTeamId.get(t.id) ?? null,
     }))
 
     if (rows.length > 0) {

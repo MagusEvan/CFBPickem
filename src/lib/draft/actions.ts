@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { generateSnakeOrder, getPickInfo, validatePick, validateWorldCupPick, checkPac12Depletion, calculateTeamScraps, calculateWcScrapsTeams } from './engine'
 import type { Pool, PoolMember, DraftPick, DraftState, CachedTeam } from '@/lib/types'
 import { getGame } from '@/lib/games/registry'
+import { fetchCfbWinTotals, matchWinTotals } from '@/lib/data-providers/vegasinsider/win-totals'
 
 export async function startDraft(poolId: string) {
   const supabase = await createClient()
@@ -324,6 +325,72 @@ export async function makePick(
   await advanceDraftState(admin, pool, state, poolId)
 
   return { success: true }
+}
+
+export async function setProjectionVisibility(poolId: string, visible: boolean) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { data: pool } = await supabase
+    .from('pools')
+    .select('admin_id')
+    .eq('id', poolId)
+    .single() as { data: { admin_id: string } | null }
+
+  if (!pool) throw new Error('Pool not found')
+  if (pool.admin_id !== user.id) throw new Error('Only the admin can toggle projections')
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('draft_state')
+    .update({ show_projections: visible, updated_at: new Date().toISOString() })
+    .eq('pool_id', poolId)
+  if (error) throw new Error(error.message)
+
+  return { success: true }
+}
+
+export async function refreshProjectedWins(poolId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { data: pool } = await supabase
+    .from('pools')
+    .select('admin_id, season_year, game_type')
+    .eq('id', poolId)
+    .single() as { data: Pick<Pool, 'admin_id' | 'season_year' | 'game_type'> | null }
+
+  if (!pool) throw new Error('Pool not found')
+  if (pool.admin_id !== user.id) throw new Error('Only the admin can refresh projections')
+  if (pool.game_type !== 'cfb') throw new Error('Projected wins are only available for CFB pools')
+
+  const admin = createAdminClient()
+  const { data: teams } = await admin
+    .from('cached_teams')
+    .select('id, name')
+    .eq('season_year', pool.season_year)
+    .eq('game_type', 'cfb') as { data: { id: string; name: string }[] | null }
+
+  if (!teams || teams.length === 0) throw new Error('No cached teams for this season — open the draft first')
+
+  const entries = await fetchCfbWinTotals()
+  const { byTeamName, unmatched } = matchWinTotals(entries, teams.map((t) => t.name))
+
+  await Promise.all(
+    teams
+      .filter((t) => byTeamName.has(t.name))
+      .map((t) =>
+        admin
+          .from('cached_teams')
+          .update({ projected_wins: byTeamName.get(t.name)! })
+          .eq('id', t.id)
+          .eq('season_year', pool.season_year)
+      )
+  )
+
+  return { success: true, updated: byTeamName.size, unmatched }
 }
 
 async function advanceDraftState(

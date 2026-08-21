@@ -95,6 +95,7 @@ export interface DraftState {
   current_member_id: string | null
   conference_key: string | null
   pac12_ind_depleted: boolean
+  show_projections: boolean
   updated_at: string
 }
 
@@ -128,6 +129,7 @@ export interface CachedTeam {
   season_year: number
   wins: number
   losses: number
+  projected_wins: number | null
   game_type: GameType
   fetched_at: string
 }
