@@ -41,20 +41,31 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   const router = useRouter()
 
   const isWorldCup = pool.game_type === 'world_cup'
+  const isAdmin = pool.admin_id === currentUserId
 
   // Use realtime pool status, falling back to server-rendered prop
   const draftStatus = poolStatus ?? pool.draft_status
 
-  // Projected win totals: admins always see them; everyone else only while
-  // the admin has flipped the live toggle (broadcast via draft_state realtime)
-  const projectionsBroadcast = draftState?.show_projections ?? false
-  const showProjections = !isWorldCup && ((pool.admin_id === currentUserId) || projectionsBroadcast)
+  // Projected win totals: admin always sees them via local state; the toggle
+  // only controls broadcasting to other drafters via draft_state realtime.
+  const [broadcastingProjections, setBroadcastingProjections] = useState(
+    draftState?.show_projections ?? false
+  )
+  // Keep local state in sync with realtime updates (e.g. page reload)
+  useEffect(() => {
+    setBroadcastingProjections(draftState?.show_projections ?? false)
+  }, [draftState?.show_projections])
+
+  const showProjections = !isWorldCup && (isAdmin || broadcastingProjections)
 
   async function handleToggleProjections() {
+    const newValue = !broadcastingProjections
+    setBroadcastingProjections(newValue) // optimistic update
     setError(null)
     try {
-      await setProjectionVisibility(pool.id, !projectionsBroadcast)
+      await setProjectionVisibility(pool.id, newValue)
     } catch (err) {
+      setBroadcastingProjections(!newValue) // rollback
       setError(err instanceof Error ? err.message : 'Failed to toggle projections')
     }
   }
@@ -115,7 +126,6 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   }, [isWorldCup, draftStatus, pool.id])
 
   const currentMember = members.find((m) => m.user_id === currentUserId)
-  const isAdmin = pool.admin_id === currentUserId
   const conferences = (pool.conferences ?? []) as string[]
 
   // Fetch all teams on mount
@@ -355,11 +365,11 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
                     Refresh Projections
                   </Button>
                   <Button
-                    variant={projectionsBroadcast ? 'default' : 'outline'}
+                    variant={broadcastingProjections ? 'default' : 'outline'}
                     size="sm"
                     onClick={handleToggleProjections}
                   >
-                    {projectionsBroadcast ? 'Projections: Visible to All' : 'Projections: Only You'}
+                    {broadcastingProjections ? 'Projections: Visible to All' : 'Projections: Only You'}
                   </Button>
                 </>
               )}
@@ -416,11 +426,11 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
                     {refreshingProjections ? 'Fetching odds...' : 'Refresh Projections'}
                   </Button>
                 <Button
-                  variant={projectionsBroadcast ? 'default' : 'outline'}
+                  variant={broadcastingProjections ? 'default' : 'outline'}
                   size="sm"
                   onClick={handleToggleProjections}
                 >
-                  {projectionsBroadcast ? 'Projections: Visible to All' : 'Projections: Only You'}
+                  {broadcastingProjections ? 'Projections: Visible to All' : 'Projections: Only You'}
                 </Button>
               </>
             )}
