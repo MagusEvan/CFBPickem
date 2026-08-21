@@ -530,8 +530,10 @@ function DraftBoard({
   conferences: string[]
 }) {
   const memberPickMap = new Map<string, typeof picks>()
+  const memberNameMap = new Map<string, string>()
   for (const member of members) {
     memberPickMap.set(member.id, [])
+    memberNameMap.set(member.id, member.profiles.display_name)
   }
   for (const pick of picks) {
     if (pick.member_id && memberPickMap.has(pick.member_id)) {
@@ -539,11 +541,13 @@ function DraftBoard({
     }
   }
 
+  const sequentialPicks = [...picks].sort((a, b) => a.pick_number - b.pick_number)
+
   return (
-    <div>
-      <h2 className="mb-3 text-lg font-semibold">Draft Board</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+    <div className="relative left-1/2 w-[min(100vw-2rem,80rem)] -translate-x-1/2 space-y-6">
+      <div>
+        <h2 className="mb-3 text-lg font-semibold">Draft Board</h2>
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b">
               <th className="px-2 py-2 text-left font-medium text-muted-foreground">Manager</th>
@@ -551,7 +555,7 @@ function DraftBoard({
                 <th key={conf} className="px-2 py-2 text-center font-medium text-muted-foreground">
                   <span className="flex flex-col items-center gap-1">
                     <ConferenceLogo conferenceKey={conf} size={24} />
-                    <span className="whitespace-nowrap">{CONFERENCE_LABELS[conf] ?? conf}</span>
+                    <span>{CONFERENCE_LABELS[conf] ?? conf}</span>
                   </span>
                 </th>
               ))}
@@ -564,7 +568,7 @@ function DraftBoard({
                 const memberPicks = memberPickMap.get(member.id) ?? []
                 return (
                   <tr key={member.id} className="border-b">
-                    <td className="px-2 py-2 font-medium whitespace-nowrap">
+                    <td className="px-2 py-2 font-medium">
                       {member.profiles.display_name}
                     </td>
                     {conferences.map((conf) => {
@@ -595,6 +599,42 @@ function DraftBoard({
           </tbody>
         </table>
       </div>
+
+      {sequentialPicks.length > 0 && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold">Pick History</h2>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="px-2 py-2 text-left font-medium text-muted-foreground">Pick</th>
+                <th className="px-2 py-2 text-left font-medium text-muted-foreground">Manager</th>
+                <th className="px-2 py-2 text-left font-medium text-muted-foreground">Team</th>
+                <th className="px-2 py-2 text-left font-medium text-muted-foreground">Conference</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sequentialPicks.map((pick) => (
+                <tr key={pick.pick_number} className="border-b">
+                  <td className="px-2 py-2 text-muted-foreground">{pick.pick_number}</td>
+                  <td className="px-2 py-2 font-medium">
+                    {pick.member_id ? memberNameMap.get(pick.member_id) ?? '—' : '—'}
+                  </td>
+                  <td className="px-2 py-2">
+                    {pick.team_name}
+                    {pick.is_bonus_pick && ' *'}
+                  </td>
+                  <td className="px-2 py-2">
+                    <span className="flex items-center gap-2">
+                      <ConferenceLogo conferenceKey={pick.conference_key} size={20} />
+                      {CONFERENCE_LABELS[pick.conference_key] ?? pick.conference_key}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
