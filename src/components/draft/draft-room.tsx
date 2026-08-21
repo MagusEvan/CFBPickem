@@ -544,10 +544,11 @@ function DraftBoard({
   const sequentialPicks = [...picks].sort((a, b) => a.pick_number - b.pick_number)
 
   return (
-    <div className="relative left-1/2 w-[min(100vw-2rem,80rem)] -translate-x-1/2 space-y-6">
+    <div className="space-y-6 lg:relative lg:left-1/2 lg:w-[min(100vw-2rem,80rem)] lg:-translate-x-1/2">
       <div>
         <h2 className="mb-3 text-lg font-semibold">Draft Board</h2>
-        <table className="w-full table-fixed text-sm">
+        <div className="overflow-x-auto lg:overflow-x-visible">
+          <table className="w-full min-w-[56rem] text-sm lg:min-w-0 lg:table-fixed">
           <thead>
             <tr className="border-b">
               <th className="px-2 py-2 text-left font-medium text-muted-foreground">Manager</th>
@@ -597,7 +598,8 @@ function DraftBoard({
                 )
               })}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {sequentialPicks.length > 0 && (
