@@ -138,7 +138,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
           setAllTeams(teams)
         }
       } else {
-        const res = await fetch(`/api/data/teams?year=${pool.season_year}`)
+        const res = await fetch(`/api/data/teams?year=${pool.season_year}&_t=${Date.now()}`)
         if (res.ok) {
           const teams: CachedTeam[] = await res.json()
           setAllTeams(teams.filter((t) => t.conference_key && conferences.includes(t.conference_key)))
