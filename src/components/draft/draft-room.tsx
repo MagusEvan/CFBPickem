@@ -37,6 +37,7 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   const [wcScraps, setWcScraps] = useState<WcScrapsTeam[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refreshingProjections, setRefreshingProjections] = useState(false)
   const router = useRouter()
 
   const isWorldCup = pool.game_type === 'world_cup'
@@ -59,18 +60,29 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
   }
 
   async function handleRefreshProjections() {
-    setSubmitting(true)
+    setRefreshingProjections(true)
     setError(null)
     try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 20000)
       const res = await fetch('/api/data/win-totals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ poolId: pool.id }),
+        signal: controller.signal,
       })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error ?? 'Failed to refresh projections')
-      if (result.unmatched?.length > 0) {
+      clearTimeout(timeout)
+      let result: { updated?: number; unmatched?: string[]; error?: string }
+      try {
+        result = await res.json()
+      } catch {
+        throw new Error(`Server returned ${res.status} (non-JSON response)`)
+      }
+      if (!res.ok) throw new Error(result.error ?? `Server returned ${res.status}`)
+      if (result.unmatched?.length) {
         setError(`Updated ${result.updated} teams; unmatched: ${result.unmatched.join(', ')}`)
+      } else {
+        setError(`Loaded projections for ${result.updated} teams`)
       }
       // Refetch teams to pick up new projected_wins values
       const teamsRes = await fetch(`/api/data/teams?year=${pool.season_year}`)
@@ -79,9 +91,13 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
         setAllTeams(teams.filter((t) => t.conference_key && (pool.conferences ?? []).includes(t.conference_key)))
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh projections')
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setError('Projections request timed out — VegasInsider may be slow or blocking')
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to refresh projections')
+      }
     }
-    setSubmitting(false)
+    setRefreshingProjections(false)
   }
 
   // Fetch WC scraps teams when draft is completed
@@ -395,9 +411,10 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
             </Button>
             {!isWorldCup && (
               <>
-                <Button variant="outline" size="sm" onClick={handleRefreshProjections} disabled={submitting}>
-                  Refresh Projections
-                </Button>
+                <Button variant="outline" size="sm" onClick={handleRefreshProjections} disabled={refreshingProjections}>
+                    {refreshingProjections && <Spinner className="mr-2" />}
+                    {refreshingProjections ? 'Fetching odds...' : 'Refresh Projections'}
+                  </Button>
                 <Button
                   variant={projectionsBroadcast ? 'default' : 'outline'}
                   size="sm"
