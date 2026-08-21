@@ -84,8 +84,8 @@ export function DraftRoom({ pool, members, currentUserId }: DraftRoomProps) {
       } else {
         setError(`Loaded projections for ${result.updated} teams`)
       }
-      // Refetch teams to pick up new projected_wins values
-      const teamsRes = await fetch(`/api/data/teams?year=${pool.season_year}`)
+      // Refetch teams to pick up new projected_wins values (cache-bust)
+      const teamsRes = await fetch(`/api/data/teams?year=${pool.season_year}&_t=${Date.now()}`)
       if (teamsRes.ok) {
         const teams: CachedTeam[] = await teamsRes.json()
         setAllTeams(teams.filter((t) => t.conference_key && (pool.conferences ?? []).includes(t.conference_key)))
