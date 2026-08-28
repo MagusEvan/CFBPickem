@@ -52,13 +52,12 @@ export default async function PoolDashboard({
     .maybeSingle()
   const isFinalized = championship !== null
 
-  // Once the draft is done the season is in-flight — land on standings by
-  // default (?view=details reaches this page). PGA drafts are per-tournament,
-  // and FF-family pools keep this page as a real hub (league nav + This Week).
+  // PGA pools redirect to standings after draft since they don't have
+  // a persistent home page. CFB/WC/FF pools now have tabbed navigation
+  // so the home page is always a valid destination.
   if (
     pool.draft_status === 'completed' &&
-    pool.game_type !== 'pga' &&
-    !isFfFamily(pool.game_type) &&
+    pool.game_type === 'pga' &&
     view !== 'details'
   ) {
     redirect(`/pools/${poolId}/standings`)

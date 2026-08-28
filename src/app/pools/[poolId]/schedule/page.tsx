@@ -1,9 +1,7 @@
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
-import Link from 'next/link'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
-import { buttonVariants } from '@/components/ui/button'
 import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
 import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
@@ -78,9 +76,6 @@ export default async function SchedulePage({
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Schedule</h1>
-        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
-          &lt; Return to Pool
-        </Link>
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             Schedule will be available after the draft is complete.
@@ -183,9 +178,39 @@ export default async function SchedulePage({
     )
   }
 
-  // CFB schedule (existing logic)
-  const selectedWeek = Number(weekParam) || 1
+  // CFB schedule — auto-detect current week if none specified
   const weeks = Array.from({ length: 15 }, (_, i) => i + 1)
+  let selectedWeek = Number(weekParam) || 0
+
+  if (!selectedWeek) {
+    // Find the latest week with completed/in-progress games, or the next
+    // week with upcoming games (closest to now)
+    const { data: weekRows } = await supabase
+      .from('cached_games')
+      .select('week, status, start_time')
+      .eq('season_year', pool.season_year)
+      .eq('game_type', 'cfb')
+
+    const rows = (weekRows ?? []) as { week: number; status: string; start_time: string | null }[]
+    const now = new Date()
+
+    // Find weeks with active/completed games
+    const activeWeeks = new Set(
+      rows.filter((g) => g.status === 'final' || g.status === 'in_progress').map((g) => g.week)
+    )
+    if (activeWeeks.size > 0) {
+      selectedWeek = Math.max(...activeWeeks)
+    } else {
+      // No games played yet — find the week with games starting soonest
+      const upcoming = rows.filter((g) => g.start_time && new Date(g.start_time) >= now)
+      if (upcoming.length > 0) {
+        upcoming.sort((a, b) => new Date(a.start_time!).getTime() - new Date(b.start_time!).getTime())
+        selectedWeek = upcoming[0].week
+      } else {
+        selectedWeek = 1
+      }
+    }
+  }
 
   const { data: gamesData } = await supabase
     .from('cached_games')
@@ -211,16 +236,11 @@ export default async function SchedulePage({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Schedule</h1>
-        <ScheduleHeader lastFetchedAt={cfbLastFetched} />
-      </div>
-      <div className="flex items-center gap-3">
-        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
-          &lt; Return to Pool
-        </Link>
         <MyTeamsToggle />
       </div>
+      <ScheduleHeader lastFetchedAt={cfbLastFetched} />
 
       <div className="flex flex-wrap gap-2">
         {weeks.map((w) => (
@@ -381,16 +401,11 @@ async function WorldCupSchedule({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Schedule</h1>
-        <ScheduleHeader lastFetchedAt={wcLastFetched} />
-      </div>
-      <div className="flex items-center gap-3">
-        <Link href={`/pools/${poolId}?view=details`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
-          &lt; Return to Pool
-        </Link>
         <MyTeamsToggle />
       </div>
+      <ScheduleHeader lastFetchedAt={wcLastFetched} />
 
       {/* Stage selector */}
       <div className="flex flex-wrap gap-2">

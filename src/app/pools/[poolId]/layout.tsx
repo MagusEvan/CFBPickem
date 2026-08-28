@@ -18,30 +18,48 @@ export default async function PoolLayout({
   const { poolId } = await params
   const pool = await getPool(poolId)
 
-  if (!pool || !isFfFamily(pool.game_type)) return <>{children}</>
+  if (!pool) return <>{children}</>
 
   const base = `/pools/${pool.id}`
   const drafted = pool.draft_status === 'completed'
-  const isBestBall = pool.game_type === 'ff_bestball'
-  const showMatchups = !isBestBall || resolveBestBallSettings(pool).format === 'h2h'
-  const showTrades =
-    !isBestBall && drafted && resolveLeagueSettings(pool).trades.enabled
 
-  const tabs: LeagueNavTab[] = [
-    { href: base, label: 'Home' },
-    ...(drafted ? [{ href: `${base}/team`, label: 'My Team' }] : []),
-    ...(drafted && showMatchups ? [{ href: `${base}/matchups`, label: 'Matchups' }] : []),
-    ...(drafted ? [{ href: `${base}/standings`, label: 'Standings' }] : []),
-    { href: `${base}/players`, label: 'Players' },
-    ...(!isBestBall && drafted ? [{ href: `${base}/transactions`, label: 'Transactions' }] : []),
-    ...(showTrades ? [{ href: `${base}/trades`, label: 'Trades' }] : []),
-    {
-      href: `${base}/draft`,
-      label: 'Draft',
-      live: pool.draft_status === 'in_progress',
-    },
-    { href: `${base}/settings`, label: 'Settings' },
-  ]
+  let tabs: LeagueNavTab[]
+
+  if (isFfFamily(pool.game_type)) {
+    const isBestBall = pool.game_type === 'ff_bestball'
+    const showMatchups = !isBestBall || resolveBestBallSettings(pool).format === 'h2h'
+    const showTrades =
+      !isBestBall && drafted && resolveLeagueSettings(pool).trades.enabled
+
+    tabs = [
+      { href: base, label: 'Home' },
+      ...(drafted ? [{ href: `${base}/team`, label: 'My Team' }] : []),
+      ...(drafted && showMatchups ? [{ href: `${base}/matchups`, label: 'Matchups' }] : []),
+      ...(drafted ? [{ href: `${base}/standings`, label: 'Standings' }] : []),
+      { href: `${base}/players`, label: 'Players' },
+      ...(!isBestBall && drafted ? [{ href: `${base}/transactions`, label: 'Transactions' }] : []),
+      ...(showTrades ? [{ href: `${base}/trades`, label: 'Trades' }] : []),
+      {
+        href: `${base}/draft`,
+        label: 'Draft',
+        live: pool.draft_status === 'in_progress',
+      },
+      { href: `${base}/settings`, label: 'Settings' },
+    ]
+  } else {
+    // CFB, World Cup, PGA
+    tabs = [
+      { href: base, label: 'Home' },
+      ...(drafted ? [{ href: `${base}/standings`, label: 'Standings' }] : []),
+      ...(drafted ? [{ href: `${base}/schedule`, label: 'Schedule' }] : []),
+      {
+        href: `${base}/draft`,
+        label: 'Draft',
+        live: pool.draft_status === 'in_progress',
+      },
+      { href: `${base}/settings`, label: 'Settings' },
+    ]
+  }
 
   return (
     <>
