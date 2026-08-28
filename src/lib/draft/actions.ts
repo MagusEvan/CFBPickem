@@ -493,7 +493,8 @@ async function finalizeTeamScraps(
   }))
 
   if (rows.length > 0) {
-    await admin.from('team_scraps').upsert(rows, { onConflict: 'pool_id,conference_key' })
+    await admin.from('team_scraps').delete().eq('pool_id', poolId)
+    await admin.from('team_scraps').insert(rows)
   }
 }
 
