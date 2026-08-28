@@ -536,7 +536,7 @@ function GameCard({
   const awayRound = teamToRound.get(game.away_team_id)
 
   return (
-    <Card data-mine={isMine}>
+    <Card className={isMine ? 'border-primary/40 bg-primary/5' : ''}>
       <CardContent className="py-3">
         {game.start_time && (
           <div className="mb-2 text-center text-xs text-muted-foreground">
@@ -677,16 +677,18 @@ function WcGameCard({
     </>
   )
 
+  const mineClass = isMine ? 'border-primary/40 bg-primary/5' : ''
+
   if (!hasBreakdown) {
     return (
-      <Card data-mine={isMine}>
+      <Card className={mineClass}>
         <CardContent className="py-3">{gameContent}</CardContent>
       </Card>
     )
   }
 
   return (
-    <Card data-mine={isMine}>
+    <Card className={mineClass}>
       <CardContent className="py-3">
         <details>
           <summary className="cursor-pointer list-none">{gameContent}</summary>
