@@ -9,7 +9,7 @@ interface CfbdTeam {
   abbreviation: string
   conference: string | null
   color: string | null
-  alt_color: string | null
+  alternateColor: string | null
   logos: string[] | null
 }
 
@@ -17,14 +17,14 @@ interface CfbdGame {
   id: number
   season: number
   week: number
-  home_team: string
-  away_team: string
-  home_id: number
-  away_id: number
-  home_points: number | null
-  away_points: number | null
+  homeTeam: string
+  awayTeam: string
+  homeId: number
+  awayId: number
+  homePoints: number | null
+  awayPoints: number | null
   completed: boolean
-  start_date: string
+  startDate: string
   venue: string | null
 }
 
@@ -42,7 +42,7 @@ export function adaptTeam(team: CfbdTeam, conferenceKey: string): CfbTeam {
     conferenceKey,
     logoUrl: team.logos?.[0] ?? null,
     colorPrimary: team.color ? `#${team.color.replace('#', '')}` : null,
-    colorSecondary: team.alt_color ? `#${team.alt_color.replace('#', '')}` : null,
+    colorSecondary: team.alternateColor ? `#${team.alternateColor.replace('#', '')}` : null,
   }
 }
 
@@ -52,18 +52,18 @@ export function adaptGame(game: CfbdGame): CfbGame {
     week: game.week,
     seasonYear: game.season,
     homeTeam: {
-      id: String(game.home_id),
-      name: game.home_team,
-      score: game.home_points,
+      id: String(game.homeId),
+      name: game.homeTeam,
+      score: game.homePoints,
     },
     awayTeam: {
-      id: String(game.away_id),
-      name: game.away_team,
-      score: game.away_points,
+      id: String(game.awayId),
+      name: game.awayTeam,
+      score: game.awayPoints,
     },
     status: game.completed ? 'final' : 'scheduled',
     statusDetail: null,
-    startTime: game.start_date,
+    startTime: game.startDate,
     venue: game.venue,
     broadcasts: [],
   }
