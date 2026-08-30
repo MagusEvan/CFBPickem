@@ -555,7 +555,7 @@ function GameCard({
               <Image src={awayTeam.logo_url} alt="" width={24} height={24} className="h-6 w-6 object-contain" />
             )}
             <div>
-              <span className="font-medium">{awayTeam?.name ?? game.away_team_id}</span>
+              <span className="font-medium">{awayTeam?.name ?? game.away_team_name ?? game.away_team_id}</span>
               {awayRound && <span className="ml-1 text-xs text-muted-foreground">(r{awayRound})</span>}
               {awayManager && (
                 <span className="ml-1 text-xs text-muted-foreground">— {awayManager}</span>
@@ -571,7 +571,7 @@ function GameCard({
               <Image src={homeTeam.logo_url} alt="" width={24} height={24} className="h-6 w-6 object-contain" />
             )}
             <div>
-              <span className="font-medium">{homeTeam?.name ?? game.home_team_id}</span>
+              <span className="font-medium">{homeTeam?.name ?? game.home_team_name ?? game.home_team_id}</span>
               {homeRound && <span className="ml-1 text-xs text-muted-foreground">(r{homeRound})</span>}
               {homeManager && (
                 <span className="ml-1 text-xs text-muted-foreground">— {homeManager}</span>
@@ -639,7 +639,7 @@ function WcGameCard({
             <Image src={homeTeam.logo_url} alt="" width={24} height={24} className="h-6 w-6 object-contain" />
           )}
           <div>
-            <span className="font-medium">{homeTeam?.name ?? game.home_team_id}</span>
+            <span className="font-medium">{homeTeam?.name ?? game.home_team_name ?? game.home_team_id}</span>
             {homeRound && <span className="ml-1 text-xs text-muted-foreground">(r{homeRound})</span>}
             {homeManager && (
               <span className="ml-1 text-xs text-muted-foreground">— {homeManager}</span>
@@ -662,7 +662,7 @@ function WcGameCard({
             <Image src={awayTeam.logo_url} alt="" width={24} height={24} className="h-6 w-6 object-contain" />
           )}
           <div>
-            <span className="font-medium">{awayTeam?.name ?? game.away_team_id}</span>
+            <span className="font-medium">{awayTeam?.name ?? game.away_team_name ?? game.away_team_id}</span>
             {awayRound && <span className="ml-1 text-xs text-muted-foreground">(r{awayRound})</span>}
             {awayManager && (
               <span className="ml-1 text-xs text-muted-foreground">— {awayManager}</span>
@@ -696,7 +696,7 @@ function WcGameCard({
             {homeBreakdown && homeManager && (
               <ScoreBreakdownRow
                 managerName={homeManager}
-                teamName={homeTeam?.name ?? game.home_team_id}
+                teamName={homeTeam?.name ?? game.home_team_name ?? game.home_team_id}
                 round={homeRound}
                 breakdown={homeBreakdown}
               />
@@ -704,7 +704,7 @@ function WcGameCard({
             {awayBreakdown && awayManager && (
               <ScoreBreakdownRow
                 managerName={awayManager}
-                teamName={awayTeam?.name ?? game.away_team_id}
+                teamName={awayTeam?.name ?? game.away_team_name ?? game.away_team_id}
                 round={awayRound}
                 breakdown={awayBreakdown}
               />

@@ -147,6 +147,8 @@ export interface CachedGame {
   week: number | null
   home_team_id: string
   away_team_id: string
+  home_team_name: string | null
+  away_team_name: string | null
   home_score: number | null
   away_score: number | null
   status: 'scheduled' | 'in_progress' | 'final'
