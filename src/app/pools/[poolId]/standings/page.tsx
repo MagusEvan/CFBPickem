@@ -176,10 +176,17 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   const standings = calculateStandings(members, picks, teams, pool.scoring_strategy)
   const teamMap = new Map(teams.map((t) => [t.id, t]))
 
-  const scrapsTotal = scraps.reduce((sum, s) => {
-    const team = teamMap.get(s.team_id)
-    return sum + (team?.wins ?? s.wins)
-  }, 0)
+  const scrapsWins = scraps.reduce((sum, s) => sum + (teamMap.get(s.team_id)?.wins ?? s.wins), 0)
+  const scrapsLosses = scraps.reduce((sum, s) => sum + (teamMap.get(s.team_id)?.losses ?? 0), 0)
+
+  type CfbStandingEntry =
+    | { type: 'manager'; memberId: string; displayName: string; totalWins: number; totalLosses: number; totalPoints: number }
+    | { type: 'scraps'; displayName: string; totalWins: number; totalLosses: number; totalPoints: number }
+
+  const combined: CfbStandingEntry[] = [
+    ...standings.map((s) => ({ type: 'manager' as const, ...s })),
+    ...(scraps.length > 0 ? [{ type: 'scraps' as const, displayName: 'Team Scraps', totalWins: scrapsWins, totalLosses: scrapsLosses, totalPoints: scrapsWins }] : []),
+  ].sort((a, b) => b.totalPoints - a.totalPoints)
 
   return (
     <div className="space-y-6">
@@ -204,29 +211,30 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
               </tr>
             </thead>
             <tbody>
-              {standings.map((s, i) => (
-                <tr key={s.memberId} className="border-b">
-                  <td className="px-2 py-2 font-medium">{i + 1}</td>
-                  <td className="px-2 py-2">
-                    <Link
-                      href={`/pools/${poolId}/rosters/${s.memberId}`}
-                      className="text-primary underline-offset-2 hover:underline"
-                    >
-                      {s.displayName}
-                    </Link>
-                  </td>
-                  <td className="px-2 py-2 text-center">{s.totalWins}</td>
-                  <td className="px-2 py-2 text-center">{s.totalLosses}</td>
-                  <td className="px-2 py-2 text-center font-bold">{s.totalPoints}</td>
-                </tr>
-              ))}
-              <tr className="border-b bg-muted/30">
-                <td className="px-2 py-2 text-muted-foreground">—</td>
-                <td className="px-2 py-2 text-muted-foreground italic">Team Scraps</td>
-                <td className="px-2 py-2 text-center text-muted-foreground">{scrapsTotal}</td>
-                <td className="px-2 py-2 text-center text-muted-foreground">—</td>
-                <td className="px-2 py-2 text-center font-bold text-muted-foreground">{scrapsTotal}</td>
-              </tr>
+              {combined.map((s, i) => {
+                const isScraps = s.type === 'scraps'
+                const key = isScraps ? 'scraps' : s.memberId
+                return (
+                  <tr key={key} className={`border-b ${isScraps ? 'bg-muted/30' : ''}`}>
+                    <td className={`px-2 py-2 font-medium ${isScraps ? 'text-muted-foreground' : ''}`}>{i + 1}</td>
+                    <td className={`px-2 py-2 ${isScraps ? 'text-muted-foreground italic' : ''}`}>
+                      {s.type === 'manager' ? (
+                        <Link
+                          href={`/pools/${poolId}/rosters/${s.memberId}`}
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          {s.displayName}
+                        </Link>
+                      ) : (
+                        s.displayName
+                      )}
+                    </td>
+                    <td className={`px-2 py-2 text-center ${isScraps ? 'text-muted-foreground' : ''}`}>{s.totalWins}</td>
+                    <td className={`px-2 py-2 text-center ${isScraps ? 'text-muted-foreground' : ''}`}>{s.totalLosses}</td>
+                    <td className={`px-2 py-2 text-center font-bold ${isScraps ? 'text-muted-foreground' : ''}`}>{s.totalPoints}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </CardContent>
