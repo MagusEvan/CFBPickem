@@ -73,11 +73,12 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
   const { getDataProvider } = await import('@/lib/data-providers')
   const provider = getDataProvider()
 
-  // Fetch all 15 weeks in parallel
+  // Fetch all 15 weeks and team records in parallel
   const weeks = Array.from({ length: 15 }, (_, i) => i + 1)
-  const allGames = await Promise.all(
-    weeks.map((week) => provider.getGamesForWeek(seasonYear, week))
-  )
+  const [allGames, records] = await Promise.all([
+    Promise.all(weeks.map((week) => provider.getGamesForWeek(seasonYear, week))),
+    provider.getTeamRecords(seasonYear),
+  ])
 
   const now = new Date().toISOString()
   const rows = allGames.flat().map((g) => ({
@@ -99,6 +100,27 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
   if (rows.length > 0) {
     const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
     if (error) throw new Error(`DB upsert failed: ${error.message}`)
+  }
+
+  // Update team win/loss records — only for teams we have cached
+  if (records.length > 0) {
+    const { data: cachedTeams } = await admin
+      .from('cached_teams')
+      .select('id')
+      .eq('season_year', seasonYear)
+      .eq('game_type', 'cfb')
+    const cachedIds = new Set((cachedTeams ?? []).map((t) => t.id))
+    const relevant = records.filter((r) => cachedIds.has(r.teamId))
+
+    await Promise.all(
+      relevant.map((rec) =>
+        admin
+          .from('cached_teams')
+          .update({ wins: rec.wins, losses: rec.losses })
+          .eq('id', rec.teamId)
+          .eq('season_year', seasonYear)
+      )
+    )
   }
 }
 
