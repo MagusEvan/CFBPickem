@@ -10,6 +10,7 @@ import { getBroadcastForLocale } from '@/lib/broadcasts'
 import { GameTime } from '@/components/schedule/game-time'
 import { ScheduleHeader } from '@/components/schedule/refresh-schedule'
 import { MyTeamsToggle } from '@/components/schedule/my-teams-toggle'
+import { OnlineDot } from '@/components/online-dot'
 import { ensureFreshGames } from '@/lib/data-refresh'
 
 export const revalidate = 60
@@ -104,15 +105,17 @@ export default async function SchedulePage({
   const teams = (teamsRes.data ?? []) as CachedTeam[]
   const wcScraps = (wcScrapsRes.data ?? []) as WcScrapsTeam[]
 
-  // Build lookups: team_id -> manager name, team_id -> draft round
+  // Build lookups: team_id -> manager name, team_id -> draft round, team_id -> last_active_at
   const teamToManager = new Map<string, string>()
   const teamToRound = new Map<string, number>()
+  const teamToLastActive = new Map<string, string | null>()
   for (const pick of picks) {
     teamToRound.set(pick.team_id, pick.round)
     if (pick.member_id) {
       const member = members.find((m) => m.id === pick.member_id)
       if (member) {
         teamToManager.set(pick.team_id, member.profiles.display_name)
+        teamToLastActive.set(pick.team_id, member.profiles.last_active_at)
       }
     }
   }
@@ -169,6 +172,7 @@ export default async function SchedulePage({
         teamMap={teamMap}
         teamToManager={teamToManager}
         teamToRound={teamToRound}
+        teamToLastActive={teamToLastActive}
         draftedTeamIds={draftedTeamIds}
         selectedStage={stageParam || defaultStage}
         scoringConfig={pool.scoring_config ?? DEFAULT_WC_SCORING}
@@ -281,6 +285,7 @@ export default async function SchedulePage({
                       teamMap={teamMap}
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
+                      teamToLastActive={teamToLastActive}
                       isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
                   ))}
@@ -299,6 +304,7 @@ export default async function SchedulePage({
                       teamMap={teamMap}
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
+                      teamToLastActive={teamToLastActive}
                       isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
                   ))}
@@ -319,6 +325,7 @@ export default async function SchedulePage({
                       teamMap={teamMap}
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
+                      teamToLastActive={teamToLastActive}
                       isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
                   ))}
@@ -346,6 +353,7 @@ async function WorldCupSchedule({
   teamMap,
   teamToManager,
   teamToRound,
+  teamToLastActive,
   draftedTeamIds,
   selectedStage,
   scoringConfig,
@@ -357,6 +365,7 @@ async function WorldCupSchedule({
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
   teamToRound: Map<string, number>
+  teamToLastActive: Map<string, string | null>
   draftedTeamIds: Set<string>
   selectedStage: string
   scoringConfig: WorldCupScoringConfig
@@ -453,6 +462,7 @@ async function WorldCupSchedule({
                       teamMap={teamMap}
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
+                      teamToLastActive={teamToLastActive}
                       scoringConfig={scoringConfig}
                       isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
@@ -472,6 +482,7 @@ async function WorldCupSchedule({
                       teamMap={teamMap}
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
+                      teamToLastActive={teamToLastActive}
                       scoringConfig={scoringConfig}
                       isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
@@ -493,6 +504,7 @@ async function WorldCupSchedule({
                       teamMap={teamMap}
                       teamToManager={teamToManager}
                       teamToRound={teamToRound}
+                      teamToLastActive={teamToLastActive}
                       scoringConfig={scoringConfig}
                       isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
                     />
@@ -520,12 +532,14 @@ function GameCard({
   teamMap,
   teamToManager,
   teamToRound,
+  teamToLastActive,
   isMine,
 }: {
   game: CachedGame
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
   teamToRound: Map<string, number>
+  teamToLastActive: Map<string, string | null>
   isMine: boolean
 }) {
   const homeTeam = teamMap.get(game.home_team_id)
@@ -558,7 +572,7 @@ function GameCard({
               <span className="font-medium">{awayTeam?.name ?? game.away_team_name ?? game.away_team_id}</span>
               {awayRound && <span className="ml-1 text-xs text-muted-foreground">(r{awayRound})</span>}
               {awayManager && (
-                <span className="ml-1 text-xs text-muted-foreground">— {awayManager}</span>
+                <span className="ml-1 text-xs text-muted-foreground">— {awayManager}<OnlineDot lastActiveAt={teamToLastActive.get(game.away_team_id)} /></span>
               )}
             </div>
           </div>
@@ -574,7 +588,7 @@ function GameCard({
               <span className="font-medium">{homeTeam?.name ?? game.home_team_name ?? game.home_team_id}</span>
               {homeRound && <span className="ml-1 text-xs text-muted-foreground">(r{homeRound})</span>}
               {homeManager && (
-                <span className="ml-1 text-xs text-muted-foreground">— {homeManager}</span>
+                <span className="ml-1 text-xs text-muted-foreground">— {homeManager}<OnlineDot lastActiveAt={teamToLastActive.get(game.home_team_id)} /></span>
               )}
             </div>
           </div>
@@ -593,6 +607,7 @@ function WcGameCard({
   teamMap,
   teamToManager,
   teamToRound,
+  teamToLastActive,
   scoringConfig,
   isMine,
 }: {
@@ -600,6 +615,7 @@ function WcGameCard({
   teamMap: Map<string, CachedTeam>
   teamToManager: Map<string, string>
   teamToRound: Map<string, number>
+  teamToLastActive: Map<string, string | null>
   scoringConfig: WorldCupScoringConfig
   isMine: boolean
 }) {
@@ -642,7 +658,7 @@ function WcGameCard({
             <span className="font-medium">{homeTeam?.name ?? game.home_team_name ?? game.home_team_id}</span>
             {homeRound && <span className="ml-1 text-xs text-muted-foreground">(r{homeRound})</span>}
             {homeManager && (
-              <span className="ml-1 text-xs text-muted-foreground">— {homeManager}</span>
+              <span className="ml-1 text-xs text-muted-foreground">— {homeManager}<OnlineDot lastActiveAt={teamToLastActive.get(game.home_team_id)} /></span>
             )}
           </div>
         </div>
@@ -665,7 +681,7 @@ function WcGameCard({
             <span className="font-medium">{awayTeam?.name ?? game.away_team_name ?? game.away_team_id}</span>
             {awayRound && <span className="ml-1 text-xs text-muted-foreground">(r{awayRound})</span>}
             {awayManager && (
-              <span className="ml-1 text-xs text-muted-foreground">— {awayManager}</span>
+              <span className="ml-1 text-xs text-muted-foreground">— {awayManager}<OnlineDot lastActiveAt={teamToLastActive.get(game.away_team_id)} /></span>
             )}
           </div>
         </div>
