@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import type { Pool, PoolMember, Profile, CachedTeam, WcScrapsTeam } from '@/lib/types'
 import { ConferenceLogo } from '@/components/conference-logo'
+import { OnlineDot } from '@/components/online-dot'
 
 const CONFERENCE_LABELS: Record<string, string> = {
   ACC: 'ACC', B12: 'Big 12', B1G: 'Big Ten', SEC: 'SEC',
@@ -683,7 +684,7 @@ function DraftBoard({
                 return (
                   <tr key={member.id} className="border-b">
                     <td className="px-2 py-2 font-medium">
-                      {member.profiles.display_name}
+                      {member.profiles.display_name}<OnlineDot lastActiveAt={member.profiles.last_active_at} />
                     </td>
                     {conferences.map((conf) => {
                       const pick = memberPicks.find((p) => p.conference_key === conf && !p.is_bonus_pick)
@@ -807,7 +808,7 @@ function WcDraftBoard({
                 return (
                   <tr key={member.id} className="border-b">
                     <td className="px-2 py-2 font-medium whitespace-nowrap">
-                      {member.profiles.display_name}
+                      {member.profiles.display_name}<OnlineDot lastActiveAt={member.profiles.last_active_at} />
                     </td>
                     {rounds.map((r) => {
                       const pick = memberPicks.find((p) => p.round === r)

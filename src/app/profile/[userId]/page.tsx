@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { getGame, isGameType } from '@/lib/games/registry'
 import type { ChampionshipRow } from '@/lib/pools/championship-actions'
+import { OnlineDot } from '@/components/online-dot'
 
 export const revalidate = 300
 
@@ -23,7 +24,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userId
 
   const admin = createAdminClient()
   const [profileRes, championshipsRes, membershipsRes] = await Promise.all([
-    admin.from('profiles').select('id,display_name,created_at').eq('id', userId).maybeSingle(),
+    admin.from('profiles').select('id,display_name,created_at,last_active_at').eq('id', userId).maybeSingle(),
     admin
       .from('pool_championships')
       .select('pool_id,game_type,season_year,finalized_at,final_standings,pools(name)')
@@ -57,7 +58,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userId
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">{profile.display_name}</h1>
+        <h1 className="text-2xl font-bold">{profile.display_name}<OnlineDot lastActiveAt={profile.last_active_at} /></h1>
         <p className="text-sm text-muted-foreground">
           Member since {new Date(profile.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
         </p>

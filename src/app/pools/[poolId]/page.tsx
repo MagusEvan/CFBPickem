@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Users, Trophy, Calendar, Settings, Shield, Flag, ArrowLeftRight, Handshake } from 'lucide-react'
 import { InviteLinkButton } from '@/components/pool/invite-link'
+import { OnlineDot } from '@/components/online-dot'
 import { getGame, isFfFamily } from '@/lib/games/registry'
 import {
   resolveBestBallSettings,
@@ -335,7 +336,7 @@ export default async function PoolDashboard({
                     </span>
                   )}
                   <Link href={`/profile/${member.user_id}`} className="font-medium hover:underline">
-                    {member.profiles.display_name}
+                    {member.profiles.display_name}<OnlineDot lastActiveAt={member.profiles.last_active_at} />
                   </Link>
                 </div>
                 {member.user_id === pool.admin_id && (

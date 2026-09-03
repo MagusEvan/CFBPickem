@@ -21,6 +21,7 @@ import { pairingWinner, playoffRoundName, playoffRoundsCount } from '@/lib/ff/pl
 import { isFfFamily } from '@/lib/games/registry'
 import { BestBallLeaderboard } from '@/components/ff/bestball-leaderboard'
 import type { Pool, DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
+import { OnlineDot } from '@/components/online-dot'
 
 export const revalidate = 60
 
@@ -175,6 +176,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
 
   const standings = calculateStandings(members, picks, teams, pool.scoring_strategy)
   const teamMap = new Map(teams.map((t) => [t.id, t]))
+  const lastActiveByMember = new Map(members.map((m) => [m.id, m.profiles.last_active_at]))
 
   const scrapsWins = scraps.reduce((sum, s) => sum + (teamMap.get(s.team_id)?.wins ?? s.wins), 0)
   const scrapsLosses = scraps.reduce((sum, s) => sum + (teamMap.get(s.team_id)?.losses ?? 0), 0)
@@ -223,7 +225,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
                           href={`/pools/${poolId}/rosters/${s.memberId}`}
                           className="text-primary underline-offset-2 hover:underline"
                         >
-                          {s.displayName}
+                          {s.displayName}<OnlineDot lastActiveAt={lastActiveByMember.get(s.memberId)} />
                         </Link>
                       ) : (
                         s.displayName
@@ -377,6 +379,7 @@ async function FfStandings({
 
   const standings = computeStandings(members.map((m) => m.id), results)
   const nameByMember = new Map(members.map((m) => [m.id, m.profiles.display_name]))
+  const ffLastActiveByMember = new Map(members.map((m) => [m.id, m.profiles.last_active_at]))
 
   // Playoff bracket (only rendered once round 1 exists)
   const playoffMatchups = matchups.filter((m) => m.is_playoff)
@@ -458,6 +461,7 @@ async function FfStandings({
             nameByMember={nameByMember}
             playoffTeams={settings.season.playoffTeams}
             streakByMember={streakByMember}
+            lastActiveByMember={ffLastActiveByMember}
           />
           <p className="mt-3 text-xs text-muted-foreground">
             Top {settings.season.playoffTeams} make the playoffs (dashed line). Ties broken by points for.
@@ -511,6 +515,7 @@ async function WorldCupStandings({
   const wcScraps = (wcScrapsRes.data ?? []) as WcScrapsTeam[]
   const config = pool.scoring_config ?? DEFAULT_WC_SCORING
   const teamToRound = new Map(picks.map((p) => [p.team_id, p.round]))
+  const wcLastActiveByMember = new Map(members.map((m) => [m.id, m.profiles.last_active_at]))
   const eliminatedTeams = computeEliminatedTeams(games)
   const pgrCache = new Map<string, number>()
   const teamPgr = (teamId: string) => {
@@ -665,7 +670,7 @@ async function WorldCupStandings({
                           href={`/pools/${poolId}/rosters/${s.memberId}`}
                           className="text-primary underline-offset-2 hover:underline"
                         >
-                          {s.displayName}
+                          {s.displayName}<OnlineDot lastActiveAt={wcLastActiveByMember.get(s.memberId)} />
                         </Link>
                       ) : (
                         s.displayName

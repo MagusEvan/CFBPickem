@@ -7,6 +7,7 @@ export interface Profile {
   display_name: string
   avatar_url: string | null
   created_at: string
+  last_active_at: string | null
 }
 
 export interface Pool {

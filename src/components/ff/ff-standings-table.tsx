@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { FFStanding } from '@/lib/ff/standings'
+import { OnlineDot } from '@/components/online-dot'
 
 /** H2H standings table with a playoff cut line. */
 export function FfStandingsTable({
@@ -8,6 +9,7 @@ export function FfStandingsTable({
   nameByMember,
   playoffTeams,
   streakByMember,
+  lastActiveByMember,
 }: {
   poolId: string
   standings: FFStanding[]
@@ -15,6 +17,7 @@ export function FfStandingsTable({
   playoffTeams: number
   /** memberId -> formatted streak ("W3"); omit to hide the column */
   streakByMember?: Map<string, string | null>
+  lastActiveByMember?: Map<string, string | null>
 }) {
   return (
     <table className="w-full text-sm">
@@ -46,7 +49,7 @@ export function FfStandingsTable({
                 href={`/pools/${poolId}/team?member=${s.memberId}`}
                 className="text-primary underline-offset-2 hover:underline"
               >
-                {nameByMember.get(s.memberId) ?? '—'}
+                {nameByMember.get(s.memberId) ?? '—'}<OnlineDot lastActiveAt={lastActiveByMember?.get(s.memberId)} />
               </Link>
             </td>
             <td className="px-2 py-2 text-center">{s.wins}</td>

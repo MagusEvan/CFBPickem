@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { ConferenceLogo } from '@/components/conference-logo'
 import type { DraftPick, CachedTeam, CachedGame, WorldCupScoringConfig } from '@/lib/types'
+import { OnlineDot } from '@/components/online-dot'
 import { calculateTeamPoints, type GamePointBreakdown } from '@/lib/scoring/strategies/world-cup'
 
 export const revalidate = 60
@@ -102,7 +103,7 @@ export default async function RosterPage({
         </Link>
       </div>
       <div>
-        <h1 className="text-2xl font-bold">{member.profiles.display_name}&apos;s Roster</h1>
+        <h1 className="text-2xl font-bold">{member.profiles.display_name}<OnlineDot lastActiveAt={member.profiles.last_active_at} />&apos;s Roster</h1>
         <p className="text-muted-foreground">
           {isWorldCup
             ? `${aggPoints} pts · ${picks.length} teams`

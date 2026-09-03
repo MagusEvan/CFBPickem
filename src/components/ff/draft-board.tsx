@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils'
 import type { FFDraftPick } from '@/lib/ff/types'
 import type { PoolMember, Profile } from '@/lib/types'
+import { OnlineDot } from '@/components/online-dot'
 
 const POSITION_COLORS: Record<string, string> = {
   QB: 'bg-red-500/10 text-red-700 dark:text-red-400',
@@ -38,7 +39,7 @@ export function DraftBoard({
             <th className="w-8 px-2 py-2 text-muted-foreground">Rd</th>
             {ordered.map((m) => (
               <th key={m.id} className="truncate px-2 py-2 text-left font-medium">
-                {m.profiles.display_name}
+                {m.profiles.display_name}<OnlineDot lastActiveAt={m.profiles.last_active_at} />
               </th>
             ))}
           </tr>
