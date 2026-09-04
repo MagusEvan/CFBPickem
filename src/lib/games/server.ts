@@ -98,66 +98,92 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
 
   const weeks = [...activeWeekSet].sort((a, b) => a - b)
 
-  if (weeks.length === 0) {
-    // No live games — just update records
-    const records = await provider.getTeamRecords(seasonYear)
-    await updateTeamRecords(admin, records, seasonYear)
-    return
+  if (weeks.length > 0) {
+    const allGames = []
+    for (const week of weeks) {
+      const games = await provider.getGamesForWeek(seasonYear, week)
+      allGames.push(...games)
+    }
+
+    const fetchedAt = new Date().toISOString()
+    const rows = allGames.map((g) => ({
+      id: g.id,
+      season_year: g.seasonYear,
+      week: g.week,
+      home_team_id: g.homeTeam.id,
+      away_team_id: g.awayTeam.id,
+      home_team_name: g.homeTeam.name,
+      away_team_name: g.awayTeam.name,
+      home_score: g.homeTeam.score,
+      away_score: g.awayTeam.score,
+      status: g.status,
+      status_detail: g.statusDetail,
+      start_time: g.startTime,
+      venue: g.venue,
+      broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
+      fetched_at: fetchedAt,
+    }))
+
+    if (rows.length > 0) {
+      const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+      if (error) throw new Error(`DB upsert failed: ${error.message}`)
+    }
   }
 
-  const allGames = []
-  for (const week of weeks) {
-    const games = await provider.getGamesForWeek(seasonYear, week)
-    allGames.push(...games)
-  }
-  const records = await provider.getTeamRecords(seasonYear)
-
-  const fetchedAt = new Date().toISOString()
-  const rows = allGames.map((g) => ({
-    id: g.id,
-    season_year: g.seasonYear,
-    week: g.week,
-    home_team_id: g.homeTeam.id,
-    away_team_id: g.awayTeam.id,
-    home_team_name: g.homeTeam.name,
-    away_team_name: g.awayTeam.name,
-    home_score: g.homeTeam.score,
-    away_score: g.awayTeam.score,
-    status: g.status,
-    status_detail: g.statusDetail,
-    start_time: g.startTime,
-    venue: g.venue,
-    broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
-    fetched_at: fetchedAt,
-  }))
-
-  if (rows.length > 0) {
-    const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
-    if (error) throw new Error(`DB upsert failed: ${error.message}`)
-  }
-
-  await updateTeamRecords(admin, records, seasonYear)
+  // Derive win/loss records from final games in the DB (ESPN standings
+  // endpoint is empty early in the season)
+  await updateTeamRecordsFromGames(admin, seasonYear)
 }
 
-async function updateTeamRecords(admin: Admin, records: { teamId: string; wins: number; losses: number }[], seasonYear: number) {
-  if (records.length === 0) return
+async function updateTeamRecordsFromGames(admin: Admin, seasonYear: number) {
+  // Get all final CFB games and compute records from results
+  const { data: finalGames } = await admin
+    .from('cached_games')
+    .select('home_team_id, away_team_id, home_score, away_score')
+    .eq('season_year', seasonYear)
+    .eq('status', 'final')
+    .not('week', 'is', null) // CFB games have weeks; WC games don't
+  if (!finalGames || finalGames.length === 0) return
+
+  const records = new Map<string, { wins: number; losses: number }>()
+  const ensure = (id: string) => {
+    if (!records.has(id)) records.set(id, { wins: 0, losses: 0 })
+    return records.get(id)!
+  }
+
+  for (const g of finalGames) {
+    if (g.home_score == null || g.away_score == null) continue
+    const home = ensure(g.home_team_id)
+    const away = ensure(g.away_team_id)
+    if (g.home_score > g.away_score) {
+      home.wins++
+      away.losses++
+    } else if (g.away_score > g.home_score) {
+      away.wins++
+      home.losses++
+    }
+    // ties: neither incremented
+  }
+
+  // Only update teams we have cached
   const { data: cachedTeams } = await admin
     .from('cached_teams')
     .select('id')
     .eq('season_year', seasonYear)
     .eq('game_type', 'cfb')
   const cachedIds = new Set((cachedTeams ?? []).map((t) => t.id))
-  const relevant = records.filter((r) => cachedIds.has(r.teamId))
 
-  await Promise.all(
-    relevant.map((rec) =>
+  const updates = [...records.entries()]
+    .filter(([id]) => cachedIds.has(id))
+    .map(([id, rec]) =>
       admin
         .from('cached_teams')
         .update({ wins: rec.wins, losses: rec.losses })
-        .eq('id', rec.teamId)
+        .eq('id', id)
         .eq('season_year', seasonYear)
     )
-  )
+
+  if (updates.length > 0) await Promise.all(updates)
 }
 
 async function refreshWcGames(admin: Admin, seasonYear: number): Promise<void> {
