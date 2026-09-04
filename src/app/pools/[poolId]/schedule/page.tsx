@@ -10,6 +10,7 @@ import { getBroadcastForLocale } from '@/lib/broadcasts'
 import { GameTime } from '@/components/schedule/game-time'
 import { ScheduleHeader } from '@/components/schedule/refresh-schedule'
 import { MyTeamsToggle } from '@/components/schedule/my-teams-toggle'
+import { DaySelector } from '@/components/schedule/day-selector'
 import { OnlineDot } from '@/components/online-dot'
 import { ensureFreshGames } from '@/lib/data-refresh'
 
@@ -80,10 +81,10 @@ export default async function SchedulePage({
   searchParams,
 }: {
   params: Promise<{ poolId: string }>
-  searchParams: Promise<{ week?: string; stage?: string; day?: string }>
+  searchParams: Promise<{ week?: string; stage?: string }>
 }) {
   const { poolId } = await params
-  const { week: weekParam, stage: stageParam, day: dayParam } = await searchParams
+  const { week: weekParam, stage: stageParam } = await searchParams
   const [pool, members, userId] = await Promise.all([
     getPool(poolId),
     getPoolMembers(poolId),
@@ -297,7 +298,7 @@ export default async function SchedulePage({
       <h2 className="text-lg font-semibold">Week {selectedWeek}</h2>
 
       {(() => {
-        // Build day tabs from relevant games
+        // Pre-group games by day for instant client-side switching
         const dayCountMap = new Map<string, number>()
         for (const g of relevantGames) {
           const dk = dateKey(g.start_time, userTz)
@@ -305,97 +306,89 @@ export default async function SchedulePage({
         }
         const sortedDays = [...dayCountMap.keys()].sort()
         const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: userTz })
-        const selectedDay = dayParam ?? todayKey
+        const h2hIds = new Set(h2hGames.map((g) => g.id))
 
-        // Filter games for the selected day
-        const dayGames = relevantGames.filter((g) => dateKey(g.start_time, userTz) === selectedDay)
-        const dayH2h = h2hGames.filter((g) => dateKey(g.start_time, userTz) === selectedDay)
-        const dayH2hIds = new Set(dayH2h.map((g) => g.id))
-        const dayOther = dayGames.filter((g) => !dayH2hIds.has(g.id))
+        const dayInfos = sortedDays.map((dk) => ({
+          key: dk,
+          label: weekdayLabel(dk, userTz),
+          count: dayCountMap.get(dk) ?? 0,
+          isToday: dk === todayKey,
+        }))
+
+        // Default to today if it has games, otherwise the first day with games
+        const defaultDay = sortedDays.includes(todayKey)
+          ? todayKey
+          : sortedDays.find((dk) => (dayCountMap.get(dk) ?? 0) > 0) ?? sortedDays[0] ?? todayKey
 
         return (
           <>
-            {sortedDays.length > 1 && (
-              <div className="flex flex-wrap gap-2">
-                {sortedDays.map((dk) => {
-                  const count = dayCountMap.get(dk) ?? 0
-                  const label = weekdayLabel(dk, userTz)
-                  const isSelected = dk === selectedDay
-                  const isCurrentDay = dk === todayKey
-                  return (
-                    <a
-                      key={dk}
-                      href={`/pools/${poolId}/schedule?week=${selectedWeek}&day=${dk}`}
-                      className={`inline-flex w-16 flex-col items-center rounded-md py-1.5 text-sm transition-colors ${
-                        isSelected
-                          ? 'bg-primary text-primary-foreground'
-                          : count === 0
-                            ? 'bg-muted text-muted-foreground/40'
-                            : 'bg-muted hover:bg-muted/80'
-                      }`}
-                    >
-                      <span className="font-medium">{isCurrentDay ? 'Today' : label}</span>
-                      <span className="text-[10px] opacity-70">{count} {count === 1 ? 'game' : 'games'}</span>
-                    </a>
-                  )
-                })}
-              </div>
-            )}
-
-            {dayH2h.length > 0 && (
-              <div className="game-section space-y-3">
-                <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {sortLiveThenFinal(dayH2h).map((game) => (
-                    <GameCard
-                      key={game.id}
-                      game={game}
-                      teamMap={teamMap}
-                      teamToManager={teamToManager}
-                      teamToRound={teamToRound}
-                      teamToLastActive={teamToLastActive}
-                      isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {dayOther.length > 0 && (
-              <div className="game-section">
-                {dayH2h.length > 0 && (
-                  <h3 className="mb-3 font-medium text-muted-foreground">Other Games</h3>
-                )}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {sortLiveThenFinal(dayOther).map((game) => (
-                    <GameCard
-                      key={game.id}
-                      game={game}
-                      teamMap={teamMap}
-                      teamToManager={teamToManager}
-                      teamToRound={teamToRound}
-                      teamToLastActive={teamToLastActive}
-                      isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {dayGames.length === 0 && relevantGames.length > 0 && (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  No games on this day.
-                </CardContent>
-              </Card>
-            )}
-
-            {relevantGames.length === 0 && (
+            {relevantGames.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
                   No games found for week {selectedWeek}. Try syncing schedule data.
                 </CardContent>
               </Card>
+            ) : (
+              <DaySelector days={dayInfos} defaultDay={defaultDay}>
+                {sortedDays.map((dk) => {
+                  const dayGames = relevantGames.filter((g) => dateKey(g.start_time, userTz) === dk)
+                  const dayH2h = dayGames.filter((g) => h2hIds.has(g.id))
+                  const dayOther = dayGames.filter((g) => !h2hIds.has(g.id))
+
+                  if (dayGames.length === 0) {
+                    return (
+                      <Card key={dk}>
+                        <CardContent className="py-8 text-center text-muted-foreground">
+                          No games on this day.
+                        </CardContent>
+                      </Card>
+                    )
+                  }
+
+                  return (
+                    <div key={dk} className="space-y-4">
+                      {dayH2h.length > 0 && (
+                        <div className="game-section space-y-3">
+                          <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {sortLiveThenFinal(dayH2h).map((game) => (
+                              <GameCard
+                                key={game.id}
+                                game={game}
+                                teamMap={teamMap}
+                                teamToManager={teamToManager}
+                                teamToRound={teamToRound}
+                                teamToLastActive={teamToLastActive}
+                                isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {dayOther.length > 0 && (
+                        <div className="game-section">
+                          {dayH2h.length > 0 && (
+                            <h3 className="mb-3 font-medium text-muted-foreground">Other Games</h3>
+                          )}
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {sortLiveThenFinal(dayOther).map((game) => (
+                              <GameCard
+                                key={game.id}
+                                game={game}
+                                teamMap={teamMap}
+                                teamToManager={teamToManager}
+                                teamToRound={teamToRound}
+                                teamToLastActive={teamToLastActive}
+                                isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </DaySelector>
             )}
           </>
         )
