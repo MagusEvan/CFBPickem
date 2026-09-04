@@ -74,35 +74,37 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
   const { EspnProvider } = await import('@/lib/data-providers/espn/provider')
   const provider = new EspnProvider()
 
-  // Only re-fetch weeks that have non-final games (or no cached data yet).
-  // This avoids fetching all 15 weeks on every refresh which can time out.
-  const { data: weekStatus } = await admin
+  // Only fetch weeks that have games that have started but aren't final.
+  // ESPN returns ~100 games per week, so we avoid fetching weeks with no live action.
+  const now = new Date()
+  const { data: liveWeeks } = await admin
     .from('cached_games')
-    .select('week, status')
+    .select('week')
     .eq('season_year', seasonYear)
     .not('week', 'is', null)
-  const weekRows = (weekStatus ?? []) as { week: number; status: string }[]
-  const weekMap = new Map<number, Set<string>>()
-  for (const r of weekRows) {
-    if (!weekMap.has(r.week)) weekMap.set(r.week, new Set())
-    weekMap.get(r.week)!.add(r.status)
+    .neq('status', 'final')
+    .lte('start_time', now.toISOString())
+  const activeWeekSet = new Set((liveWeeks ?? []).map((r: { week: number }) => r.week))
+
+  // Bootstrap: if no cached data at all, fetch week 1
+  if (activeWeekSet.size === 0) {
+    const { count } = await admin
+      .from('cached_games')
+      .select('id', { count: 'exact', head: true })
+      .eq('season_year', seasonYear)
+      .not('week', 'is', null)
+    if (!count || count === 0) activeWeekSet.add(1)
   }
-  // Fetch weeks that have no data yet, or have any non-final games
-  const allWeeks = Array.from({ length: 15 }, (_, i) => i + 1)
-  const weeks = allWeeks.filter((w) => {
-    const statuses = weekMap.get(w)
-    if (!statuses) return true // no cached data — fetch it
-    return statuses.has('scheduled') || statuses.has('in_progress')
-  })
+
+  const weeks = [...activeWeekSet].sort((a, b) => a - b)
 
   if (weeks.length === 0) {
-    // All weeks are fully final — just update records
+    // No live games — just update records
     const records = await provider.getTeamRecords(seasonYear)
     await updateTeamRecords(admin, records, seasonYear)
     return
   }
 
-  // Fetch active weeks sequentially to avoid Vercel function timeout
   const allGames = []
   for (const week of weeks) {
     const games = await provider.getGamesForWeek(seasonYear, week)
@@ -110,7 +112,7 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
   }
   const records = await provider.getTeamRecords(seasonYear)
 
-  const now = new Date().toISOString()
+  const fetchedAt = new Date().toISOString()
   const rows = allGames.map((g) => ({
     id: g.id,
     season_year: g.seasonYear,
@@ -126,7 +128,7 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
     start_time: g.startTime,
     venue: g.venue,
     broadcasts: g.broadcasts.length > 0 ? g.broadcasts : null,
-    fetched_at: now,
+    fetched_at: fetchedAt,
   }))
 
   if (rows.length > 0) {
