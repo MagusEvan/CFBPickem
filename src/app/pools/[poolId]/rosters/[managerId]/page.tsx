@@ -96,7 +96,7 @@ export default async function RosterPage({
   const aggLosses = teamStats.reduce((sum, s) => sum + s.losses, 0)
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-lg space-y-6">
       <div className="flex items-center gap-4">
         <Link href={`/pools/${poolId}/standings`} className={`${buttonVariants({ variant: 'outline' })} border-foreground/25`}>
           &lt; Return to Standings
@@ -160,39 +160,44 @@ export default async function RosterPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3">
-          {teamStats.map((stat) => {
-            const team = teamMap.get(stat.pick.team_id)
-            return (
-              <Card key={stat.pick.id}>
-                <CardContent className="flex items-center gap-4 py-4">
-                  {team?.logo_url && (
-                    <Image src={team.logo_url} alt={stat.pick.team_name} width={48} height={48} className="h-12 w-12 object-contain" />
-                  )}
-                  <div className="flex-1">
-                    <p className="font-semibold">
-                      {stat.pick.team_name}
-                      <span className="ml-1 text-sm font-normal text-muted-foreground">(r{stat.pick.round})</span>
-                    </p>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Badge variant="outline" className="gap-1 text-xs">
-                        <ConferenceLogo conferenceKey={stat.pick.conference_key} size={14} />
-                        {stat.pick.conference_key}
-                      </Badge>
-                      {stat.pick.is_bonus_pick && (
-                        <Badge variant="secondary" className="text-xs">Bonus</Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold">{stat.wins}W</p>
-                    <p className="text-sm text-muted-foreground">{stat.losses}L</p>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
+        <Card>
+          <CardContent className="py-2">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="px-2 py-1.5 text-left text-xs">Rd</th>
+                  <th className="px-2 py-1.5 text-left text-xs">Team</th>
+                  <th className="px-2 py-1.5 text-center text-xs">W</th>
+                  <th className="px-2 py-1.5 text-center text-xs">L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamStats.map((stat) => {
+                  const team = teamMap.get(stat.pick.team_id)
+                  return (
+                    <tr key={stat.pick.id} className="border-b last:border-0">
+                      <td className="px-2 py-1.5 text-muted-foreground">{stat.pick.round}</td>
+                      <td className="px-2 py-1.5">
+                        <div className="flex items-center gap-2">
+                          {team?.logo_url && (
+                            <Image src={team.logo_url} alt={stat.pick.team_name} width={20} height={20} className="h-5 w-5 object-contain" />
+                          )}
+                          <span className="font-medium">{stat.pick.team_name}</span>
+                          <ConferenceLogo conferenceKey={stat.pick.conference_key} size={14} />
+                          {stat.pick.is_bonus_pick && (
+                            <Badge variant="secondary" className="text-[10px] px-1 py-0">B</Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-2 py-1.5 text-center font-medium">{stat.wins}</td>
+                      <td className="px-2 py-1.5 text-center text-muted-foreground">{stat.losses}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
