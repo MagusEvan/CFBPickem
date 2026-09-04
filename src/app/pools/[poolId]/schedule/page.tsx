@@ -13,7 +13,7 @@ import { MyTeamsToggle } from '@/components/schedule/my-teams-toggle'
 import { OnlineDot } from '@/components/online-dot'
 import { ensureFreshGames } from '@/lib/data-refresh'
 
-export const revalidate = 60
+export const dynamic = 'force-dynamic'
 
 const DEFAULT_WC_SCORING: WorldCupScoringConfig = {
   group: { win: 6, draw: 3, goal_points: 1, goal_cap: 3, shutout: 1 },
