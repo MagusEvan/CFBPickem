@@ -70,8 +70,9 @@ const wcScoringConfigSchema = z.object({
 // --- Refresh implementations ---
 
 async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> {
-  const { getDataProvider } = await import('@/lib/data-providers')
-  const provider = getDataProvider()
+  // Always use ESPN for games — CFBD does not provide live/in-progress scores
+  const { EspnProvider } = await import('@/lib/data-providers/espn/provider')
+  const provider = new EspnProvider()
 
   // Fetch all 15 weeks and team records in parallel
   const weeks = Array.from({ length: 15 }, (_, i) => i + 1)
