@@ -326,7 +326,7 @@ export default async function SchedulePage({
                     <a
                       key={dk}
                       href={`/pools/${poolId}/schedule?week=${selectedWeek}&day=${dk}`}
-                      className={`inline-flex flex-col items-center rounded-md px-3 py-1 text-sm transition-colors ${
+                      className={`inline-flex w-16 flex-col items-center rounded-md py-1.5 text-sm transition-colors ${
                         isSelected
                           ? 'bg-primary text-primary-foreground'
                           : count === 0
@@ -335,7 +335,7 @@ export default async function SchedulePage({
                       }`}
                     >
                       <span className="font-medium">{isCurrentDay ? 'Today' : label}</span>
-                      <span className="text-xs opacity-70">{count}</span>
+                      <span className="text-[10px] opacity-70">{count} {count === 1 ? 'game' : 'games'}</span>
                     </a>
                   )
                 })}
