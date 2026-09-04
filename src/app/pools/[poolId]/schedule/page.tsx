@@ -4,7 +4,7 @@ import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
 import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
-import type { DraftPick, CachedGame, CachedTeam, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
+import type { DraftPick, CachedGame, CachedTeam, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 import { scoreWorldCupGame } from '@/lib/scoring/strategies/world-cup'
 import { getBroadcastForLocale } from '@/lib/broadcasts'
 import { GameTime } from '@/components/schedule/game-time'
@@ -88,8 +88,8 @@ export default async function SchedulePage({
 
   const supabase = await createClient()
 
-  // Get all draft picks, team data, and WC scraps
-  const [picksRes, teamsRes, wcScrapsRes] = await Promise.all([
+  // Get all draft picks, team data, and scraps
+  const [picksRes, teamsRes, wcScrapsRes, cfbScrapsRes] = await Promise.all([
     supabase.from('draft_picks').select('*').eq('pool_id', poolId),
     supabase
       .from('cached_teams')
@@ -99,11 +99,15 @@ export default async function SchedulePage({
     pool.game_type === 'world_cup'
       ? supabase.from('wc_scraps_teams').select('*').eq('pool_id', poolId)
       : Promise.resolve({ data: null }),
+    pool.game_type === 'cfb'
+      ? supabase.from('team_scraps').select('*').eq('pool_id', poolId)
+      : Promise.resolve({ data: null }),
   ])
 
   const picks = (picksRes.data ?? []) as DraftPick[]
   const teams = (teamsRes.data ?? []) as CachedTeam[]
   const wcScraps = (wcScrapsRes.data ?? []) as WcScrapsTeam[]
+  const cfbScraps = (cfbScrapsRes.data ?? []) as TeamScraps[]
 
   // Build lookups: team_id -> manager name, team_id -> draft round, team_id -> last_active_at
   const teamToManager = new Map<string, string>()
@@ -122,10 +126,14 @@ export default async function SchedulePage({
   for (const scrap of wcScraps) {
     teamToManager.set(scrap.team_id, `Scraps Team ${scrap.scraps_team_number}`)
   }
+  for (const scrap of cfbScraps) {
+    teamToManager.set(scrap.team_id, 'Scraps')
+  }
 
   const draftedTeamIds = new Set([
     ...picks.map((p) => p.team_id),
     ...wcScraps.map((s) => s.team_id),
+    ...cfbScraps.map((s) => s.team_id),
   ])
 
   // Current user's teams for "my teams only" filter
@@ -231,11 +239,12 @@ export default async function SchedulePage({
     (g) => draftedTeamIds.has(g.home_team_id) || draftedTeamIds.has(g.away_team_id)
   )
 
+  const isScrapsLabel = (name: string) => name === 'Scraps' || name.startsWith('Scraps Team')
   const h2hGames = relevantGames.filter((g) => {
     const homeManager = teamToManager.get(g.home_team_id)
     const awayManager = teamToManager.get(g.away_team_id)
     return homeManager && awayManager && homeManager !== awayManager
-      && !homeManager.startsWith('Scraps Team') && !awayManager.startsWith('Scraps Team')
+      && !isScrapsLabel(homeManager) && !isScrapsLabel(awayManager)
   })
 
   return (
@@ -401,11 +410,12 @@ async function WorldCupSchedule({
     (g) => draftedTeamIds.has(g.home_team_id) || draftedTeamIds.has(g.away_team_id)
   )
 
+  const isScrapsLabel = (name: string) => name === 'Scraps' || name.startsWith('Scraps Team')
   const h2hGames = relevantGames.filter((g) => {
     const homeManager = teamToManager.get(g.home_team_id)
     const awayManager = teamToManager.get(g.away_team_id)
     return homeManager && awayManager && homeManager !== awayManager
-      && !homeManager.startsWith('Scraps Team') && !awayManager.startsWith('Scraps Team')
+      && !isScrapsLabel(homeManager) && !isScrapsLabel(awayManager)
   })
 
   return (
