@@ -50,15 +50,40 @@ function isToday(startTime: string | null, tz: string): boolean {
   return fmt(new Date(startTime)) === fmt(new Date())
 }
 
+/** Returns 'YYYY-MM-DD' in the given timezone */
+function dateKey(startTime: string | null, tz: string): string | null {
+  if (!startTime) return null
+  return new Date(startTime).toLocaleDateString('en-CA', { timeZone: tz })
+}
+
+/** Returns short weekday like 'Thu' */
+function weekdayLabel(dateStr: string, tz: string): string {
+  const d = new Date(dateStr + 'T12:00:00') // noon to avoid DST edge
+  return d.toLocaleDateString('en-US', { weekday: 'short', timeZone: tz })
+}
+
+/** Sort games with final games at the bottom, then by start time */
+function sortLiveThenFinal<T extends { start_time: string | null; status: string }>(games: T[]): T[] {
+  return [...games].sort((a, b) => {
+    const aFinal = a.status === 'final' ? 1 : 0
+    const bFinal = b.status === 'final' ? 1 : 0
+    if (aFinal !== bFinal) return aFinal - bFinal
+    if (!a.start_time && !b.start_time) return 0
+    if (!a.start_time) return 1
+    if (!b.start_time) return -1
+    return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  })
+}
+
 export default async function SchedulePage({
   params,
   searchParams,
 }: {
   params: Promise<{ poolId: string }>
-  searchParams: Promise<{ week?: string; stage?: string }>
+  searchParams: Promise<{ week?: string; stage?: string; day?: string }>
 }) {
   const { poolId } = await params
-  const { week: weekParam, stage: stageParam } = await searchParams
+  const { week: weekParam, stage: stageParam, day: dayParam } = await searchParams
   const [pool, members, userId] = await Promise.all([
     getPool(poolId),
     getPoolMembers(poolId),
@@ -272,39 +297,56 @@ export default async function SchedulePage({
       <h2 className="text-lg font-semibold">Week {selectedWeek}</h2>
 
       {(() => {
-        const todayGames = relevantGames.filter((g) => isToday(g.start_time, userTz))
-        const todayGameIds = new Set(todayGames.map((g) => g.id))
-        const remainingGames = relevantGames.filter((g) => !todayGameIds.has(g.id))
-        const remainingH2h = h2hGames.filter((g) => !todayGameIds.has(g.id))
-        const remainingH2hIds = new Set(remainingH2h.map((g) => g.id))
-        const remainingOther = remainingGames.filter((g) => !remainingH2hIds.has(g.id))
+        // Build day tabs from relevant games
+        const dayCountMap = new Map<string, number>()
+        for (const g of relevantGames) {
+          const dk = dateKey(g.start_time, userTz)
+          if (dk) dayCountMap.set(dk, (dayCountMap.get(dk) ?? 0) + 1)
+        }
+        const sortedDays = [...dayCountMap.keys()].sort()
+        const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: userTz })
+        const selectedDay = dayParam ?? todayKey
+
+        // Filter games for the selected day
+        const dayGames = relevantGames.filter((g) => dateKey(g.start_time, userTz) === selectedDay)
+        const dayH2h = h2hGames.filter((g) => dateKey(g.start_time, userTz) === selectedDay)
+        const dayH2hIds = new Set(dayH2h.map((g) => g.id))
+        const dayOther = dayGames.filter((g) => !dayH2hIds.has(g.id))
 
         return (
           <>
-            {todayGames.length > 0 && (
-              <div className="game-section space-y-3">
-                <h3 className="font-medium text-primary">Today&apos;s Matchups</h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {sortByTime(todayGames).map((game) => (
-                    <GameCard
-                      key={game.id}
-                      game={game}
-                      teamMap={teamMap}
-                      teamToManager={teamToManager}
-                      teamToRound={teamToRound}
-                      teamToLastActive={teamToLastActive}
-                      isMine={myTeamIds.has(game.home_team_id) || myTeamIds.has(game.away_team_id)}
-                    />
-                  ))}
-                </div>
+            {sortedDays.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                {sortedDays.map((dk) => {
+                  const count = dayCountMap.get(dk) ?? 0
+                  const label = weekdayLabel(dk, userTz)
+                  const isSelected = dk === selectedDay
+                  const isCurrentDay = dk === todayKey
+                  return (
+                    <a
+                      key={dk}
+                      href={`/pools/${poolId}/schedule?week=${selectedWeek}&day=${dk}`}
+                      className={`inline-flex flex-col items-center rounded-md px-3 py-1 text-sm transition-colors ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground'
+                          : count === 0
+                            ? 'bg-muted text-muted-foreground/40'
+                            : 'bg-muted hover:bg-muted/80'
+                      }`}
+                    >
+                      <span className="font-medium">{isCurrentDay ? 'Today' : label}</span>
+                      <span className="text-xs opacity-70">{count}</span>
+                    </a>
+                  )
+                })}
               </div>
             )}
 
-            {remainingH2h.length > 0 && (
+            {dayH2h.length > 0 && (
               <div className="game-section space-y-3">
                 <h3 className="font-medium text-primary">Head-to-Head Matchups</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {sortByTime(remainingH2h).map((game) => (
+                  {sortLiveThenFinal(dayH2h).map((game) => (
                     <GameCard
                       key={game.id}
                       game={game}
@@ -319,13 +361,13 @@ export default async function SchedulePage({
               </div>
             )}
 
-            {remainingOther.length > 0 && (
+            {dayOther.length > 0 && (
               <div className="game-section">
-                {(todayGames.length > 0 || remainingH2h.length > 0) && (
+                {dayH2h.length > 0 && (
                   <h3 className="mb-3 font-medium text-muted-foreground">Other Games</h3>
                 )}
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {sortByTime(remainingOther).map((game) => (
+                  {sortLiveThenFinal(dayOther).map((game) => (
                     <GameCard
                       key={game.id}
                       game={game}
@@ -338,6 +380,14 @@ export default async function SchedulePage({
                   ))}
                 </div>
               </div>
+            )}
+
+            {dayGames.length === 0 && relevantGames.length > 0 && (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No games on this day.
+                </CardContent>
+              </Card>
             )}
 
             {relevantGames.length === 0 && (
