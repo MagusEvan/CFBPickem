@@ -1,14 +1,14 @@
 const ESPN_BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/college-football'
 
 export async function espnFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(path, ESPN_BASE_URL)
+  const url = new URL(`${ESPN_BASE_URL}${path}`)
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
   }
 
   const res = await fetch(url.toString(), {
     headers: { Accept: 'application/json' },
-    next: { revalidate: 3600 },
+    cache: 'no-store',
   })
 
   if (!res.ok) {
