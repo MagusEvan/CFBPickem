@@ -239,12 +239,10 @@ export default async function SchedulePage({
     (g) => draftedTeamIds.has(g.home_team_id) || draftedTeamIds.has(g.away_team_id)
   )
 
-  const isScrapsLabel = (name: string) => name === 'Scraps' || name.startsWith('Scraps Team')
   const h2hGames = relevantGames.filter((g) => {
     const homeManager = teamToManager.get(g.home_team_id)
     const awayManager = teamToManager.get(g.away_team_id)
     return homeManager && awayManager && homeManager !== awayManager
-      && !isScrapsLabel(homeManager) && !isScrapsLabel(awayManager)
   })
 
   return (
@@ -410,12 +408,10 @@ async function WorldCupSchedule({
     (g) => draftedTeamIds.has(g.home_team_id) || draftedTeamIds.has(g.away_team_id)
   )
 
-  const isScrapsLabel = (name: string) => name === 'Scraps' || name.startsWith('Scraps Team')
   const h2hGames = relevantGames.filter((g) => {
     const homeManager = teamToManager.get(g.home_team_id)
     const awayManager = teamToManager.get(g.away_team_id)
     return homeManager && awayManager && homeManager !== awayManager
-      && !isScrapsLabel(homeManager) && !isScrapsLabel(awayManager)
   })
 
   return (
