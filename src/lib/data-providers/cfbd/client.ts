@@ -14,7 +14,7 @@ export async function cfbdFetch<T>(path: string, params?: Record<string, string>
       Authorization: `Bearer ${apiKey}`,
       Accept: 'application/json',
     },
-    next: { revalidate: 3600 }, // Cache for 1 hour
+    cache: 'no-store',
   })
 
   if (!res.ok) {
