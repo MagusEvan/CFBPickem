@@ -90,6 +90,7 @@ export function LineupEditor({
     const isLocked = player ? locked.has(player.id) : false
     const isSelected = slot.id === selectedId
     const validTarget = selected !== null && isValidTarget(slot)
+    const gameStatus = player ? gameInfoByPlayer[player.id]?.status ?? 'scheduled' : 'scheduled'
 
     return (
       <button
@@ -102,7 +103,9 @@ export function LineupEditor({
           canEdit && 'hover:bg-muted/50',
           isSelected && 'border-primary ring-1 ring-primary',
           selected && !isSelected && validTarget && 'border-primary/50 bg-primary/5',
-          selected && !isSelected && !validTarget && 'opacity-40'
+          selected && !isSelected && !validTarget && 'opacity-40',
+          gameStatus === 'final' && 'text-muted-foreground/60',
+          gameStatus === 'in_progress' && !isSelected && 'bg-primary/5',
         )}
       >
         <span className="w-12 shrink-0 text-xs font-semibold text-muted-foreground">
@@ -116,13 +119,21 @@ export function LineupEditor({
                 alt={player.name}
                 width={32}
                 height={32}
-                className="h-8 w-8 rounded-full object-cover"
+                className={cn(
+                  'h-8 w-8 rounded-full object-cover',
+                  gameStatus === 'final' && 'opacity-50',
+                )}
               />
             )}
             <span className="min-w-0 flex-1">
               <span className="block truncate">
-                <span className="font-medium">{player.name}</span>{' '}
-                <span className="text-xs text-muted-foreground">
+                <span className={cn('font-medium', gameStatus === 'final' && 'font-normal')}>
+                  {player.name}
+                </span>{' '}
+                <span className={cn(
+                  'text-xs',
+                  gameStatus === 'final' ? 'text-muted-foreground/50' : 'text-muted-foreground',
+                )}>
                   {player.position} · {player.nfl_team_abbrev ?? 'FA'}
                   {player.injury_status && ` · ${player.injury_status}`}
                 </span>
@@ -136,7 +147,10 @@ export function LineupEditor({
               )}
             </span>
             {isLocked && <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-            <span className="w-14 shrink-0 text-right font-mono text-sm tabular-nums">
+            <span className={cn(
+              'w-14 shrink-0 text-right font-mono text-sm tabular-nums',
+              gameStatus === 'in_progress' && 'font-semibold text-foreground',
+            )}>
               {(pointsByPlayer[player.id] ?? 0).toFixed(2)}
             </span>
           </>

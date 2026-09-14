@@ -32,6 +32,7 @@ import {
   getNflTeamAbbrevs,
 } from '@/lib/ff/queries'
 import { computeFantasyPoints, scoreLineup, isStarterSlot } from '@/lib/ff/scoring'
+import { optimalLineup } from '@/lib/ff/bestball'
 import { sortSlots } from '@/lib/ff/roster'
 import {
   formatStatLine,
@@ -616,10 +617,26 @@ async function LeagueRosters({
     const memberRoster = rosters.filter((r) => r.member_id === member.id)
     const memberLineup = lineups?.filter((s) => s.member_id === member.id) ?? []
 
-    // Determine which players are starters (in lineup starter slots)
-    const starterPlayerIds = new Set(
-      memberLineup.filter((s) => isStarterSlot(s.slot) && s.player_id).map((s) => s.player_id!)
-    )
+    // Determine which players are starters and compute total
+    let starterPlayerIds: Set<string>
+    let total: number
+
+    if (lineups) {
+      // H2H: starters come from lineup slots
+      starterPlayerIds = new Set(
+        memberLineup.filter((s) => isStarterSlot(s.slot) && s.player_id).map((s) => s.player_id!)
+      )
+      total = scoreLineup(sortSlots(memberLineup), statsByPlayer, scoring)
+    } else {
+      // Best ball: starters come from optimal lineup calculation
+      const rosterPlayers = memberRoster
+        .map((r) => playersById.get(r.player_id))
+        .filter((p): p is NonNullable<typeof p> => p != null)
+        .map((p) => ({ id: p.id, position: p.position }))
+      const optimal = optimalLineup(rosterPlayers, statsByPlayer, scoring, bb!)
+      starterPlayerIds = optimal.starterIds
+      total = optimal.total
+    }
 
     const players: TeamPlayer[] = []
     for (const r of memberRoster) {
@@ -634,7 +651,7 @@ async function LeagueRosters({
         points: pointsByPlayer[p.id] ?? 0,
         statLine: statLineByPlayer[p.id] ?? null,
         gameInfo: gameInfoByPlayer[p.id] ?? null,
-        isStarter: lineups ? starterPlayerIds.has(p.id) : true,
+        isStarter: starterPlayerIds.has(p.id),
       })
     }
 
@@ -647,15 +664,6 @@ async function LeagueRosters({
       if (pa !== pb) return pa - pb
       return b.points - a.points
     })
-
-    // Total points from starters only (or all in best ball context)
-    let total: number
-    if (lineups) {
-      const slots = sortSlots(memberLineup)
-      total = scoreLineup(slots, statsByPlayer, scoring)
-    } else {
-      total = players.reduce((sum, p) => sum + p.points, 0)
-    }
 
     teams.push({ memberId: member.id, name: member.profiles.display_name, total, players })
   }

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlayerGameContext } from './player-game-context'
+import { cn } from '@/lib/utils'
 import type { PlayerGameInfo } from '@/lib/ff/stat-format'
 import type { BestBallLineup } from '@/lib/ff/bestball'
 import type { FFPlayer } from '@/lib/ff/types'
@@ -99,17 +100,27 @@ export function BestBallTeam({
               <tbody>
                 {lineup.slots.map((slot, i) => {
                   const player = slot.player_id ? playersById[slot.player_id] : null
+                  const gameStatus = player ? gameInfoByPlayer[player.id]?.status ?? 'scheduled' : 'scheduled'
                   return (
-                    <tr key={i} className="border-b last:border-0">
+                    <tr key={i} className={cn(
+                      'border-b last:border-0',
+                      gameStatus === 'final' && 'text-muted-foreground/60',
+                      gameStatus === 'in_progress' && 'bg-primary/5',
+                    )}>
                       <td className="w-14 px-2 py-2 text-xs font-semibold text-muted-foreground">
                         {slot.slot === 'DST' ? 'D/ST' : slot.slot}
                       </td>
                       <td className="px-2 py-2">
                         {player ? (
                           <>
-                            {player.name}
+                            <span className={cn(gameStatus === 'final' && 'font-normal')}>
+                              {player.name}
+                            </span>
                             {player.nfl_team_abbrev && (
-                              <span className="ml-1 text-xs text-muted-foreground">
+                              <span className={cn(
+                                'ml-1 text-xs',
+                                gameStatus === 'final' ? 'text-muted-foreground/50' : 'text-muted-foreground',
+                              )}>
                                 {player.nfl_team_abbrev}
                               </span>
                             )}
@@ -119,7 +130,10 @@ export function BestBallTeam({
                           <span className="text-muted-foreground">Empty</span>
                         )}
                       </td>
-                      <td className="px-2 py-2 text-right font-medium tabular-nums">
+                      <td className={cn(
+                        'px-2 py-2 text-right font-medium tabular-nums',
+                        gameStatus === 'in_progress' && 'font-semibold text-foreground',
+                      )}>
                         {slot.points.toFixed(2)}
                       </td>
                     </tr>
@@ -151,23 +165,30 @@ export function BestBallTeam({
             ) : (
               <table className="w-full text-sm">
                 <tbody>
-                  {unused.map((p) => (
-                    <tr key={p.id} className="border-b text-muted-foreground last:border-0">
-                      <td className="w-14 px-2 py-2 text-xs font-semibold">
-                        {p.position === 'DST' ? 'D/ST' : p.position}
-                      </td>
-                      <td className="px-2 py-2">
-                        {p.name}
-                        {p.nfl_team_abbrev && (
-                          <span className="ml-1 text-xs">{p.nfl_team_abbrev}</span>
-                        )}
-                        {subLine(p.id)}
-                      </td>
-                      <td className="px-2 py-2 text-right tabular-nums">
-                        {(lineup.pointsByPlayer.get(p.id) ?? 0).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
+                  {unused.map((p) => {
+                    const gameStatus = gameInfoByPlayer[p.id]?.status ?? 'scheduled'
+                    return (
+                      <tr key={p.id} className={cn(
+                        'border-b last:border-0',
+                        gameStatus === 'final' ? 'text-muted-foreground/60' : 'text-muted-foreground',
+                        gameStatus === 'in_progress' && 'bg-primary/5',
+                      )}>
+                        <td className="w-14 px-2 py-2 text-xs font-semibold">
+                          {p.position === 'DST' ? 'D/ST' : p.position}
+                        </td>
+                        <td className="px-2 py-2">
+                          {p.name}
+                          {p.nfl_team_abbrev && (
+                            <span className="ml-1 text-xs">{p.nfl_team_abbrev}</span>
+                          )}
+                          {subLine(p.id)}
+                        </td>
+                        <td className="px-2 py-2 text-right tabular-nums">
+                          {(lineup.pointsByPlayer.get(p.id) ?? 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )}
