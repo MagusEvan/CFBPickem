@@ -749,10 +749,13 @@ async function LeagueRosters({
                             ) : null}
                           </span>
                           <span className={cn(
-                            'w-12 shrink-0 text-right font-mono text-xs tabular-nums',
+                            'w-14 shrink-0 text-right font-mono text-xs tabular-nums',
                             status === 'in_progress' && 'font-semibold text-foreground',
                           )}>
                             {p.points.toFixed(2)}
+                            {p.isStarter && (
+                              <span className="ml-0.5 text-[9px] text-yellow-500">&#9733;</span>
+                            )}
                           </span>
                         </div>
                       </div>
