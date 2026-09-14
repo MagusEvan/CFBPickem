@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { getPool, getPoolMembers, getCurrentUserId } from '@/lib/pools/queries'
 import { createClient } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
@@ -9,6 +10,8 @@ import { Separator } from '@/components/ui/separator'
 import { Users, Trophy, Calendar, Settings, Shield, Flag, ArrowLeftRight, Handshake } from 'lucide-react'
 import { InviteLinkButton } from '@/components/pool/invite-link'
 import { OnlineDot } from '@/components/online-dot'
+import { LiveRefresh } from '@/components/live-refresh'
+import { PlayerGameContext } from '@/components/ff/player-game-context'
 import { getGame, isFfFamily } from '@/lib/games/registry'
 import {
   resolveBestBallSettings,
@@ -21,10 +24,25 @@ import {
   getFfCurrentWeek,
   getFfLineups,
   getFfMatchups,
+  getFfRosters,
+  getFfWeekGames,
+  getFfWeekStats,
   getFfWeekScores,
+  getFfPlayersByIds,
+  getNflTeamAbbrevs,
 } from '@/lib/ff/queries'
+import { computeFantasyPoints, scoreLineup, isStarterSlot } from '@/lib/ff/scoring'
+import { sortSlots } from '@/lib/ff/roster'
+import {
+  formatStatLine,
+  playerGameInfo,
+  weekGamesByTeamId,
+  type PlayerGameInfo,
+} from '@/lib/ff/stat-format'
 import { computeStandings, type FFMatchupResult } from '@/lib/ff/standings'
 import type { Pool, PoolMember, Profile } from '@/lib/types'
+import type { FFStatLine } from '@/lib/ff/types'
+import { cn } from '@/lib/utils'
 
 export const revalidate = 60
 
@@ -348,6 +366,10 @@ export default async function PoolDashboard({
         </div>
       </div>
 
+      {isFfFamily(pool.game_type) && pool.draft_status === 'completed' && !isFinalized && (
+        <LeagueRosters pool={pool} members={members} />
+      )}
+
       {/* Admin actions */}
       {isAdmin && pool.draft_status === 'pre_draft' && (
         <>
@@ -519,5 +541,221 @@ async function ThisWeekCard({
         </Link>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * All teams and rosters on one page. Players are styled by game status:
+ * greyed out if final, highlighted if in_progress, normal if scheduled.
+ */
+async function LeagueRosters({
+  pool,
+  members,
+}: {
+  pool: Pool
+  members: (PoolMember & { profiles: Profile })[]
+}) {
+  const isBestBall = pool.game_type === 'ff_bestball'
+  const bb = isBestBall ? resolveBestBallSettings(pool) : null
+  const scoring = resolveScoringSettings(pool)
+  const settings = isBestBall ? null : resolveLeagueSettings(pool)
+
+  const currentWeek = bb
+    ? (await getBestBallCurrentWeek(pool.season_year, bb)).currentWeek
+    : await getFfCurrentWeek(pool.season_year)
+
+  const [rosters, games, statsByPlayer, abbrevByTeamId] = await Promise.all([
+    getFfRosters(pool.id),
+    getFfWeekGames(pool.season_year, currentWeek),
+    getFfWeekStats(pool.season_year, currentWeek),
+    getNflTeamAbbrevs(),
+  ])
+
+  // For H2H, also fetch lineups to show starters vs bench
+  const lineups = !isBestBall
+    ? await getFfLineups(pool.id, currentWeek)
+    : null
+
+  const allPlayerIds = [...new Set(rosters.map((r) => r.player_id))]
+  const playersById = await getFfPlayersByIds(allPlayerIds)
+
+  const gamesByTeam = weekGamesByTeamId(games)
+  const anyLive = games.some((g) => g.status === 'in_progress')
+
+  // Build game info + points per player
+  const gameInfoByPlayer: Record<string, PlayerGameInfo> = {}
+  const pointsByPlayer: Record<string, number> = {}
+  const statLineByPlayer: Record<string, string> = {}
+  for (const p of playersById.values()) {
+    const info = playerGameInfo(p.nfl_team_id, gamesByTeam, abbrevByTeamId)
+    if (info) gameInfoByPlayer[p.id] = info
+    const stats = statsByPlayer[p.id] as FFStatLine | undefined
+    pointsByPlayer[p.id] = stats ? computeFantasyPoints(stats, scoring) : 0
+    if (stats) statLineByPlayer[p.id] = formatStatLine(stats, p.position)
+  }
+
+  // Group rosters by member
+  const nameByMember = new Map(members.map((m) => [m.id, m.profiles.display_name]))
+
+  // Build per-member team data
+  type TeamPlayer = {
+    id: string
+    name: string
+    position: string
+    team: string
+    headshot: string | null
+    points: number
+    statLine: string | null
+    gameInfo: PlayerGameInfo | null
+    isStarter: boolean
+  }
+
+  const teams: Array<{ memberId: string; name: string; total: number; players: TeamPlayer[] }> = []
+
+  for (const member of members) {
+    const memberRoster = rosters.filter((r) => r.member_id === member.id)
+    const memberLineup = lineups?.filter((s) => s.member_id === member.id) ?? []
+
+    // Determine which players are starters (in lineup starter slots)
+    const starterPlayerIds = new Set(
+      memberLineup.filter((s) => isStarterSlot(s.slot) && s.player_id).map((s) => s.player_id!)
+    )
+
+    const players: TeamPlayer[] = []
+    for (const r of memberRoster) {
+      const p = playersById.get(r.player_id)
+      if (!p) continue
+      players.push({
+        id: p.id,
+        name: p.name,
+        position: p.position,
+        team: p.nfl_team_abbrev ?? 'FA',
+        headshot: p.headshot_url,
+        points: pointsByPlayer[p.id] ?? 0,
+        statLine: statLineByPlayer[p.id] ?? null,
+        gameInfo: gameInfoByPlayer[p.id] ?? null,
+        isStarter: lineups ? starterPlayerIds.has(p.id) : true,
+      })
+    }
+
+    // Sort: starters first, then by position priority, then by points
+    const posPriority: Record<string, number> = { QB: 1, RB: 2, WR: 3, TE: 4, K: 5, DST: 6 }
+    players.sort((a, b) => {
+      if (a.isStarter !== b.isStarter) return a.isStarter ? -1 : 1
+      const pa = posPriority[a.position] ?? 99
+      const pb = posPriority[b.position] ?? 99
+      if (pa !== pb) return pa - pb
+      return b.points - a.points
+    })
+
+    // Total points from starters only (or all in best ball context)
+    let total: number
+    if (lineups) {
+      const slots = sortSlots(memberLineup)
+      total = scoreLineup(slots, statsByPlayer, scoring)
+    } else {
+      total = players.reduce((sum, p) => sum + p.points, 0)
+    }
+
+    teams.push({ memberId: member.id, name: member.profiles.display_name, total, players })
+  }
+
+  // Sort teams by total points descending
+  teams.sort((a, b) => b.total - a.total)
+
+  return (
+    <>
+      <LiveRefresh live={anyLive} />
+      <Separator />
+      <div>
+        <h2 className="mb-4 text-lg font-semibold">
+          League Rosters — Week {currentWeek}
+        </h2>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {teams.map((team) => (
+            <Card key={team.memberId}>
+              <CardContent className="px-4 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <Link
+                    href={`/pools/${pool.id}/team?member=${team.memberId}`}
+                    className="font-semibold hover:underline"
+                  >
+                    {team.name}
+                  </Link>
+                  <span className="font-mono text-sm tabular-nums">
+                    {team.total.toFixed(2)} pts
+                  </span>
+                </div>
+                <div className="space-y-0.5">
+                  {team.players.map((p, i) => {
+                    const status = p.gameInfo?.status ?? 'scheduled'
+                    const showBenchLabel = lineups && i > 0 && p.isStarter === false && team.players[i - 1]?.isStarter === true
+
+                    return (
+                      <div key={p.id}>
+                        {showBenchLabel && (
+                          <div className="mb-0.5 mt-1.5 text-[10px] font-semibold uppercase text-muted-foreground">
+                            Bench
+                          </div>
+                        )}
+                        <div
+                          className={cn(
+                            'flex items-center gap-2 rounded px-2 py-1 text-sm',
+                            status === 'final' && 'text-muted-foreground/60',
+                            status === 'in_progress' && 'bg-primary/5',
+                          )}
+                        >
+                          {p.headshot ? (
+                            <Image
+                              src={p.headshot}
+                              alt={p.name}
+                              width={24}
+                              height={24}
+                              className={cn(
+                                'h-6 w-6 rounded-full object-cover',
+                                status === 'final' && 'opacity-50',
+                              )}
+                            />
+                          ) : (
+                            <span className="h-6 w-6" />
+                          )}
+                          <span className="w-8 shrink-0 text-xs font-medium">
+                            {p.position}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">
+                            <span className={cn('font-medium', status === 'final' && 'font-normal')}>
+                              {p.name}
+                            </span>
+                            <span className={cn(
+                              'ml-1 text-xs',
+                              status === 'final' ? 'text-muted-foreground/50' : 'text-muted-foreground',
+                            )}>
+                              {p.team}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                            {p.statLine ? (
+                              <span className="hidden sm:inline">{p.statLine}</span>
+                            ) : p.gameInfo ? (
+                              <PlayerGameContext info={p.gameInfo} />
+                            ) : null}
+                          </span>
+                          <span className={cn(
+                            'w-12 shrink-0 text-right font-mono text-xs tabular-nums',
+                            status === 'in_progress' && 'font-semibold text-foreground',
+                          )}>
+                            {p.points.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </>
   )
 }
