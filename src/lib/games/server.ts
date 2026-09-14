@@ -74,17 +74,24 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
   const { EspnProvider } = await import('@/lib/data-providers/espn/provider')
   const provider = new EspnProvider()
 
-  // Only fetch weeks that have games that have started but aren't final.
-  // ESPN returns ~100 games per week, so we avoid fetching weeks with no live action.
+  // Fetch weeks with live action OR games that recently finished (so we
+  // capture final scores for games that ended between refresh cycles).
   const now = new Date()
+  const recentCutoff = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString()
   const { data: liveWeeks } = await admin
     .from('cached_games')
-    .select('week')
+    .select('week, status, start_time')
     .eq('season_year', seasonYear)
     .not('week', 'is', null)
-    .neq('status', 'final')
     .lte('start_time', now.toISOString())
-  const activeWeekSet = new Set((liveWeeks ?? []).map((r: { week: number }) => r.week))
+  const activeWeekSet = new Set(
+    (liveWeeks ?? [])
+      .filter(
+        (r: { week: number; status: string; start_time: string }) =>
+          r.status !== 'final' || r.start_time >= recentCutoff
+      )
+      .map((r: { week: number }) => r.week)
+  )
 
   // Bootstrap: if no cached data at all, fetch week 1
   if (activeWeekSet.size === 0) {

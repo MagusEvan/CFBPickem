@@ -264,17 +264,21 @@ export async function refreshWeekStats(
   if (games.length > 0) await upsertGames(admin, games)
 
   // Box scores for started games; skip finals whose stats are already stored
+  // UNLESS the game finished recently — in-progress stats may be partial.
   const started = games.filter((g) => g.status !== 'scheduled')
-  const finalIds = started.filter((g) => g.status === 'final').map((g) => g.id)
+  const recentCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+  const oldFinalIds = started
+    .filter((g) => g.status === 'final' && g.startTime < recentCutoff)
+    .map((g) => g.id)
 
   let ingestedFinalIds = new Set<string>()
-  if (finalIds.length > 0) {
+  if (oldFinalIds.length > 0) {
     const { data } = await admin
       .from('ff_player_stats')
       .select('nfl_game_id')
       .eq('season_year', seasonYear)
       .eq('week', week)
-      .in('nfl_game_id', finalIds)
+      .in('nfl_game_id', oldFinalIds)
     ingestedFinalIds = new Set((data ?? []).map((r) => r.nfl_game_id as string))
   }
 
