@@ -263,23 +263,40 @@ export async function refreshWeekStats(
   const games = await provider.getWeekGames(seasonYear, week)
   if (games.length > 0) await upsertGames(admin, games)
 
-  // Box scores for started games; skip finals whose stats are already stored
-  // UNLESS the game finished recently — in-progress stats may be partial.
+  // Box scores for started games; skip finals whose stats were captured
+  // AFTER the game ended. Stats fetched mid-game are partial and must be
+  // re-fetched once the game is final.
+  const GAME_OVER_BUFFER_MS = 5 * 60 * 60 * 1000 // kickoff + 5h ≈ safely post-final
   const started = games.filter((g) => g.status !== 'scheduled')
-  const recentCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
-  const oldFinalIds = started
-    .filter((g) => g.status === 'final' && g.startTime < recentCutoff)
-    .map((g) => g.id)
+  const finalGames = started.filter((g) => g.status === 'final')
+  const finalIds = finalGames.map((g) => g.id)
 
-  let ingestedFinalIds = new Set<string>()
-  if (oldFinalIds.length > 0) {
+  const ingestedFinalIds = new Set<string>()
+  if (finalIds.length > 0) {
     const { data } = await admin
       .from('ff_player_stats')
-      .select('nfl_game_id')
+      .select('nfl_game_id, fetched_at')
       .eq('season_year', seasonYear)
       .eq('week', week)
-      .in('nfl_game_id', oldFinalIds)
-    ingestedFinalIds = new Set((data ?? []).map((r) => r.nfl_game_id as string))
+      .in('nfl_game_id', finalIds)
+
+    // Earliest fetched_at per game — if it's after kickoff + 5h the stats
+    // were captured post-game and are safe to skip.
+    const earliest = new Map<string, string>()
+    for (const r of data ?? []) {
+      const prev = earliest.get(r.nfl_game_id as string)
+      if (!prev || (r.fetched_at as string) < prev)
+        earliest.set(r.nfl_game_id as string, r.fetched_at as string)
+    }
+
+    for (const g of finalGames) {
+      const fetchedAt = earliest.get(g.id)
+      if (!fetchedAt) continue
+      const gameOverEst = new Date(
+        new Date(g.startTime).getTime() + GAME_OVER_BUFFER_MS
+      ).toISOString()
+      if (fetchedAt >= gameOverEst) ingestedFinalIds.add(g.id)
+    }
   }
 
   const toFetch = started.filter((g) => g.status === 'in_progress' || !ingestedFinalIds.has(g.id))
