@@ -175,6 +175,33 @@ export async function refreshSchedule(admin: Admin, seasonYear: number): Promise
   const results = await mapSettled(weeks, (w) => provider.getWeekGames(seasonYear, w))
   const games = results.filter((r) => r.status === 'fulfilled').flatMap((r) => r.value)
   if (games.length > 0) await upsertGames(admin, games)
+
+  // Remove stale games: if ESPN no longer returns a game for a
+  // successfully-fetched week (flexed/moved/cancelled), delete it so
+  // phantom entries don't linger.
+  const fetchedIdsByWeek = new Map<number, Set<string>>()
+  for (let i = 0; i < weeks.length; i++) {
+    if (results[i].status !== 'fulfilled') continue
+    const weekGames = (results[i] as PromiseFulfilledResult<NflGameData[]>).value
+    const ids = new Set(weekGames.map((g) => g.id))
+    fetchedIdsByWeek.set(weeks[i], ids)
+  }
+
+  for (const [week, ids] of fetchedIdsByWeek) {
+    if (ids.size === 0) continue
+    const { data: existing } = await admin
+      .from('ff_nfl_games')
+      .select('id')
+      .eq('season_year', seasonYear)
+      .eq('season_type', 2)
+      .eq('week', week)
+    const staleIds = (existing ?? [])
+      .map((r) => r.id as string)
+      .filter((id) => !ids.has(id))
+    if (staleIds.length > 0) {
+      await admin.from('ff_nfl_games').delete().in('id', staleIds)
+    }
+  }
 }
 
 async function upsertGames(admin: Admin, games: NflGameData[]): Promise<void> {

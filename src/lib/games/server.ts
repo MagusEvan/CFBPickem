@@ -106,10 +106,12 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
   const weeks = [...activeWeekSet].sort((a, b) => a - b)
 
   if (weeks.length > 0) {
+    const gamesByWeek = new Map<number, string[]>()
     const allGames = []
     for (const week of weeks) {
       const games = await provider.getGamesForWeek(seasonYear, week)
       allGames.push(...games)
+      gamesByWeek.set(week, games.map((g) => g.id))
     }
 
     const fetchedAt = new Date().toISOString()
@@ -134,6 +136,23 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
     if (rows.length > 0) {
       const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
       if (error) throw new Error(`DB upsert failed: ${error.message}`)
+    }
+
+    // Remove stale games: if ESPN no longer returns a game for a fetched
+    // week (postponed/cancelled/rescheduled), delete it.
+    for (const [week, ids] of gamesByWeek) {
+      if (ids.length === 0) continue
+      const { data: existing } = await admin
+        .from('cached_games')
+        .select('id')
+        .eq('season_year', seasonYear)
+        .eq('week', week)
+      const staleIds = (existing ?? [])
+        .map((r) => r.id as string)
+        .filter((id) => !new Set(ids).has(id))
+      if (staleIds.length > 0) {
+        await admin.from('cached_games').delete().in('id', staleIds)
+      }
     }
   }
 
