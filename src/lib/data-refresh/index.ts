@@ -11,9 +11,15 @@ import { GAME_SERVERS } from '@/lib/games/server'
  * data_refresh table) and fetches from ESPN; concurrent callers serve the
  * existing cache. Fetch failures are swallowed — stale data is better than
  * an error page, and the claim prevents hammering a failing API.
+ *
+ * The claim sets a short lock (LOCK_MS) to prevent concurrent callers from
+ * duplicating work. On success, confirmRefresh advances the real timestamp
+ * so the next check uses the full staleness window. On failure, the lock
+ * expires quickly and the next caller retries.
  */
 
 const STALE_MS = 5 * 60 * 1000
+const LOCK_MS = 60 * 1000 // 1-minute lock for concurrent dedup
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -27,16 +33,34 @@ export async function claimRefresh(
     .from('data_refresh')
     .upsert({ resource }, { onConflict: 'resource', ignoreDuplicates: true })
 
-  // Atomically claim: only one concurrent caller's update matches the filter
+  // Atomically claim: only one concurrent caller's update matches the filter.
+  // Set timestamp so the resource becomes stale again after LOCK_MS (not the
+  // full staleMs). If the refresh succeeds, confirmRefresh sets the real
+  // timestamp. If it fails/times out, the short lock expires and the next
+  // caller retries quickly instead of waiting the full staleness window.
   const staleBefore = new Date(Date.now() - staleMs).toISOString()
+  const lockTs = new Date(Date.now() - staleMs + LOCK_MS).toISOString()
   const { data } = await admin
     .from('data_refresh')
-    .update({ last_refreshed_at: new Date().toISOString() })
+    .update({ last_refreshed_at: lockTs })
     .eq('resource', resource)
     .lt('last_refreshed_at', staleBefore)
     .select('resource')
 
   return (data?.length ?? 0) > 0
+}
+
+/** Mark a refresh as successfully completed so the full staleness window applies. */
+export async function confirmRefresh(
+  admin: Admin,
+  resource: string
+): Promise<void> {
+  // Set to "now" — the staleness check uses `now - staleMs`, so this pushes
+  // the next eligible refresh to now + staleMs.
+  await admin
+    .from('data_refresh')
+    .update({ last_refreshed_at: new Date().toISOString() })
+    .eq('resource', resource)
 }
 
 export async function ensureFreshGames(
@@ -47,9 +71,11 @@ export async function ensureFreshGames(
   if (!refreshGames) return // e.g. PGA uses ensureFreshGolfers per tournament
 
   const admin = createAdminClient()
+  const resource = `games:${gameType}:${seasonYear}`
   try {
-    if (!(await claimRefresh(admin, `games:${gameType}:${seasonYear}`))) return
+    if (!(await claimRefresh(admin, resource))) return
     await refreshGames(admin, seasonYear)
+    await confirmRefresh(admin, resource)
   } catch (err) {
     console.error(`ensureFreshGames(${gameType}, ${seasonYear}) failed:`, err)
   }
@@ -72,8 +98,10 @@ export async function ensureFreshGolfers(
     const live = golfersInPlay(cached ?? [])
     const staleMs = live ? 90 * 1000 : STALE_MS
 
-    if (!(await claimRefresh(admin, `golfers:${tournamentId}`, staleMs))) return
+    const resource = `golfers:${tournamentId}`
+    if (!(await claimRefresh(admin, resource, staleMs))) return
     await fetchAndCacheGolfers(admin, tournamentId, espnEventId)
+    await confirmRefresh(admin, resource)
   } catch (err) {
     console.error(`ensureFreshGolfers(${tournamentId}) failed:`, err)
   }

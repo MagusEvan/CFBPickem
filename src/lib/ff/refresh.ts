@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { claimRefresh } from '@/lib/data-refresh'
+import { claimRefresh, confirmRefresh } from '@/lib/data-refresh'
 import { getNflProvider } from '@/lib/data-providers/nfl/provider'
 import { recomputeEffectiveRanks } from './rankings'
 import type { NflGameData } from '@/lib/data-providers/nfl/types'
@@ -70,9 +70,11 @@ const POSITION_PRIORITY: Record<string, number> = { RB: 1, WR: 2, QB: 3, TE: 4, 
 
 export async function ensureFreshPlayerCatalog(seasonYear: number): Promise<void> {
   const admin = createAdminClient()
+  const resource = `ff_players:${seasonYear}`
   try {
-    if (!(await claimRefresh(admin, `ff_players:${seasonYear}`, DAY_MS))) return
+    if (!(await claimRefresh(admin, resource, DAY_MS))) return
     await refreshPlayerCatalog(admin)
+    await confirmRefresh(admin, resource)
   } catch (err) {
     console.error(`ensureFreshPlayerCatalog(${seasonYear}) failed:`, err)
   }
@@ -161,9 +163,11 @@ export async function refreshPlayerCatalog(admin: Admin): Promise<void> {
 
 export async function ensureFreshSchedule(seasonYear: number): Promise<void> {
   const admin = createAdminClient()
+  const resource = `ff_schedule:${seasonYear}`
   try {
-    if (!(await claimRefresh(admin, `ff_schedule:${seasonYear}`, DAY_MS))) return
+    if (!(await claimRefresh(admin, resource, DAY_MS))) return
     await refreshSchedule(admin, seasonYear)
+    await confirmRefresh(admin, resource)
   } catch (err) {
     console.error(`ensureFreshSchedule(${seasonYear}) failed:`, err)
   }
@@ -171,7 +175,23 @@ export async function ensureFreshSchedule(seasonYear: number): Promise<void> {
 
 export async function refreshSchedule(admin: Admin, seasonYear: number): Promise<void> {
   const provider = getNflProvider()
-  const weeks = Array.from({ length: REGULAR_SEASON_WEEKS }, (_, i) => i + 1)
+
+  // Only fetch a rolling window around the current week to avoid
+  // Vercel function timeouts (18 ESPN calls was too many).
+  // Current week ± 3 covers flex-scheduling changes that matter.
+  const { data: allGames } = await admin
+    .from('ff_nfl_games')
+    .select('id, week, status, start_time')
+    .eq('season_year', seasonYear)
+    .eq('season_type', 2)
+  const cw = currentWeek(allGames ?? []) ?? 1
+
+  // If no schedule exists at all, seed weeks 1-4 to bootstrap
+  const hasSchedule = (allGames?.length ?? 0) > 0
+  const weeks = hasSchedule
+    ? Array.from({ length: 7 }, (_, i) => cw - 1 + i).filter((w) => w >= 1 && w <= REGULAR_SEASON_WEEKS)
+    : Array.from({ length: 4 }, (_, i) => i + 1)
+
   const results = await mapSettled(weeks, (w) => provider.getWeekGames(seasonYear, w))
   const games = results.filter((r) => r.status === 'fulfilled').flatMap((r) => r.value)
   if (games.length > 0) await upsertGames(admin, games)
@@ -179,22 +199,17 @@ export async function refreshSchedule(admin: Admin, seasonYear: number): Promise
   // Remove stale games: if ESPN no longer returns a game for a
   // successfully-fetched week (flexed/moved/cancelled), delete it so
   // phantom entries don't linger.
-  const fetchedIdsByWeek = new Map<number, Set<string>>()
   for (let i = 0; i < weeks.length; i++) {
     if (results[i].status !== 'fulfilled') continue
     const weekGames = (results[i] as PromiseFulfilledResult<NflGameData[]>).value
     const ids = new Set(weekGames.map((g) => g.id))
-    fetchedIdsByWeek.set(weeks[i], ids)
-  }
-
-  for (const [week, ids] of fetchedIdsByWeek) {
     if (ids.size === 0) continue
     const { data: existing } = await admin
       .from('ff_nfl_games')
       .select('id')
       .eq('season_year', seasonYear)
       .eq('season_type', 2)
-      .eq('week', week)
+      .eq('week', weeks[i])
     const staleIds = (existing ?? [])
       .map((r) => r.id as string)
       .filter((id) => !ids.has(id))
@@ -272,8 +287,10 @@ export async function ensureFreshStats(seasonYear: number): Promise<void> {
     const weekGames = (games as GameRow[]).filter((g) => g.week === week)
     const staleMs = statsStaleMs(weekGames)
 
-    if (!(await claimRefresh(admin, `ff_stats:${seasonYear}`, staleMs))) return
+    const resource = `ff_stats:${seasonYear}`
+    if (!(await claimRefresh(admin, resource, staleMs))) return
     await refreshWeekStats(admin, seasonYear, week)
+    await confirmRefresh(admin, resource)
   } catch (err) {
     console.error(`ensureFreshStats(${seasonYear}) failed:`, err)
   }
