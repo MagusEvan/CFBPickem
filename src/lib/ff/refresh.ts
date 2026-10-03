@@ -289,6 +289,25 @@ export async function ensureFreshStats(seasonYear: number): Promise<void> {
 
     const resource = `ff_stats:${seasonYear}`
     if (!(await claimRefresh(admin, resource, staleMs))) return
+
+    // Backfill: if any past weeks that have started games are missing stats
+    // entirely (e.g. schedule was stale and currentWeek just caught up),
+    // refresh those first so best-ball and standings aren't missing weeks.
+    const now = Date.now()
+    const { data: existingStats } = await admin
+      .from('ff_player_stats')
+      .select('week')
+      .eq('season_year', seasonYear)
+    const weeksWithStats = new Set((existingStats ?? []).map((r) => r.week as number))
+    const pastWeeks = (games as GameRow[])
+      .filter((g) => g.week < week && new Date(g.start_time).getTime() < now)
+      .map((g) => g.week)
+    const missingWeeks = [...new Set(pastWeeks)].filter((w) => !weeksWithStats.has(w)).sort()
+
+    for (const mw of missingWeeks) {
+      await refreshWeekStats(admin, seasonYear, mw)
+    }
+
     await refreshWeekStats(admin, seasonYear, week)
     await confirmRefresh(admin, resource)
   } catch (err) {
