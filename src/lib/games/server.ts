@@ -139,20 +139,25 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
     }
 
     // Remove stale games: if ESPN no longer returns a game for a fetched
-    // week (postponed/cancelled/rescheduled), delete it.
-    for (const [week, ids] of gamesByWeek) {
-      if (ids.length === 0) continue
-      const { data: existing } = await admin
-        .from('cached_games')
-        .select('id')
-        .eq('season_year', seasonYear)
-        .eq('week', week)
-      const staleIds = (existing ?? [])
-        .map((r) => r.id as string)
-        .filter((id) => !new Set(ids).has(id))
-      if (staleIds.length > 0) {
-        await admin.from('cached_games').delete().in('id', staleIds)
+    // week (postponed/cancelled/rescheduled), delete it. Non-fatal — a
+    // failed cleanup must never block the score upsert above.
+    try {
+      const fetchedIdSet = new Set(allGames.map((g) => g.id))
+      for (const [week] of gamesByWeek) {
+        const { data: existing } = await admin
+          .from('cached_games')
+          .select('id')
+          .eq('season_year', seasonYear)
+          .eq('week', week)
+        const staleIds = (existing ?? [])
+          .map((r) => r.id as string)
+          .filter((id) => !fetchedIdSet.has(id))
+        if (staleIds.length > 0) {
+          await admin.from('cached_games').delete().in('id', staleIds)
+        }
       }
+    } catch (err) {
+      console.error('CFB stale game cleanup failed (non-fatal):', err)
     }
   }
 

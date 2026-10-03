@@ -198,24 +198,29 @@ export async function refreshSchedule(admin: Admin, seasonYear: number): Promise
 
   // Remove stale games: if ESPN no longer returns a game for a
   // successfully-fetched week (flexed/moved/cancelled), delete it so
-  // phantom entries don't linger.
-  for (let i = 0; i < weeks.length; i++) {
-    if (results[i].status !== 'fulfilled') continue
-    const weekGames = (results[i] as PromiseFulfilledResult<NflGameData[]>).value
-    const ids = new Set(weekGames.map((g) => g.id))
-    if (ids.size === 0) continue
-    const { data: existing } = await admin
-      .from('ff_nfl_games')
-      .select('id')
-      .eq('season_year', seasonYear)
-      .eq('season_type', 2)
-      .eq('week', weeks[i])
-    const staleIds = (existing ?? [])
-      .map((r) => r.id as string)
-      .filter((id) => !ids.has(id))
-    if (staleIds.length > 0) {
-      await admin.from('ff_nfl_games').delete().in('id', staleIds)
+  // phantom entries don't linger. Non-fatal — cleanup must never block
+  // the score upsert above.
+  try {
+    for (let i = 0; i < weeks.length; i++) {
+      if (results[i].status !== 'fulfilled') continue
+      const weekGames = (results[i] as PromiseFulfilledResult<NflGameData[]>).value
+      const ids = new Set(weekGames.map((g) => g.id))
+      if (ids.size === 0) continue
+      const { data: existing } = await admin
+        .from('ff_nfl_games')
+        .select('id')
+        .eq('season_year', seasonYear)
+        .eq('season_type', 2)
+        .eq('week', weeks[i])
+      const staleIds = (existing ?? [])
+        .map((r) => r.id as string)
+        .filter((id) => !ids.has(id))
+      if (staleIds.length > 0) {
+        await admin.from('ff_nfl_games').delete().in('id', staleIds)
+      }
     }
+  } catch (err) {
+    console.error('NFL stale game cleanup failed (non-fatal):', err)
   }
 }
 
