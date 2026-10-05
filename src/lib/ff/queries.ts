@@ -403,46 +403,56 @@ export async function getFfWeekScores(
   throughWeek: number
 ): Promise<FFWeekScores[]> {
   const supabase = await createClient()
-  const [slotsRes, statsRes, gamesRes] = await Promise.all([
-    supabase
-      .from('ff_lineup_slots')
-      .select('member_id, week, slot, player_id')
-      .eq('pool_id', poolId)
-      .lte('week', throughWeek),
-    supabase
-      .from('ff_player_stats')
-      .select('player_id, week, stats')
-      .eq('season_year', seasonYear)
-      .lte('week', throughWeek),
-    supabase
-      .from('ff_nfl_games')
-      .select('week, status')
-      .eq('season_year', seasonYear)
-      .eq('season_type', 2)
-      .lte('week', throughWeek),
-  ])
+
+  // Query per-week to stay under the Supabase/PostgREST default 1000-row
+  // limit. A single NFL week has ~800 stat rows; multi-week queries silently
+  // truncate, causing standings to show wrong scores.
+  const weeks = Array.from({ length: throughWeek }, (_, i) => i + 1)
+  const perWeekRes = await Promise.all(
+    weeks.map((w) =>
+      Promise.all([
+        supabase
+          .from('ff_lineup_slots')
+          .select('member_id, week, slot, player_id')
+          .eq('pool_id', poolId)
+          .eq('week', w),
+        supabase
+          .from('ff_player_stats')
+          .select('player_id, week, stats')
+          .eq('season_year', seasonYear)
+          .eq('week', w),
+        supabase
+          .from('ff_nfl_games')
+          .select('week, status')
+          .eq('season_year', seasonYear)
+          .eq('season_type', 2)
+          .eq('week', w),
+      ])
+    )
+  )
 
   const statsByWeek = new Map<number, Record<string, FFStatLine>>()
-  for (const row of statsRes.data ?? []) {
-    const forWeek = statsByWeek.get(row.week) ?? {}
-    forWeek[row.player_id] = row.stats as FFStatLine
-    statsByWeek.set(row.week, forWeek)
-  }
-
   const weekHasGames = new Set<number>()
   const weekHasNonFinal = new Set<number>()
-  for (const g of gamesRes.data ?? []) {
-    weekHasGames.add(g.week)
-    if (g.status !== 'final') weekHasNonFinal.add(g.week)
-  }
-
   const slotsByWeekMember = new Map<number, Map<string, Pick<FFLineupSlot, 'slot' | 'player_id'>[]>>()
-  for (const row of slotsRes.data ?? []) {
-    const byMember = slotsByWeekMember.get(row.week) ?? new Map()
-    const list = byMember.get(row.member_id) ?? []
-    list.push({ slot: row.slot, player_id: row.player_id })
-    byMember.set(row.member_id, list)
-    slotsByWeekMember.set(row.week, byMember)
+
+  for (const [slotsRes, statsRes, gamesRes] of perWeekRes) {
+    for (const row of statsRes.data ?? []) {
+      const forWeek = statsByWeek.get(row.week) ?? {}
+      forWeek[row.player_id] = row.stats as FFStatLine
+      statsByWeek.set(row.week, forWeek)
+    }
+    for (const g of gamesRes.data ?? []) {
+      weekHasGames.add(g.week)
+      if (g.status !== 'final') weekHasNonFinal.add(g.week)
+    }
+    for (const row of slotsRes.data ?? []) {
+      const byMember = slotsByWeekMember.get(row.week) ?? new Map()
+      const list = byMember.get(row.member_id) ?? []
+      list.push({ slot: row.slot, player_id: row.player_id })
+      byMember.set(row.member_id, list)
+      slotsByWeekMember.set(row.week, byMember)
+    }
   }
 
   const results: FFWeekScores[] = []
@@ -478,22 +488,31 @@ export async function getBestBallWeekScores(
   throughWeek: number
 ): Promise<FFWeekScores[]> {
   const supabase = await createClient()
-  const [rostersRes, statsRes, gamesRes] = await Promise.all([
+
+  // Query stats per-week to stay under the Supabase/PostgREST default 1000-row
+  // limit. A single NFL week has ~800 stat rows (50 players × 16 games); a
+  // multi-week query silently truncates, causing standings to show wrong totals.
+  const weeks = Array.from({ length: throughWeek }, (_, i) => i + 1)
+  const [rostersRes, ...perWeekRes] = await Promise.all([
     supabase
       .from('ff_rosters')
       .select('member_id, player_id, ff_players(position)')
       .eq('pool_id', poolId),
-    supabase
-      .from('ff_player_stats')
-      .select('player_id, week, stats')
-      .eq('season_year', seasonYear)
-      .lte('week', throughWeek),
-    supabase
-      .from('ff_nfl_games')
-      .select('week, status')
-      .eq('season_year', seasonYear)
-      .eq('season_type', 2)
-      .lte('week', throughWeek),
+    ...weeks.map((w) =>
+      Promise.all([
+        supabase
+          .from('ff_player_stats')
+          .select('player_id, week, stats')
+          .eq('season_year', seasonYear)
+          .eq('week', w),
+        supabase
+          .from('ff_nfl_games')
+          .select('week, status')
+          .eq('season_year', seasonYear)
+          .eq('season_type', 2)
+          .eq('week', w),
+      ])
+    ),
   ])
 
   const rosterByMember = new Map<string, Array<{ id: string; position: FFPosition }>>()
@@ -506,17 +525,21 @@ export async function getBestBallWeekScores(
   }
 
   const statsByWeek = new Map<number, Record<string, FFStatLine>>()
-  for (const row of statsRes.data ?? []) {
-    const forWeek = statsByWeek.get(row.week) ?? {}
-    forWeek[row.player_id] = row.stats as FFStatLine
-    statsByWeek.set(row.week, forWeek)
+  for (const [statsRes, _] of perWeekRes) {
+    for (const row of statsRes.data ?? []) {
+      const forWeek = statsByWeek.get(row.week) ?? {}
+      forWeek[row.player_id] = row.stats as FFStatLine
+      statsByWeek.set(row.week, forWeek)
+    }
   }
 
   const weekHasGames = new Set<number>()
   const weekHasNonFinal = new Set<number>()
-  for (const g of gamesRes.data ?? []) {
-    weekHasGames.add(g.week)
-    if (g.status !== 'final') weekHasNonFinal.add(g.week)
+  for (const [_, gamesRes] of perWeekRes) {
+    for (const g of gamesRes.data ?? []) {
+      weekHasGames.add(g.week)
+      if (g.status !== 'final') weekHasNonFinal.add(g.week)
+    }
   }
 
   // Test mode: weeks before the simulated week are final by definition

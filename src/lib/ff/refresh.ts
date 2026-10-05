@@ -295,21 +295,41 @@ export async function ensureFreshStats(seasonYear: number): Promise<void> {
     const resource = `ff_stats:${seasonYear}`
     if (!(await claimRefresh(admin, resource, staleMs))) return
 
-    // Backfill: if any past weeks that have started games are missing stats
-    // entirely (e.g. schedule was stale and currentWeek just caught up),
-    // refresh those first so best-ball and standings aren't missing weeks.
+    // Backfill: re-fetch past weeks that are missing stats entirely OR have
+    // incomplete game coverage (e.g. Thursday night was ingested but Sunday
+    // games timed out). refreshWeekStats skips properly-ingested finals, so
+    // re-running a complete week costs only 1 ESPN scoreboard call + 1 DB query.
     const now = Date.now()
-    const { data: existingStats } = await admin
-      .from('ff_player_stats')
-      .select('week')
-      .eq('season_year', seasonYear)
-    const weeksWithStats = new Set((existingStats ?? []).map((r) => r.week as number))
-    const pastWeeks = (games as GameRow[])
-      .filter((g) => g.week < week && new Date(g.start_time).getTime() < now)
-      .map((g) => g.week)
-    const missingWeeks = [...new Set(pastWeeks)].filter((w) => !weeksWithStats.has(w)).sort()
+    const pastFinalGames = (games as GameRow[]).filter(
+      (g) => g.week < week && g.status === 'final' && new Date(g.start_time).getTime() < now
+    )
+    const pastWeekSet = new Set(pastFinalGames.map((g) => g.week))
 
-    for (const mw of missingWeeks) {
+    // Check which past games already have stats (keyed by nfl_game_id)
+    const pastGameIds = pastFinalGames.map((g) => g.id)
+    const coveredGameIds = new Set<string>()
+    if (pastGameIds.length > 0) {
+      // Query in chunks to stay under PostgREST URL length limits
+      for (let i = 0; i < pastGameIds.length; i += 200) {
+        const { data: rows } = await admin
+          .from('ff_player_stats')
+          .select('nfl_game_id')
+          .eq('season_year', seasonYear)
+          .in('nfl_game_id', pastGameIds.slice(i, i + 200))
+        for (const r of rows ?? []) coveredGameIds.add(r.nfl_game_id as string)
+      }
+    }
+
+    // A past week needs backfill if any of its final games have no stats rows
+    const incompleteWeeks = [...pastWeekSet]
+      .filter((w) =>
+        pastFinalGames
+          .filter((g) => g.week === w)
+          .some((g) => !coveredGameIds.has(g.id))
+      )
+      .sort()
+
+    for (const mw of incompleteWeeks) {
       await refreshWeekStats(admin, seasonYear, mw)
     }
 
