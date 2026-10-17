@@ -103,6 +103,24 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
     if (!count || count === 0) activeWeekSet.add(1)
   }
 
+  // Seed future weeks: ensure all regular-season weeks (0-16) have cached
+  // schedule data so GP/GR columns are accurate. Fetch up to 3 missing weeks
+  // per refresh cycle to fill in progressively without hitting Vercel timeouts.
+  // liveWeeks only has start_time <= now; check all cached weeks for seeding.
+  const { data: allCachedWeeks } = await admin
+    .from('cached_games')
+    .select('week')
+    .eq('season_year', seasonYear)
+    .not('week', 'is', null)
+  const cachedWeekSet = new Set((allCachedWeeks ?? []).map((r: { week: number }) => r.week))
+  let seeded = 0
+  for (let w = 0; w <= 16 && seeded < 3; w++) {
+    if (!cachedWeekSet.has(w)) {
+      activeWeekSet.add(w)
+      seeded++
+    }
+  }
+
   const weeks = [...activeWeekSet].sort((a, b) => a - b)
 
   if (weeks.length > 0) {
