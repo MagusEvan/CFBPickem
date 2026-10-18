@@ -186,25 +186,33 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
 }
 
 async function updateTeamRecordsFromGames(admin: Admin, seasonYear: number) {
-  // Get all final CFB games and compute records from results
-  const { data: finalGames } = await admin
-    .from('cached_games')
-    .select('home_team_id, away_team_id, home_score, away_score')
-    .eq('season_year', seasonYear)
-    .eq('status', 'final')
-    .not('week', 'is', null) // CFB games have weeks; WC games don't
-  if (!finalGames || finalGames.length === 0) return
+  // Get all CFB games (per-week to avoid the 1000-row PostgREST limit)
+  const weekResults = await Promise.all(
+    Array.from({ length: 17 }, (_, w) =>
+      admin
+        .from('cached_games')
+        .select('home_team_id, away_team_id, home_score, away_score, status')
+        .eq('season_year', seasonYear)
+        .eq('week', w)
+    )
+  )
+  const allGames = weekResults.flatMap((r) => r.data ?? [])
+  if (allGames.length === 0) return
 
-  const records = new Map<string, { wins: number; losses: number }>()
+  const records = new Map<string, { wins: number; losses: number; totalGames: number }>()
   const ensure = (id: string) => {
-    if (!records.has(id)) records.set(id, { wins: 0, losses: 0 })
+    if (!records.has(id)) records.set(id, { wins: 0, losses: 0, totalGames: 0 })
     return records.get(id)!
   }
 
-  for (const g of finalGames) {
-    if (g.home_score == null || g.away_score == null) continue
+  for (const g of allGames) {
     const home = ensure(g.home_team_id)
     const away = ensure(g.away_team_id)
+    // Every game (regardless of status) counts toward total_games
+    home.totalGames++
+    away.totalGames++
+    // Only final games count toward wins/losses
+    if (g.status !== 'final' || g.home_score == null || g.away_score == null) continue
     if (g.home_score > g.away_score) {
       home.wins++
       away.losses++
@@ -228,7 +236,7 @@ async function updateTeamRecordsFromGames(admin: Admin, seasonYear: number) {
     .map(([id, rec]) =>
       admin
         .from('cached_teams')
-        .update({ wins: rec.wins, losses: rec.losses })
+        .update({ wins: rec.wins, losses: rec.losses, total_games: rec.totalGames })
         .eq('id', id)
         .eq('season_year', seasonYear)
     )

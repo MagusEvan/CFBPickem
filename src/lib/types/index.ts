@@ -131,6 +131,7 @@ export interface CachedTeam {
   wins: number
   losses: number
   projected_wins: number | null
+  total_games: number | null
   game_type: GameType
   fetched_at: string
 }

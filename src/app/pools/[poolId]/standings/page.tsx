@@ -166,7 +166,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   // CFB standings
   const [picksRes, teamsRes, scrapsRes] = await Promise.all([
     supabase.from('draft_picks').select('*').eq('pool_id', poolId),
-    supabase.from('cached_teams').select('id,name,wins,losses,logo_url').eq('season_year', pool.season_year),
+    supabase.from('cached_teams').select('id,name,wins,losses,total_games,logo_url').eq('season_year', pool.season_year),
     supabase.from('team_scraps').select('*').eq('pool_id', poolId),
   ])
 
@@ -174,38 +174,35 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   const teams = (teamsRes.data ?? []) as CachedTeam[]
   const scraps = (scrapsRes.data ?? []) as TeamScraps[]
 
-  // Fetch cached games per-week (0-16) to avoid the Supabase 1000-row default
-  // limit — a full CFB season has 1500+ games across all weeks.
-  const gameFields = 'id,home_team_id,away_team_id,home_team_name,away_team_name,status,start_time,week'
-  const weekResults = await Promise.all(
-    Array.from({ length: 17 }, (_, w) =>
-      supabase.from('cached_games').select(gameFields)
-        .eq('season_year', pool.season_year)
-        .eq('week', w)
-    )
-  )
-  type CfbGameRow = {
-    id: string; home_team_id: string; away_team_id: string
-    home_team_name: string | null; away_team_name: string | null
-    status: string; start_time: string | null; week: number
-  }
-  const cfbGames = weekResults.flatMap((r) => (r.data ?? []) as CfbGameRow[])
-
   const standings = calculateStandings(members, picks, teams, pool.scoring_strategy)
   const teamMap = new Map(teams.map((t) => [t.id, t]))
   const lastActiveByMember = new Map(members.map((m) => [m.id, m.profiles.last_active_at]))
 
-  // GP / GR per team
-  const gpByTeam = new Map<string, number>()
-  const grByTeam = new Map<string, number>()
-  for (const g of cfbGames) {
-    for (const tid of [g.home_team_id, g.away_team_id]) {
-      if (g.status === 'final') gpByTeam.set(tid, (gpByTeam.get(tid) ?? 0) + 1)
-      else grByTeam.set(tid, (grByTeam.get(tid) ?? 0) + 1)
-    }
+  // GP = wins + losses; GR = total_games - GP (from cached_teams, no game queries needed)
+  const gpOf = (t: CachedTeam) => t.wins + t.losses
+  const grOf = (t: CachedTeam) => (t.total_games ?? 12) - gpOf(t)
+
+  // Aggregate GP/GR per manager from their drafted teams
+  const memberTeamIds = new Map<string, string[]>()
+  for (const p of picks) {
+    if (!p.member_id) continue
+    const ids = memberTeamIds.get(p.member_id) ?? []
+    ids.push(p.team_id)
+    memberTeamIds.set(p.member_id, ids)
   }
 
-  // Which manager owns each team (for "next opponent" display)
+  const gpFor = (teamIds: string[]) => teamIds.reduce((sum, id) => {
+    const t = teamMap.get(id); return sum + (t ? gpOf(t) : 0)
+  }, 0)
+  const grFor = (teamIds: string[]) => teamIds.reduce((sum, id) => {
+    const t = teamMap.get(id); return sum + (t ? grOf(t) : 0)
+  }, 0)
+
+  const scrapsTeamIds = scraps.map((s) => s.team_id)
+  const scrapsWins = scraps.reduce((sum, s) => sum + (teamMap.get(s.team_id)?.wins ?? s.wins), 0)
+  const scrapsLosses = scraps.reduce((sum, s) => sum + (teamMap.get(s.team_id)?.losses ?? 0), 0)
+
+  // Which manager owns each team (for "next opponent" display in scraps)
   const ownerByTeamId = new Map<string, string>()
   for (const p of picks) {
     if (p.member_id) {
@@ -215,43 +212,34 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   }
   for (const s of scraps) ownerByTeamId.set(s.team_id, 'Scraps')
 
-  // Next game per team (earliest non-final game by start_time)
+  // Next game per scraps team — only query games involving scraps teams
   const nextGameByTeam = new Map<string, { opponentName: string; opponentOwner: string | null; week: number }>()
-  const futureGames = cfbGames
-    .filter((g) => g.status !== 'final')
-    .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
-  for (const g of futureGames) {
-    if (!nextGameByTeam.has(g.home_team_id)) {
-      nextGameByTeam.set(g.home_team_id, {
-        opponentName: g.away_team_name ?? g.away_team_id,
-        opponentOwner: ownerByTeamId.get(g.away_team_id) ?? null,
-        week: g.week,
-      })
-    }
-    if (!nextGameByTeam.has(g.away_team_id)) {
-      nextGameByTeam.set(g.away_team_id, {
-        opponentName: g.home_team_name ?? g.home_team_id,
-        opponentOwner: ownerByTeamId.get(g.home_team_id) ?? null,
-        week: g.week,
-      })
+  if (scraps.length > 0) {
+    const scrapsIdSet = new Set(scrapsTeamIds)
+    const { data: futureGames } = await supabase
+      .from('cached_games')
+      .select('home_team_id,away_team_id,home_team_name,away_team_name,status,start_time,week')
+      .eq('season_year', pool.season_year)
+      .neq('status', 'final')
+      .not('week', 'is', null)
+      .order('start_time')
+    for (const g of futureGames ?? []) {
+      if (scrapsIdSet.has(g.home_team_id) && !nextGameByTeam.has(g.home_team_id)) {
+        nextGameByTeam.set(g.home_team_id, {
+          opponentName: g.away_team_name ?? g.away_team_id,
+          opponentOwner: ownerByTeamId.get(g.away_team_id) ?? null,
+          week: g.week,
+        })
+      }
+      if (scrapsIdSet.has(g.away_team_id) && !nextGameByTeam.has(g.away_team_id)) {
+        nextGameByTeam.set(g.away_team_id, {
+          opponentName: g.home_team_name ?? g.home_team_id,
+          opponentOwner: ownerByTeamId.get(g.home_team_id) ?? null,
+          week: g.week,
+        })
+      }
     }
   }
-
-  // Aggregate GP/GR per manager
-  const memberTeamIds = new Map<string, string[]>()
-  for (const p of picks) {
-    if (!p.member_id) continue
-    const ids = memberTeamIds.get(p.member_id) ?? []
-    ids.push(p.team_id)
-    memberTeamIds.set(p.member_id, ids)
-  }
-  const scrapsTeamIds = scraps.map((s) => s.team_id)
-
-  const gpFor = (teamIds: string[]) => teamIds.reduce((sum, id) => sum + (gpByTeam.get(id) ?? 0), 0)
-  const grFor = (teamIds: string[]) => teamIds.reduce((sum, id) => sum + (grByTeam.get(id) ?? 0), 0)
-
-  const scrapsWins = scraps.reduce((sum, s) => sum + (teamMap.get(s.team_id)?.wins ?? s.wins), 0)
-  const scrapsLosses = scraps.reduce((sum, s) => sum + (teamMap.get(s.team_id)?.losses ?? 0), 0)
 
   type CfbStandingEntry =
     | { type: 'manager'; memberId: string; displayName: string; totalWins: number; totalLosses: number; totalPoints: number; gp: number; gr: number }
