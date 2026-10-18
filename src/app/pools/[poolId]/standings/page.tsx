@@ -164,23 +164,32 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   }
 
   // CFB standings
-  const [picksRes, teamsRes, scrapsRes, gamesRes] = await Promise.all([
+  const [picksRes, teamsRes, scrapsRes] = await Promise.all([
     supabase.from('draft_picks').select('*').eq('pool_id', poolId),
     supabase.from('cached_teams').select('id,name,wins,losses,logo_url').eq('season_year', pool.season_year),
     supabase.from('team_scraps').select('*').eq('pool_id', poolId),
-    supabase.from('cached_games').select('id,home_team_id,away_team_id,home_team_name,away_team_name,status,start_time,week')
-      .eq('season_year', pool.season_year)
-      .not('week', 'is', null),
   ])
 
   const picks = (picksRes.data ?? []) as DraftPick[]
   const teams = (teamsRes.data ?? []) as CachedTeam[]
   const scraps = (scrapsRes.data ?? []) as TeamScraps[]
-  const cfbGames = (gamesRes.data ?? []) as Array<{
+
+  // Fetch cached games per-week (0-16) to avoid the Supabase 1000-row default
+  // limit — a full CFB season has 1500+ games across all weeks.
+  const gameFields = 'id,home_team_id,away_team_id,home_team_name,away_team_name,status,start_time,week'
+  const weekResults = await Promise.all(
+    Array.from({ length: 17 }, (_, w) =>
+      supabase.from('cached_games').select(gameFields)
+        .eq('season_year', pool.season_year)
+        .eq('week', w)
+    )
+  )
+  type CfbGameRow = {
     id: string; home_team_id: string; away_team_id: string
     home_team_name: string | null; away_team_name: string | null
     status: string; start_time: string | null; week: number
-  }>
+  }
+  const cfbGames = weekResults.flatMap((r) => (r.data ?? []) as CfbGameRow[])
 
   const standings = calculateStandings(members, picks, teams, pool.scoring_strategy)
   const teamMap = new Map(teams.map((t) => [t.id, t]))

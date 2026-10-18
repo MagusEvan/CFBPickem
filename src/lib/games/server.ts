@@ -103,22 +103,21 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
     if (!count || count === 0) activeWeekSet.add(1)
   }
 
-  // Seed future weeks: ensure all regular-season weeks (0-16) have cached
-  // schedule data so GP/GR columns are accurate. Fetch up to 3 missing weeks
-  // per refresh cycle to fill in progressively without hitting Vercel timeouts.
-  // liveWeeks only has start_time <= now; check all cached weeks for seeding.
-  const { data: allCachedWeeks } = await admin
-    .from('cached_games')
-    .select('week')
-    .eq('season_year', seasonYear)
-    .not('week', 'is', null)
-  const cachedWeekSet = new Set((allCachedWeeks ?? []).map((r: { week: number }) => r.week))
-  let seeded = 0
-  for (let w = 0; w <= 16 && seeded < 3; w++) {
-    if (!cachedWeekSet.has(w)) {
-      activeWeekSet.add(w)
-      seeded++
-    }
+  // Seed all regular-season weeks (0-16) so GP/GR columns are accurate.
+  // Check which weeks already have cached games (one count query per week
+  // is cheap — HEAD-only, no row transfer) and add all missing weeks.
+  const cachedWeekChecks = await Promise.all(
+    Array.from({ length: 17 }, (_, w) =>
+      admin
+        .from('cached_games')
+        .select('id', { count: 'exact', head: true })
+        .eq('season_year', seasonYear)
+        .eq('week', w)
+        .then(({ count }) => ({ week: w, has: (count ?? 0) > 0 }))
+    )
+  )
+  for (const { week: w, has } of cachedWeekChecks) {
+    if (!has) activeWeekSet.add(w)
   }
 
   const weeks = [...activeWeekSet].sort((a, b) => a - b)
@@ -151,8 +150,10 @@ async function refreshCfbGames(admin: Admin, seasonYear: number): Promise<void> 
       fetched_at: fetchedAt,
     }))
 
-    if (rows.length > 0) {
-      const { error } = await admin.from('cached_games').upsert(rows, { onConflict: 'id' })
+    // Upsert in chunks to stay under PostgREST payload limits when many
+    // weeks are fetched at once (full season = ~1000 rows).
+    for (let i = 0; i < rows.length; i += 500) {
+      const { error } = await admin.from('cached_games').upsert(rows.slice(i, i + 500), { onConflict: 'id' })
       if (error) throw new Error(`DB upsert failed: ${error.message}`)
     }
 
