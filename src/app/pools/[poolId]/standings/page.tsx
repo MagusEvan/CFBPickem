@@ -22,6 +22,8 @@ import { isFfFamily } from '@/lib/games/registry'
 import { BestBallLeaderboard } from '@/components/ff/bestball-leaderboard'
 import type { Pool, DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 import { OnlineDot } from '@/components/online-dot'
+import { CfbThisWeek, computeCurrentCfbWeek } from '@/components/standings/cfb-this-week'
+import { getCurrentUserId } from '@/lib/pools/queries'
 
 export const revalidate = 60
 
@@ -164,11 +166,24 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   }
 
   // CFB standings
-  const [picksRes, teamsRes, scrapsRes] = await Promise.all([
+  const [picksRes, teamsRes, scrapsRes, userId] = await Promise.all([
     supabase.from('draft_picks').select('*').eq('pool_id', poolId),
     supabase.from('cached_teams').select('id,name,wins,losses,total_games,logo_url').eq('season_year', pool.season_year),
     supabase.from('team_scraps').select('*').eq('pool_id', poolId),
+    getCurrentUserId(),
   ])
+
+  // Fetch all games per-week (avoids 1000-row PostgREST limit)
+  const weekGameResults = await Promise.all(
+    Array.from({ length: 17 }, (_, w) =>
+      supabase
+        .from('cached_games')
+        .select('id,week,home_team_id,away_team_id,home_team_name,away_team_name,home_score,away_score,status,status_detail,start_time')
+        .eq('season_year', pool.season_year)
+        .eq('week', w)
+    )
+  )
+  const allSeasonGames = weekGameResults.flatMap((r) => (r.data ?? []) as CachedGame[])
 
   const picks = (picksRes.data ?? []) as DraftPick[]
   const teams = (teamsRes.data ?? []) as CachedTeam[]
@@ -258,6 +273,52 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
     }] : []),
   ].sort((a, b) => b.totalPoints - a.totalPoints)
 
+  // --- "This Week" pane data ---
+  // Find the current user's member ID
+  const currentMemberId = userId
+    ? members.find((m) => m.user_id === userId)?.id ?? null
+    : null
+
+  // Build manager tabs: one per manager + scraps
+  const managerTabs = [
+    ...standings.map((s) => ({
+      id: s.memberId,
+      label: s.displayName,
+      teamIds: memberTeamIds.get(s.memberId) ?? [],
+    })),
+    ...(scraps.length > 0
+      ? [{ id: 'scraps', label: 'Scraps', teamIds: scrapsTeamIds }]
+      : []),
+  ]
+
+  // Serialize games for client component
+  const thisWeekGames = allSeasonGames.map((g) => ({
+    id: g.id,
+    week: g.week ?? 0,
+    homeTeamId: g.home_team_id,
+    awayTeamId: g.away_team_id,
+    homeTeamName: g.home_team_name ?? g.home_team_id,
+    awayTeamName: g.away_team_name ?? g.away_team_id,
+    homeScore: g.home_score,
+    awayScore: g.away_score,
+    status: g.status,
+    statusDetail: g.status_detail,
+    startTime: g.start_time,
+  }))
+
+  const thisWeekTeamMap: Record<string, { id: string; name: string; logoUrl: string | null; wins: number; losses: number }> = {}
+  for (const t of teams) {
+    thisWeekTeamMap[t.id] = { id: t.id, name: t.name, logoUrl: t.logo_url, wins: t.wins, losses: t.losses }
+  }
+
+  const thisWeekOwnerMap: Record<string, string> = {}
+  for (const [teamId, owner] of ownerByTeamId) {
+    thisWeekOwnerMap[teamId] = owner
+  }
+
+  const availableWeeks = [...new Set(allSeasonGames.map((g) => g.week).filter((w): w is number => w != null))].sort((a, b) => a - b)
+  const defaultWeek = computeCurrentCfbWeek(thisWeekGames, availableWeeks)
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Standings</h1>
@@ -313,6 +374,16 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
           </table>
         </CardContent>
       </Card>
+
+      <CfbThisWeek
+        managers={managerTabs}
+        currentUserId={currentMemberId}
+        games={thisWeekGames}
+        teamMap={thisWeekTeamMap}
+        ownerByTeamId={thisWeekOwnerMap}
+        availableWeeks={availableWeeks}
+        defaultWeek={defaultWeek}
+      />
 
       {scraps.length > 0 && (
         <Card>
