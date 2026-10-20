@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useTransition } from 'react'
 import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -125,21 +126,43 @@ export function CfbThisWeek({
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-base">This Week</CardTitle>
-          <Select
-            value={String(selectedWeek)}
-            onValueChange={(v) => setSelectedWeek(Number(v))}
-          >
-            <SelectTrigger className="h-8 w-28">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableWeeks.map((w) => (
-                <SelectItem key={w} value={String(w)}>
-                  Week {w}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                const idx = availableWeeks.indexOf(selectedWeek)
+                if (idx > 0) setSelectedWeek(availableWeeks[idx - 1])
+              }}
+              disabled={availableWeeks.indexOf(selectedWeek) <= 0}
+              className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+            </button>
+            <Select
+              value={String(selectedWeek)}
+              onValueChange={(v) => setSelectedWeek(Number(v))}
+            >
+              <SelectTrigger className="h-8 w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableWeeks.map((w) => (
+                  <SelectItem key={w} value={String(w)}>
+                    Week {w}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <button
+              onClick={() => {
+                const idx = availableWeeks.indexOf(selectedWeek)
+                if (idx < availableWeeks.length - 1) setSelectedWeek(availableWeeks[idx + 1])
+              }}
+              disabled={availableWeeks.indexOf(selectedWeek) >= availableWeeks.length - 1}
+              className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <ChevronRightIcon className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         {/* Manager tabs */}
         <div className="mt-2 flex gap-1 overflow-x-auto pb-1">
