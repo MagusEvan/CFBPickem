@@ -293,11 +293,9 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
       : []),
   ]
 
-  // Determine current week for the "This Week" pane
-  // Fetch game start_times + statuses for the most recent weeks to determine current week
-  const recentWeeks = availableWeeks.slice(-4) // last 4 weeks is enough for auto-advance logic
-  const recentGamesResults = await Promise.all(
-    recentWeeks.map((w) =>
+  // Determine current week — fetch lightweight status/start_time per week
+  const weekStatusResults = await Promise.all(
+    availableWeeks.map((w) =>
       supabase
         .from('cached_games')
         .select('week,status,start_time')
@@ -305,14 +303,14 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
         .eq('week', w)
     )
   )
-  const recentGames = recentGamesResults.flatMap((r) =>
+  const weekStatusGames = weekStatusResults.flatMap((r) =>
     (r.data ?? []).map((g) => ({
       week: g.week as number,
       status: g.status as 'scheduled' | 'in_progress' | 'final',
       startTime: g.start_time as string | null,
     }))
   )
-  const defaultWeek = computeCurrentCfbWeek(recentGames, availableWeeks)
+  const defaultWeek = computeCurrentCfbWeek(weekStatusGames, availableWeeks)
 
   // Fetch only the default week's games for initial render
   const { data: defaultWeekGames } = await supabase
