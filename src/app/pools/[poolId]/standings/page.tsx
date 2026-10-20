@@ -173,17 +173,18 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
     getCurrentUserId(),
   ])
 
-  // Fetch all games per-week (avoids 1000-row PostgREST limit)
-  const weekGameResults = await Promise.all(
+  // Lightweight: get distinct weeks that have games (HEAD-count per week)
+  const weekChecks = await Promise.all(
     Array.from({ length: 17 }, (_, w) =>
       supabase
         .from('cached_games')
-        .select('id,week,home_team_id,away_team_id,home_team_name,away_team_name,home_score,away_score,status,status_detail,start_time')
+        .select('id', { count: 'exact', head: true })
         .eq('season_year', pool.season_year)
         .eq('week', w)
+        .then(({ count }) => ({ week: w, has: (count ?? 0) > 0 }))
     )
   )
-  const allSeasonGames = weekGameResults.flatMap((r) => (r.data ?? []) as CachedGame[])
+  const availableWeeks = weekChecks.filter((c) => c.has).map((c) => c.week).sort((a, b) => a - b)
 
   const picks = (picksRes.data ?? []) as DraftPick[]
   const teams = (teamsRes.data ?? []) as CachedTeam[]
@@ -291,19 +292,46 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
       : []),
   ]
 
-  // Serialize games for client component
-  const thisWeekGames = allSeasonGames.map((g) => ({
-    id: g.id,
-    week: g.week ?? 0,
-    homeTeamId: g.home_team_id,
-    awayTeamId: g.away_team_id,
-    homeTeamName: g.home_team_name ?? g.home_team_id,
-    awayTeamName: g.away_team_name ?? g.away_team_id,
-    homeScore: g.home_score,
-    awayScore: g.away_score,
-    status: g.status,
-    statusDetail: g.status_detail,
-    startTime: g.start_time,
+  // Determine current week for the "This Week" pane
+  // Fetch game start_times + statuses for the most recent weeks to determine current week
+  const recentWeeks = availableWeeks.slice(-4) // last 4 weeks is enough for auto-advance logic
+  const recentGamesResults = await Promise.all(
+    recentWeeks.map((w) =>
+      supabase
+        .from('cached_games')
+        .select('week,status,start_time')
+        .eq('season_year', pool.season_year)
+        .eq('week', w)
+    )
+  )
+  const recentGames = recentGamesResults.flatMap((r) =>
+    (r.data ?? []).map((g) => ({
+      week: g.week as number,
+      status: g.status as 'scheduled' | 'in_progress' | 'final',
+      startTime: g.start_time as string | null,
+    }))
+  )
+  const defaultWeek = computeCurrentCfbWeek(recentGames, availableWeeks)
+
+  // Fetch only the default week's games for initial render
+  const { data: defaultWeekGames } = await supabase
+    .from('cached_games')
+    .select('id,week,home_team_id,away_team_id,home_team_name,away_team_name,home_score,away_score,status,status_detail,start_time')
+    .eq('season_year', pool.season_year)
+    .eq('week', defaultWeek)
+
+  const initialGames = (defaultWeekGames ?? []).map((g) => ({
+    id: g.id as string,
+    week: (g.week ?? 0) as number,
+    homeTeamId: g.home_team_id as string,
+    awayTeamId: g.away_team_id as string,
+    homeTeamName: (g.home_team_name ?? g.home_team_id) as string,
+    awayTeamName: (g.away_team_name ?? g.away_team_id) as string,
+    homeScore: g.home_score as number | null,
+    awayScore: g.away_score as number | null,
+    status: g.status as 'scheduled' | 'in_progress' | 'final',
+    statusDetail: g.status_detail as string | null,
+    startTime: g.start_time as string | null,
   }))
 
   const thisWeekTeamMap: Record<string, { id: string; name: string; logoUrl: string | null; wins: number; losses: number }> = {}
@@ -315,9 +343,6 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
   for (const [teamId, owner] of ownerByTeamId) {
     thisWeekOwnerMap[teamId] = owner
   }
-
-  const availableWeeks = [...new Set(allSeasonGames.map((g) => g.week).filter((w): w is number => w != null))].sort((a, b) => a - b)
-  const defaultWeek = computeCurrentCfbWeek(thisWeekGames, availableWeeks)
 
   return (
     <div className="space-y-6">
@@ -378,11 +403,12 @@ export default async function StandingsPage({ params }: { params: Promise<{ pool
       <CfbThisWeek
         managers={managerTabs}
         currentUserId={currentMemberId}
-        games={thisWeekGames}
+        initialGames={initialGames}
         teamMap={thisWeekTeamMap}
         ownerByTeamId={thisWeekOwnerMap}
         availableWeeks={availableWeeks}
         defaultWeek={defaultWeek}
+        seasonYear={pool.season_year}
       />
 
       {scraps.length > 0 && (
