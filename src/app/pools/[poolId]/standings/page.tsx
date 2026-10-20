@@ -22,7 +22,8 @@ import { isFfFamily } from '@/lib/games/registry'
 import { BestBallLeaderboard } from '@/components/ff/bestball-leaderboard'
 import type { Pool, DraftPick, CachedTeam, CachedGame, TeamScraps, WcScrapsTeam, WorldCupScoringConfig } from '@/lib/types'
 import { OnlineDot } from '@/components/online-dot'
-import { CfbThisWeek, computeCurrentCfbWeek } from '@/components/standings/cfb-this-week'
+import { CfbThisWeek } from '@/components/standings/cfb-this-week'
+import { computeCurrentCfbWeek } from '@/lib/cfb/week'
 import { getCurrentUserId } from '@/lib/pools/queries'
 
 export const revalidate = 60
